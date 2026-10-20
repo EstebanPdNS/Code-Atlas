@@ -410,6 +410,7 @@ import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/AtlasTerminal";
 import { AtlasClaudeProgress } from "~/atlas/AtlasClaudeProgress";
 import { atlasActivityLabel } from "~/atlas/claudeProgress";
+import { computerUseApp, useAgentControlOverlay } from "~/atlas/agentControlOverlay";
 import { useAtlasTerminalSummary } from "~/atlas/AtlasRailSections";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
@@ -2944,6 +2945,7 @@ export default function ChatView(props: ChatViewProps) {
       }) as const,
   );
   const timelineEntries = isServerThread ? serverTimelineEntries : draftTimelineEntries;
+  useAgentControlOverlay(isWorking ? computerUseApp(timelineEntries) : null);
   const timelineMessages = timelineEntries.flatMap((entry) =>
     entry.kind === "message" ? [entry.message] : [],
   );

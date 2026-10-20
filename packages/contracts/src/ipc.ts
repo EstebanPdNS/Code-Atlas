@@ -1032,6 +1032,8 @@ export interface DesktopBridge {
   getPathForFile?: (file: File) => string;
   getClientPlatform?: () => string;
   setNotificationBadge?: (badge: { count: number; image: string | null }) => Promise<void>;
+  /** Code Atlas: frame the window of the app an agent is driving; null clears it. */
+  setAgentControlOverlay?: (target: { app: string } | null) => Promise<void>;
   onNotificationBadgeClear?: (listener: () => void) => () => void;
   onTrackpadScrollEnd?: (listener: () => void) => () => void;
   /**
