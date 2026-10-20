@@ -579,3 +579,23 @@ it.effect(
       ),
     ),
 );
+
+it("sums weekly insertions and deletions across commits", () => {
+  const stdout = [
+    "@@atlas-commit",
+    "",
+    " 3 files changed, 10 insertions(+), 2 deletions(-)",
+    "@@atlas-commit",
+    "",
+    " 1 file changed, 1 insertion(+)",
+    "@@atlas-commit",
+    "",
+    " 2 files changed, 7 deletions(-)",
+    "",
+  ].join("\n");
+  assert.deepStrictEqual(SourceControlDiscovery.parseWeeklyShortstat(stdout), {
+    commits: 3,
+    linesAdded: 11,
+    linesRemoved: 9,
+  });
+});

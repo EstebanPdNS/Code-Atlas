@@ -4,20 +4,14 @@ import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/c
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { FolderPlusIcon } from "lucide-react";
-import { useAtomValue } from "@effect/atom-react";
 import { useEffect, useRef, useState } from "react";
 
 import { openCommandPalette } from "~/commandPaletteBus";
-import { shortcutLabelForCommand } from "~/keybindings";
-import { primaryServerKeybindingsAtom } from "~/state/server";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { useClientSettings } from "~/hooks/useSettings";
 import { hasExplicitComposerModelSelection } from "~/lib/chatThreadActions";
-import {
-  deriveLogicalProjectKeyFromSettings,
-  selectProjectGroupingSettings,
-} from "~/logicalProject";
+import { selectProjectGroupingSettings } from "~/logicalProject";
 import {
   buildSidebarProjectPickerEntries,
   buildSidebarProjectSnapshots,
@@ -75,9 +69,8 @@ export function DraftHeroHeadline({
   const applyStickyState = useComposerDraftStore((store) => store.applyStickyState);
   const setModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const openAddProject = () => openCommandPalette({ open: "add-project" });
-  const { scratchEnvironmentId, scratchWorkspaceRootFor, openScratchProject } = useScratchProject();
+  const { scratchEnvironmentId, scratchWorkspaceRootFor } = useScratchProject();
   const openProjectDraft = useNewThreadHandler();
-  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const pickerFilter = useComboboxFilter();
@@ -203,25 +196,6 @@ export function DraftHeroHeadline({
       }
     }
   };
-  const startScratch = async (): Promise<boolean> => {
-    if (scratchTargetEnvironmentId === null || isScratchDraft) {
-      return false;
-    }
-    const requested = { draftId, activeProjectKey, scratchTargetEnvironmentId };
-    const project = await openScratchProject(scratchTargetEnvironmentId);
-    const latest = latestTargetRef.current;
-    if (
-      !project ||
-      latest.draftId !== requested.draftId ||
-      latest.activeProjectKey !== requested.activeProjectKey ||
-      latest.scratchTargetEnvironmentId !== requested.scratchTargetEnvironmentId
-    ) {
-      return false;
-    }
-    selectProject(project, deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings));
-    return true;
-  };
-
   const projectSelector = shouldShowProjectMenu ? (
     <Combobox
       items={pickerItems}
@@ -315,31 +289,6 @@ export function DraftHeroHeadline({
     </button>
   );
 
-  const noProjectShortcut = shortcutLabelForCommand(keybindings, "chat.newWithoutProject");
-  const orStartWithoutProject =
-    scratchWorkspaceRoot !== null && !isScratchDraft && (hasResolvedProject || canChooseProject) ? (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <InlineButton
-              tone="muted"
-              className="pointer-events-auto"
-              onClick={() =>
-                void startScratch().then((started) => {
-                  if (started) {
-                    document.querySelector<HTMLElement>("[data-draft-project-trigger]")?.focus();
-                  }
-                })
-              }
-            />
-          }
-        >
-          or start without a project
-        </TooltipTrigger>
-        {noProjectShortcut ? <TooltipPopup side="bottom">{noProjectShortcut}</TooltipPopup> : null}
-      </Tooltip>
-    ) : null;
-
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col items-center">
       {hasResolvedProject && !isScratchDraft ? (
@@ -347,7 +296,7 @@ export function DraftHeroHeadline({
           {projectSelector}
         </DraftHeroProjectHeading>
       ) : (
-        <h1 className="w-full text-center font-normal text-2xl text-foreground tracking-tight sm:text-3xl">
+        <h1 className="w-full text-center font-normal text-xl text-foreground tracking-tight sm:text-2xl">
           {isScratchDraft ? (
             <>What should we work on?</>
           ) : canChooseProject ? (
@@ -357,9 +306,10 @@ export function DraftHeroHeadline({
           )}
         </h1>
       )}
-      {scratchWorkspaceRoot === null ? null : (
+      {/* Code Atlas: no "or start without a project" line; the keybinding still starts one. */}
+      {scratchWorkspaceRoot === null || !isScratchDraft ? null : (
         <p className="mt-2 flex h-6 w-full items-center justify-center text-sm">
-          {isScratchDraft ? projectSelector : orStartWithoutProject}
+          {projectSelector}
         </p>
       )}
     </div>

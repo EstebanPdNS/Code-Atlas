@@ -408,7 +408,7 @@ import { createPageScrollController, type PageScrollKey } from "./chat/pageScrol
 import { createUpwardScrollDetector, isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/AtlasTerminal";
-import { useAtlasAgentSummary } from "~/atlas/AtlasRailSections";
+import { useAtlasTerminalSummary } from "~/atlas/AtlasRailSections";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
   BranchRestoreConfirmHost,
@@ -2637,7 +2637,10 @@ export default function ChatView(props: ChatViewProps) {
     isConnecting ||
     isCompacting ||
     runlessWorkStartedAt !== null;
-  const atlasAgentSummary = useAtlasAgentSummary(activeThread?.environmentId ?? null);
+  const atlasAgentSummary = useAtlasTerminalSummary(
+    activeThread?.environmentId ?? activeProject?.environmentId ?? null,
+    activeProject?.workspaceRoot ?? null,
+  );
   const activeContextWindow = deriveLatestContextWindowSnapshot(
     serverVisibleTurnItems ?? [],
     activeThreadLiveTokenUsage,

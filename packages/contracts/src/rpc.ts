@@ -378,6 +378,7 @@ import {
 import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
+  SourceControlDiscoveryInput,
   SourceControlDiscoveryResult,
   SourceControlPublishRepositoryInput,
   SourceControlPublishRepositoryResult,
@@ -793,7 +794,7 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
 });
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
-  payload: Schema.Struct({}),
+  payload: SourceControlDiscoveryInput,
   success: SourceControlDiscoveryResult,
   error: EnvironmentAuthorizationError,
 });

@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import { VcsDriverKind } from "./vcs.ts";
 
 /**
@@ -163,9 +163,29 @@ export const SourceControlProviderDiscoveryItem = Schema.Struct({
 });
 export type SourceControlProviderDiscoveryItem = typeof SourceControlProviderDiscoveryItem.Type;
 
+/** Code Atlas: what local branches committed in the last seven days. */
+export const VcsWeeklyActivityResult = Schema.Struct({
+  commits: NonNegativeInt,
+  linesAdded: NonNegativeInt,
+  linesRemoved: NonNegativeInt,
+});
+export type VcsWeeklyActivityResult = typeof VcsWeeklyActivityResult.Type;
+
+/**
+ * Code Atlas: discovery can also report `activityCwd`'s weekly commits, so the
+ * new-thread terminal needs no RPC method of its own (the RPC group sits at
+ * TypeScript's instantiation depth limit).
+ */
+export const SourceControlDiscoveryInput = Schema.Struct({
+  activityCwd: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type SourceControlDiscoveryInput = typeof SourceControlDiscoveryInput.Type;
+
 export const SourceControlDiscoveryResult = Schema.Struct({
   versionControlSystems: Schema.Array(VcsDiscoveryItem),
   sourceControlProviders: Schema.Array(SourceControlProviderDiscoveryItem),
+  /** Present when the request named an `activityCwd` inside a git repository. */
+  weeklyActivity: Schema.optionalKey(VcsWeeklyActivityResult),
 });
 export type SourceControlDiscoveryResult = typeof SourceControlDiscoveryResult.Type;
 

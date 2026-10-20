@@ -40,18 +40,23 @@ export function resolveChatCanvasLayout({
   composerHeight?: number;
   detailsCard?: PreviewMiniPlayerObstacles["detailsCard"];
   findBar?: PreviewMiniPlayerObstacles["detailsCard"];
-  /** Code Atlas: beside the details card the chat spans the whole free lane instead of its reading width. */
+  /**
+   * Code Atlas: beside the details card the chat spans the whole free lane
+   * instead of its reading width, with the card clearance as its left gap too.
+   */
   fillBesideDetailsCard?: boolean;
 }) {
+  const fill = fillBesideDetailsCard && detailsCard !== null;
+  // A filled lane keeps the same gap on its left as the card clearance on its right.
+  const lanePadding = fill ? DETAILS_CARD_CLEARANCE : padding;
   const laneRight = detailsCard
     ? detailsCard.left - DETAILS_CARD_CLEARANCE
     : container.width - padding;
-  const laneMaxWidth =
-    fillBesideDetailsCard && detailsCard ? Math.max(0, laneRight - padding) : maxChatWidth;
-  const centeredWidth = Math.max(0, Math.min(laneMaxWidth, container.width - padding * 2));
-  const normalWidth = Math.max(0, Math.min(centeredWidth, laneRight - padding));
+  const laneMaxWidth = fill ? Math.max(0, laneRight - lanePadding) : maxChatWidth;
+  const centeredWidth = Math.max(0, Math.min(laneMaxWidth, container.width - lanePadding * 2));
+  const normalWidth = Math.max(0, Math.min(centeredWidth, laneRight - lanePadding));
   const normalLeft = Math.max(
-    padding,
+    lanePadding,
     Math.min((container.width - normalWidth) / 2, laneRight - normalWidth),
   );
   let chat = {

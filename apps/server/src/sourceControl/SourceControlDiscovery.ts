@@ -1,7 +1,9 @@
 import {
+  type SourceControlDiscoveryInput,
   type SourceControlDiscoveryResult,
   type VcsDiscoveryItem,
   type VcsDriverKind,
+  type VcsWeeklyActivityResult,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -57,10 +59,37 @@ const VCS_PROBES: ReadonlyArray<VcsProbe> = [
   },
 ];
 
+const WEEKLY_COMMIT_MARKER = "@@atlas-commit";
+
+/**
+ * Sums `git log --shortstat` output written with `--format=tformat:<marker>`:
+ * one marker line per commit, then a summary such as
+ * " 3 files changed, 10 insertions(+), 2 deletions(-)". Either count is
+ * omitted when it is zero.
+ */
+export function parseWeeklyShortstat(stdout: string): VcsWeeklyActivityResult {
+  let commits = 0;
+  let linesAdded = 0;
+  let linesRemoved = 0;
+  for (const line of stdout.split("\n")) {
+    if (line === WEEKLY_COMMIT_MARKER) {
+      commits += 1;
+      continue;
+    }
+    linesAdded += Number(/(\d+) insertions?\(\+\)/.exec(line)?.[1] ?? 0);
+    linesRemoved += Number(/(\d+) deletions?\(-\)/.exec(line)?.[1] ?? 0);
+  }
+  return { commits, linesAdded, linesRemoved };
+}
+
 export class SourceControlDiscovery extends Context.Service<
   SourceControlDiscovery,
   {
     readonly discover: Effect.Effect<SourceControlDiscoveryResult>;
+    /** Code Atlas: `discover`, plus `activityCwd`'s commits this week when it names a repository. */
+    readonly discoverFor: (
+      input: SourceControlDiscoveryInput,
+    ) => Effect.Effect<SourceControlDiscoveryResult>;
   }
 >()("t3/sourceControl/SourceControlDiscovery") {}
 
@@ -129,14 +158,48 @@ export const make = Effect.gen(function* () {
       );
   };
 
-  return SourceControlDiscovery.of({
-    discover: Effect.all({
-      versionControlSystems: Effect.all(
-        VCS_PROBES.map((entry) => probe(entry)) as ReadonlyArray<Effect.Effect<VcsDiscoveryItem>>,
-        { concurrency: "unbounded" },
+  const discover = Effect.all({
+    versionControlSystems: Effect.all(
+      VCS_PROBES.map((entry) => probe(entry)) as ReadonlyArray<Effect.Effect<VcsDiscoveryItem>>,
+      { concurrency: "unbounded" },
+    ),
+    sourceControlProviders: sourceControlProviders.discover,
+  });
+
+  const git = (cwd: string, operation: string, args: ReadonlyArray<string>) =>
+    process.run({ operation, command: "git", args, cwd, timeoutMs: 10_000 });
+
+  // Only the repository's configured author counts, so a fork's upstream work
+  // is not "this week". Outside a repository, or when git fails, there is none.
+  const weeklyActivity = (cwd: string): Effect.Effect<Option.Option<VcsWeeklyActivityResult>> =>
+    git(cwd, "source-control.discovery.weekly-author", ["config", "user.email"]).pipe(
+      Effect.map((result) => result.stdout.trim()),
+      Effect.orElseSucceed(() => ""),
+      Effect.flatMap((author) =>
+        git(cwd, "source-control.discovery.weekly-activity", [
+          "log",
+          "--branches",
+          "--no-merges",
+          "--since=7.days",
+          ...(author === "" ? [] : ["--fixed-strings", `--author=${author}`]),
+          "--shortstat",
+          `--format=tformat:${WEEKLY_COMMIT_MARKER}`,
+        ]),
       ),
-      sourceControlProviders: sourceControlProviders.discover,
-    }),
+      Effect.map((result) => Option.some(parseWeeklyShortstat(result.stdout))),
+      Effect.orElseSucceed(() => Option.none<VcsWeeklyActivityResult>()),
+    );
+
+  return SourceControlDiscovery.of({
+    discover,
+    discoverFor: (input) =>
+      input.activityCwd === undefined
+        ? discover
+        : Effect.all([discover, weeklyActivity(input.activityCwd)]).pipe(
+            Effect.map(([result, activity]) =>
+              Option.isSome(activity) ? { ...result, weeklyActivity: activity.value } : result,
+            ),
+          ),
   });
 });
 

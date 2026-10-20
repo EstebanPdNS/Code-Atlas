@@ -1,5 +1,6 @@
 import type {
   EnvironmentId,
+  SourceControlDiscoveryResult,
   OrchestrationV2PendingBackgroundTask,
   ServerProvider,
   ThreadId,
@@ -14,9 +15,11 @@ import { formatContextWindowTokens, type ContextWindowSnapshot } from "~/lib/con
 import { cn } from "~/lib/utils";
 import { formatProviderDriverKindLabel } from "~/providerModels";
 import { useEnvironmentProviders } from "~/state/environments";
+import { useEnvironmentQuery } from "~/state/query";
+import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useKnownTerminalSessions } from "~/state/terminalSessions";
 
-import type { AtlasUsageEntry } from "./atlasIntro";
+import type { AtlasGitHubAccount, AtlasTerminalMeta } from "./atlasIntro";
 
 const AGENT_DRIVERS = new Set(["claudeAgent", "codex"]);
 const NO_PROVIDERS: readonly ServerProvider[] = [];
@@ -44,11 +47,42 @@ function useAgentProviders(environmentId: EnvironmentId | null): readonly Server
     );
 }
 
-/** Installed agents and each one's weekly usage, for the terminal (session lives in the Usage card). */
-export function useAtlasAgentSummary(environmentId: EnvironmentId | null): {
-  readonly agents: readonly string[];
-  readonly usage: readonly AtlasUsageEntry[];
-} {
+// The owner's two GitHub accounts: ports live on EstebanPdN, apps on EstebanPdNS.
+const ATLAS_GITHUB_ACCOUNTS = ["EstebanPdN", "EstebanPdNS"];
+
+function toAtlasGitHubAccounts(
+  discovery: SourceControlDiscoveryResult | null | undefined,
+): readonly AtlasGitHubAccount[] {
+  const github = discovery?.sourceControlProviders.find((item) => item.kind === "github");
+  const signedIn = new Set(
+    (github?.auth.accounts ?? [])
+      .filter((entry) => entry.authenticated)
+      .map((entry) => entry.account.toLowerCase()),
+  );
+  return ATLAS_GITHUB_ACCOUNTS.map((account) => ({
+    account,
+    connected: signedIn.has(account.toLowerCase()),
+  }));
+}
+
+/**
+ * Everything the terminal shows below the logo: installed agents and each
+ * one's weekly usage (session lives in the Usage card), lines committed in the
+ * project this week, and the GitHub accounts' sign-in state.
+ */
+export function useAtlasTerminalSummary(
+  environmentId: EnvironmentId | null,
+  cwd: string | null,
+): Omit<AtlasTerminalMeta, "projectName"> {
+  // One discovery call answers both the GitHub sign-in state and this week's commits.
+  const discovery = useEnvironmentQuery(
+    environmentId === null
+      ? null
+      : sourceControlEnvironment.discovery({
+          environmentId,
+          input: cwd === null ? {} : { activityCwd: cwd },
+        }),
+  );
   const providers = useAgentProviders(environmentId);
   const agents = [...new Set(providers.map(providerLabel))];
   const usage = providersWithLimits(providers).map((provider) => {
@@ -56,7 +90,12 @@ export function useAtlasAgentSummary(environmentId: EnvironmentId | null): {
     const weekly = windows.find((window) => window.kind === "weekly") ?? windows[0];
     return { label: providerLabel(provider), percent: weekly?.usedPercent ?? null };
   });
-  return { agents, usage };
+  return {
+    agents,
+    usage,
+    week: discovery.data?.weeklyActivity ?? null,
+    github: toAtlasGitHubAccounts(discovery.data),
+  };
 }
 
 function Meter({ percent, className }: { readonly percent: number; readonly className?: string }) {

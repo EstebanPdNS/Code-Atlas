@@ -13,13 +13,37 @@ export interface AtlasUsageEntry {
   readonly percent: number | null;
 }
 
+export interface AtlasWeekActivity {
+  readonly commits: number;
+  readonly linesAdded: number;
+  readonly linesRemoved: number;
+}
+
+export interface AtlasGitHubAccount {
+  readonly account: string;
+  readonly connected: boolean;
+}
+
 export interface AtlasTerminalMeta {
   readonly projectName: string | null;
   readonly agents: readonly string[];
   readonly usage: readonly AtlasUsageEntry[];
+  /** Lines committed in the project this week; null outside a repository or while loading. */
+  readonly week: AtlasWeekActivity | null;
+  readonly github: readonly AtlasGitHubAccount[];
 }
 
-const EMPTY_META: AtlasTerminalMeta = { projectName: null, agents: [], usage: [] };
+const EMPTY_META: AtlasTerminalMeta = {
+  projectName: null,
+  agents: [],
+  usage: [],
+  week: null,
+  github: [],
+};
+
+function metaKey(value: AtlasTerminalMeta): string {
+  return JSON.stringify(value);
+}
 
 let status: AtlasIntroStatus = "pending";
 let meta: AtlasTerminalMeta = EMPTY_META;
@@ -47,14 +71,7 @@ export function replayAtlasIntro() {
 }
 
 export function publishAtlasTerminalMeta(next: AtlasTerminalMeta) {
-  if (
-    meta.projectName === next.projectName &&
-    meta.agents.join("\0") === next.agents.join("\0") &&
-    meta.usage.map((entry) => `${entry.label}:${entry.percent}`).join("\0") ===
-      next.usage.map((entry) => `${entry.label}:${entry.percent}`).join("\0")
-  ) {
-    return;
-  }
+  if (metaKey(meta) === metaKey(next)) return;
   meta = next;
   emit();
 }

@@ -71,6 +71,11 @@ const MAP_ROW_KEYS = MAP_ROWS.map((_, index) => `map-${index}`);
 const PALETTE_KEYS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
 const TOTAL_ROWS = MAP_ROWS.length;
 
+const countFormat = new Intl.NumberFormat("en-US");
+function formatCount(value: number): string {
+  return countFormat.format(value);
+}
+
 function randomBetween(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
@@ -159,18 +164,18 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
             </pre>
           </div>
           <div data-atlas-reveal data-atlas-info>
-            <dl className="grid gap-y-0.5 text-2xs leading-relaxed">
-              <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
+            <dl className="grid gap-y-1 text-sm leading-relaxed">
+              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
                 <dt className="font-semibold text-primary">Project</dt>
                 <dd className="truncate text-foreground">{meta.projectName ?? "No project"}</dd>
               </div>
-              <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
+              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
                 <dt className="font-semibold text-primary">Agents</dt>
                 <dd className="text-muted-foreground">
                   {meta.agents.length > 0 ? meta.agents.join(" · ") : "Claude Code · Codex"}
                 </dd>
               </div>
-              <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
+              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
                 <dt className="font-semibold text-primary">Usage</dt>
                 <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
                   {meta.usage.length === 0 ? <span>No usage data yet</span> : null}
@@ -187,6 +192,45 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
                   ))}
                 </dd>
               </div>
+              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
+                <dt className="font-semibold text-primary">This week</dt>
+                <dd className="text-muted-foreground tabular-nums">
+                  {meta.week === null ? (
+                    "—"
+                  ) : (
+                    <>
+                      <span className="text-success">+{formatCount(meta.week.linesAdded)}</span>
+                      {" / "}
+                      <span className="text-destructive">
+                        −{formatCount(meta.week.linesRemoved)}
+                      </span>
+                      {` lines · ${formatCount(meta.week.commits)} ${meta.week.commits === 1 ? "commit" : "commits"}`}
+                    </>
+                  )}
+                </dd>
+              </div>
+              {meta.github.length > 0 ? (
+                <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
+                  <dt className="font-semibold text-primary">GitHub</dt>
+                  <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+                    {meta.github.map((entry) => (
+                      <span key={entry.account} className="inline-flex items-center gap-1.5">
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "size-1.5 rounded-full",
+                            entry.connected ? "bg-success" : "bg-muted-foreground/40",
+                          )}
+                        />
+                        <span className={entry.connected ? "text-foreground" : undefined}>
+                          {entry.account}
+                        </span>
+                        {entry.connected ? null : <span>· not signed in</span>}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ) : null}
             </dl>
             <div aria-hidden data-atlas-palette className="mt-3">
               {PALETTE_KEYS.map((key) => (
@@ -195,7 +239,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
             </div>
           </div>
         </div>
-        <div data-atlas-reveal className="text-2xs">
+        <div data-atlas-reveal className="text-xs">
           <p className="text-muted-foreground">
             <span className="text-primary">[ready]</span> workspace loaded · describe your next task
             below
