@@ -111,6 +111,7 @@ export function ChatCanvas({
       preview,
       detailsCard,
       findBar,
+      fillBesideDetailsCard: true,
     }),
     previewKey: preview?.key ?? null,
     reportPreview,
@@ -127,12 +128,14 @@ export function ChatCanvas({
         ref={elementRef}
         data-chat-canvas
         data-preview-overlaps-chat={layout.overlapsChat || undefined}
+        data-atlas-lane-fill={detailsCard ? "" : undefined}
         className="relative flex min-h-0 min-w-0 flex-1 flex-col"
         style={
           {
             "--chat-timeline-gutter": `${measurements.timelineGutter}px`,
             "--chat-lane-inset-start": `${layout.chat.insetStart}px`,
             "--chat-lane-inset-end": `${layout.chat.insetEnd}px`,
+            "--atlas-lane-width": `${layout.chat.width}px`,
           } as CSSProperties
         }
       >

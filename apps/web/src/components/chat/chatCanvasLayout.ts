@@ -30,6 +30,7 @@ export function resolveChatCanvasLayout({
   composerHeight = 0,
   detailsCard = null,
   findBar = null,
+  fillBesideDetailsCard = false,
 }: {
   container: PreviewMiniPlayerSize;
   preview: ChatCanvasPreview | null;
@@ -39,11 +40,15 @@ export function resolveChatCanvasLayout({
   composerHeight?: number;
   detailsCard?: PreviewMiniPlayerObstacles["detailsCard"];
   findBar?: PreviewMiniPlayerObstacles["detailsCard"];
+  /** Code Atlas: beside the details card the chat spans the whole free lane instead of its reading width. */
+  fillBesideDetailsCard?: boolean;
 }) {
-  const centeredWidth = Math.max(0, Math.min(maxChatWidth, container.width - padding * 2));
   const laneRight = detailsCard
     ? detailsCard.left - DETAILS_CARD_CLEARANCE
     : container.width - padding;
+  const laneMaxWidth =
+    fillBesideDetailsCard && detailsCard ? Math.max(0, laneRight - padding) : maxChatWidth;
+  const centeredWidth = Math.max(0, Math.min(laneMaxWidth, container.width - padding * 2));
   const normalWidth = Math.max(0, Math.min(centeredWidth, laneRight - padding));
   const normalLeft = Math.max(
     padding,
@@ -113,7 +118,7 @@ export function resolveChatCanvasLayout({
     const chatBeside = (player: PreviewMiniPlayerFrame) => {
       const normalRight = normalLeft + normalWidth;
       if (player.x >= normalRight + GAP) return chat;
-      const width = Math.min(maxChatWidth, player.x - GAP - padding);
+      const width = Math.min(laneMaxWidth, player.x - GAP - padding);
       if (width < minChatWidth) return null;
       const left = Math.min(normalLeft, player.x - GAP - width);
       return {

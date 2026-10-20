@@ -1,4 +1,4 @@
-import { MicIcon } from "lucide-react";
+import { CornerDownLeftIcon, MicIcon } from "lucide-react";
 import { useRef, useState, type PointerEvent } from "react";
 
 import {
@@ -57,24 +57,33 @@ export function ComposerDictationControl(props: {
         inert={!active}
       >
         <div className="min-w-0 overflow-hidden">
-          <ComposerDictationActivity
-            phase={phase}
-            level={dictation.level}
-            onCancel={dictation.cancel}
-          />
+          <ComposerDictationActivity phase={phase} level={dictation.level} />
         </div>
       </div>
       {active ? (
-        <button
-          type="button"
-          disabled={phase !== "recording"}
-          onPointerDown={keepComposerFocus}
-          onClick={dictation.stop}
-          aria-label={phase === "recording" ? "Stop and insert dictation" : "Transcribing"}
-          className="mr-0.5 grid size-7 place-items-center rounded-full bg-primary text-primary-foreground transition-[opacity,scale] duration-200 ease-out starting:scale-50 starting:opacity-0 disabled:opacity-45 motion-reduce:transition-none"
-        >
-          <span className="size-2.5 rounded-xs bg-current" />
-        </button>
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={phase !== "recording"}
+            onPointerDown={keepComposerFocus}
+            onClick={dictation.stop}
+            aria-label="Insert dictation"
+          >
+            <CornerDownLeftIcon />
+          </Button>
+          <button
+            type="button"
+            disabled={phase !== "recording"}
+            onPointerDown={keepComposerFocus}
+            onClick={dictation.stop}
+            aria-label={phase === "recording" ? "Stop and insert dictation" : "Transcribing"}
+            className="grid size-8 place-items-center rounded-lg bg-primary/20 text-primary transition-opacity duration-200 ease-out disabled:opacity-60 motion-reduce:transition-none"
+          >
+            <MicIcon className="size-4" />
+          </button>
+        </>
       ) : (
         <span
           ref={micRef}

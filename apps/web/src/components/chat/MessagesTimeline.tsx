@@ -1493,8 +1493,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
         style={{ paddingBottom: emptyPlaceholderInset }}
       >
         {/* Code Atlas: an empty thread greets with the handbook terminal too. */}
-        <div className="flex w-full max-w-(--chat-content-max-width) flex-col items-center gap-6">
-          <div className="hidden w-full sm:block">
+        <div className="flex h-full w-full max-w-(--chat-content-max-width) flex-col items-center gap-6 self-start pt-3">
+          <div data-atlas-fill className="hidden min-h-0 w-full flex-1 sm:block">
             <AtlasEmptyThreadTerminal />
           </div>
           <p className="text-sm text-muted-foreground/50">

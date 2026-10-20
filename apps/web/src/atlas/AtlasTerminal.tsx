@@ -171,7 +171,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
                 </dd>
               </div>
               <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
-                <dt className="font-semibold text-primary">Weekly</dt>
+                <dt className="font-semibold text-primary">Usage</dt>
                 <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
                   {meta.usage.length === 0 ? <span>No usage data yet</span> : null}
                   {meta.usage.map((entry) => (
@@ -243,7 +243,7 @@ export function AtlasTerminal({ meta }: { readonly meta: AtlasTerminalMeta }) {
       chromeVisible
       caret={false}
       hidden={status !== "done"}
-      className={cn("mx-auto max-w-176 shadow-lg/5", status !== "done" && "invisible")}
+      className={cn("mx-auto shadow-lg/5", status !== "done" && "invisible")}
       controls={
         <>
           <Button
@@ -315,9 +315,12 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
   const [typed, setTyped] = useState(0);
   const [rows, setRows] = useState(0);
   const [phase, setPhase] = useState<IntroPhase>("typing");
-  const [width] = useState(() => {
+  // Same box as the terminal it lands in, so the zoom-out ends pixel for pixel on it.
+  const [{ width, height }] = useState(() => {
     const rect = findLandedTerminal()?.getBoundingClientRect();
-    return rect && rect.width > 0 ? rect.width : Math.min(704, window.innerWidth - 64);
+    return rect && rect.width > 0
+      ? { width: rect.width, height: rect.height }
+      : { width: Math.min(704, window.innerWidth - 64), height: null };
   });
   const overlayRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -353,13 +356,10 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
         (window.innerHeight - top - 40) / (artBottom - commandTop),
       ),
     );
-    // As in the handbook: centre the whole window when it fits, else pin the prompt to the edge.
-    const scaledWidth = width * scale;
-    const left =
-      scaledWidth < viewportWidth ? (viewportWidth - scaledWidth) / 2 : edge - commandLeft * scale;
+    const left = edge - commandLeft * scale;
     startTransform.current = `translate(${left}px, ${top - commandTop * scale}px) scale(${scale})`;
     camera.style.transform = startTransform.current;
-  }, [width]);
+  }, []);
 
   useEffect(() => {
     const timers: number[] = [];
@@ -471,8 +471,13 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       onClick={() => setAtlasIntroStatus("done")}
       className="fixed inset-0 z-100 overflow-hidden"
     >
-      <div ref={backdropRef} data-atlas-intro-backdrop className="absolute inset-0" />
-      <div ref={cameraRef} data-atlas-intro-camera style={{ width }}>
+      <div ref={backdropRef} data-atlas-intro-backdrop className="absolute inset-0 bg-card" />
+      <div
+        ref={cameraRef}
+        data-atlas-intro-camera
+        data-atlas-fill={height === null ? undefined : ""}
+        style={height === null ? { width } : { width, height }}
+      >
         <AtlasTerminalFrame
           meta={meta}
           typed={typed}

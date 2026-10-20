@@ -100,10 +100,11 @@ export function driveDictationWaveform(
 }
 
 /**
- * Code Atlas: a scrolling level history, like a voice memo. Every level push
- * (about 25 a second) enters at the right edge and older readings slide left,
- * so speech reads as a moving trace; silence rests as a row of dots. Only
- * `transform` is written, once per push, with no frame loop of its own.
+ * Code Atlas: a scrolling level history, like Claude's voice input. The level
+ * is sampled on a fixed clock (so the trace keeps sliding left through pauses),
+ * enters at the right edge, and is scaled against an adapting noise floor and
+ * peak, so any microphone, loud or quiet, shows each syllable as a bar while
+ * silence rests as dots. Only `transform` is written.
  */
 export function driveScrollingWaveform(
   bars: ReadonlyArray<HTMLElement>,
@@ -112,6 +113,8 @@ export function driveScrollingWaveform(
   const count = bars.length;
   const values = new Float32Array(count).fill(WAVEFORM_REST_SCALE);
   const written = new Float32Array(count).fill(-1);
+  let floor = 1;
+  let peak = 0;
   const write = () => {
     for (let index = 0; index < count; index++) {
       const value = values[index]!;
@@ -120,21 +123,18 @@ export function driveScrollingWaveform(
       bars[index]!.style.transform = `scaleY(${value.toFixed(3)})`;
     }
   };
-  // A slowly adapting floor and ceiling: auto gain keeps speech loud, so bars
-  // follow syllables relative to the recent range rather than absolute level.
-  let floor = 0;
-  let ceiling = 0.35;
-  const onLevel = (raw: number) => {
-    const gated = Math.max(0, (raw - NOISE_GATE) / (1 - NOISE_GATE));
-    ceiling = Math.max(gated, ceiling * 0.985, 0.35);
-    floor = gated < floor ? gated : floor + (gated - floor) * 0.02;
-    const span = Math.max(0.2, ceiling - floor);
-    const shaped = gated <= 0 ? 0 : Math.min(1, Math.max(0, (gated - floor) / span) ** 1.3);
+  const sample = () => {
+    const raw = level.read();
+    // The floor follows the quietest recent level (room noise); the peak the loudest speech.
+    floor = raw < floor ? raw : floor + (raw - floor) * 0.01;
+    peak = Math.max(raw, peak * 0.99, floor + 0.08);
+    const relative = (raw - floor) / Math.max(0.08, peak - floor);
+    const shaped = raw <= 0 ? 0 : Math.min(1, Math.max(0, relative) ** 1.2);
     values.copyWithin(0, 1);
     values[count - 1] = Math.max(WAVEFORM_REST_SCALE, shaped);
     write();
   };
   write();
-  const unsubscribe = level.subscribe(onLevel);
-  return unsubscribe;
+  const interval = window.setInterval(sample, 45);
+  return () => window.clearInterval(interval);
 }

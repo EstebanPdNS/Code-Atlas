@@ -150,6 +150,18 @@ describe("chat canvas layout", () => {
     expect(result.overlapsDetailsCard).toBe(false);
     expect(result.chat).toEqual({ left: 424, width: 736, insetStart: 0, insetEnd: 0 });
   });
+  it("fills the free lane beside the details card instead of centering under it", () => {
+    const layout = (fillBesideDetailsCard: boolean) =>
+      resolveChatCanvasLayout({
+        container: { width: 1256, height: 848 },
+        maxChatWidth: 736,
+        detailsCard: { left: 964, right: 1244, bottom: 700 },
+        preview: null,
+        fillBesideDetailsCard,
+      }).chat;
+    expect(layout(false)).toEqual({ left: 196, width: 736, insetStart: 0, insetEnd: 128 });
+    expect(layout(true)).toEqual({ left: 48, width: 884, insetStart: 0, insetEnd: 276 });
+  });
   it("keeps a dragged or resized preview below the open find bar", () => {
     const findBar = { left: 1292, right: 1572, bottom: 48 };
     const layout = (lastInteraction: "drag" | "resize") =>

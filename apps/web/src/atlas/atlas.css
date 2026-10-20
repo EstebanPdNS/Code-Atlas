@@ -312,9 +312,8 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   transition: opacity 300ms ease;
 }
 
-/* Like the handbook's frame 01: the terminal window stays outlined while the
-   title bar and metadata wait for the zoom-out. */
 [data-atlas-chrome="off"] {
+  border-color: transparent;
   box-shadow: none;
 }
 
@@ -404,17 +403,50 @@ html.dark {
   --stage-art-bottom: #4a2408;
 }
 
-/* With the terminal above it, the new-thread composer sits in the lower third
-   instead of the middle so the intro has room on short windows. */
+/* New-thread layout with the terminal: the terminal's top lines up with the
+   details cards (12px from the canvas top), the composer sits at the bottom,
+   and the headline is centred in the space between them. */
 [data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
-  align-items: flex-end;
-  padding-bottom: 5vh;
+  align-items: stretch;
+  padding-top: 12px;
+  padding-bottom: 1.5rem;
 }
 
-@media (max-height: 1000px) {
-  [data-atlas-terminal] [data-atlas-palette] {
-    display: none;
-  }
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) .chat-composer-lane {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) [data-chat-composer-stack] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+[data-atlas-hero-head]:has([data-atlas-terminal]) {
+  position: static;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+[data-atlas-hero-head]:has([data-atlas-terminal]) [data-atlas-hero-column] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+[data-atlas-hero-head] [data-atlas-hero-terminal] {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+[data-atlas-hero-head] [data-atlas-hero-column] > :last-child {
+  margin-top: 1.25rem;
 }
 
 @media (max-height: 680px) {
@@ -500,19 +532,11 @@ html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
 }
 
 html:not([data-theme-id]) [data-chat-column] > header + div {
-  margin: 0 0.5rem 0.5rem 0;
+  margin: 0;
   border: 0;
-  border-radius: 0.875rem;
+  border-radius: 0;
   background: var(--background);
   overflow: hidden;
-}
-
-html:not([data-theme-id])
-  [data-slot="sidebar-wrapper"][data-sidebar-state="collapsed"]
-  [data-chat-column]
-  > header
-  + div {
-  margin-left: 0.5rem;
 }
 
 /* ---------- Composer controls: model, effort, access ---------- */
@@ -525,12 +549,79 @@ html:not([data-theme-id])
   height: 0.875rem;
 }
 
-/* The handbook intro: a darker room around the terminal window. */
-[data-atlas-intro-backdrop] {
-  background: var(--atlas-chrome, var(--background));
+/* ---------- Terminal that fills its slot (new and empty threads) ---------- */
+/* The window grows down to the space it is given and the logo scales with
+   both its width and its height, so tall windows get a bigger logo. */
+[data-atlas-fill] > [data-atlas-terminal] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
-/* Breathing room above the new-thread terminal, so it never touches the top. */
-[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) [data-atlas-terminal] {
-  margin-top: 1.25rem;
+[data-atlas-fill] > [data-atlas-terminal] > :nth-child(2) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  container-type: size;
+}
+
+[data-atlas-fill] [data-atlas-layout] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+}
+
+/* Sized against the terminal body: its 40px of side padding, and ~14rem of
+   command line, project data, and ready lines stacked around the logo. */
+[data-atlas-fill] [data-atlas-layout] [data-atlas-art] {
+  --atlas-art-size: clamp(
+    6px,
+    min(calc((100cqw - 40px) / 38.5), calc((100cqh - 14rem) / 16.6)),
+    28px
+  );
+}
+
+[data-atlas-fill] [data-atlas-layout] [data-atlas-info] {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  padding-left: 0;
+  border-top: 1px solid var(--border);
+  border-left: 0;
+}
+
+/* Very wide windows: logo on the left, project data on the right. */
+@container (min-width: 1180px) {
+  [data-atlas-fill] [data-atlas-layout] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-content: center;
+    align-items: center;
+    gap: 2.5rem;
+  }
+
+  [data-atlas-fill] [data-atlas-layout] [data-atlas-art] {
+    --atlas-art-size: clamp(
+      6px,
+      min(calc((100cqw - 40px) * 0.62 / 38.5), calc((100cqh - 8rem) / 16.6)),
+      28px
+    );
+  }
+
+  [data-atlas-fill] [data-atlas-layout] [data-atlas-info] {
+    margin-top: 0;
+    padding-top: 0;
+    padding-left: 2rem;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+
+/* Beside the details rail the chat fills the free lane (see fillBesideDetailsCard).
+   The aria-hidden width probe keeps the reading width it measures. */
+[data-chat-canvas][data-atlas-lane-fill] > :not([aria-hidden]) {
+  --chat-content-max-width: var(--atlas-lane-width);
 }

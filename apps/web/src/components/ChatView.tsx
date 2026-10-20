@@ -8376,8 +8376,9 @@ export default function ChatView(props: ChatViewProps) {
                   className="group/composer-stack pointer-events-auto relative z-10 mx-auto w-full max-w-(--chat-content-max-width)"
                 >
                   {isDraftHeroState ? (
-                    <div className="absolute inset-x-0 bottom-full">
+                    <div data-atlas-hero-head className="absolute inset-x-0 bottom-full">
                       <div
+                        data-atlas-hero-column
                         className="pb-4 group-has-data-[composer-shoulder-tab]/composer-stack:pb-0"
                         style={
                           forceExpandedMobileComposer
@@ -8386,7 +8387,11 @@ export default function ChatView(props: ChatViewProps) {
                         }
                       >
                         {/* Code Atlas: the handbook terminal greets every new thread. */}
-                        <div className="mb-5 hidden sm:block">
+                        <div
+                          data-atlas-hero-terminal
+                          data-atlas-fill
+                          className="mb-5 hidden sm:block"
+                        >
                           <AtlasTerminal
                             meta={{
                               projectName: activeProject?.title ?? null,
