@@ -10,8 +10,9 @@ import {
   MIN_PROMPT_FONT_SIZE,
 } from "@t3tools/contracts";
 
+// Code Atlas: the handbook's monospace is the interface face.
 export const DEFAULT_SANS_FONT_STACK =
-  '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif';
+  '"SF Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, "Liberation Mono", monospace';
 
 // Concrete names first: some engines alias `ui-monospace` to the
 // proportional system UI font, which would break every code surface.

@@ -20,12 +20,11 @@
   --atlas-ascii-0: #ffe0c5;
   --atlas-ascii-1: #ffad66;
   --atlas-ascii-2: #d98442;
+  /* Concrete names first: some engines alias ui-monospace to the proportional UI font. */
   --atlas-font-console:
-    ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   /* The handbook's typeface everywhere. Settings -> Appearance still overrides it. */
   --font-sans: var(--atlas-font-console);
-  /* Monospace runs wide: a slightly smaller root keeps the UI as dense as the handbook. */
-  font-size: 15px;
 }
 
 html.dark {

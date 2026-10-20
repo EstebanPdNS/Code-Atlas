@@ -126,7 +126,8 @@ export const InterfaceFontSize = Schema.Int.check(
   Schema.isBetween({ minimum: MIN_INTERFACE_FONT_SIZE, maximum: MAX_INTERFACE_FONT_SIZE }),
 );
 export type InterfaceFontSize = typeof InterfaceFontSize.Type;
-export const DEFAULT_INTERFACE_FONT_SIZE: InterfaceFontSize = 16;
+// Code Atlas: the handbook monospace runs wide, so the interface defaults one step smaller.
+export const DEFAULT_INTERFACE_FONT_SIZE: InterfaceFontSize = 15;
 
 export const MIN_PROMPT_FONT_SIZE = 12;
 export const MAX_PROMPT_FONT_SIZE = 20;
