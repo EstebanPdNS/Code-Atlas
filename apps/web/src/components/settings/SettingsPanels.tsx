@@ -27,6 +27,7 @@ import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
   type ChatWidth,
+  type WorkDisplayStyle,
   type DiffLayout,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
@@ -208,6 +209,11 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
   wide: "Wide",
   full: "Full",
+};
+
+const WORK_DISPLAY_STYLE_LABELS: Record<WorkDisplayStyle, string> = {
+  claude: "Claude Code",
+  codex: "Codex",
 };
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
@@ -544,6 +550,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Diff colors"]
       : []),
     ...(settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? ["Chat width"] : []),
+    ...(settings.workDisplayStyle !== DEFAULT_UNIFIED_SETTINGS.workDisplayStyle
+      ? ["Progress style"]
+      : []),
     ...(settings.mathRenderingEnabled !== DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled
       ? ["Render math"]
       : []),
@@ -721,6 +730,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
+      workDisplayStyle: DEFAULT_UNIFIED_SETTINGS.workDisplayStyle,
       mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
@@ -1374,6 +1384,39 @@ export function AppearanceSettingsPanel() {
                   <SelectItem value="comfortable">Comfortable (default)</SelectItem>
                   <SelectItem value="wide">Wide</SelectItem>
                   <SelectItem value="full">Full</SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("work-display-style")}
+          description="How a running agent shows its plan, elapsed time, tokens and current step."
+          resetAction={
+            settings.workDisplayStyle !== DEFAULT_UNIFIED_SETTINGS.workDisplayStyle ? (
+              <SettingResetButton
+                label="progress style"
+                onClick={() =>
+                  updateSettings({ workDisplayStyle: DEFAULT_UNIFIED_SETTINGS.workDisplayStyle })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.workDisplayStyle}
+                onValueChange={(value) => {
+                  if (value === "claude" || value === "codex")
+                    updateSettings({ workDisplayStyle: value });
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Progress style">
+                  <SelectValue>{WORK_DISPLAY_STYLE_LABELS[settings.workDisplayStyle]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="claude">Claude Code (default)</SelectItem>
+                  <SelectItem value="codex">Codex</SelectItem>
                 </SelectPopup>
               </Select>
             </div>

@@ -408,6 +408,8 @@ import { createPageScrollController, type PageScrollKey } from "./chat/pageScrol
 import { createUpwardScrollDetector, isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/AtlasTerminal";
+import { AtlasClaudeProgress } from "~/atlas/AtlasClaudeProgress";
+import { atlasActivityLabel } from "~/atlas/claudeProgress";
 import { useAtlasTerminalSummary } from "~/atlas/AtlasRailSections";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
@@ -2674,6 +2676,9 @@ export default function ChatView(props: ChatViewProps) {
   const activeWorkStartedAt =
     deriveActiveWorkStartedAt(activeActivityRun, activeRuntime, localDispatchStartedAt) ??
     runlessWorkStartedAt;
+  // Code Atlas: Claude Code or Codex presentation of the running turn's plan and status.
+  const claudeProgressStyle =
+    useClientSettings((settings) => settings.workDisplayStyle) === "claude";
   const activeRunPreparing = activeActivityRun?.status === "preparing";
   const sendQueuesBehindSetup =
     isServerThread && (activeRunPreparing || activeActivityRun?.status === "starting");
@@ -8410,6 +8415,15 @@ export default function ChatView(props: ChatViewProps) {
                       </div>
                     </div>
                   ) : null}
+                  {claudeProgressStyle && !isDraftHeroState ? (
+                    <AtlasClaudeProgress
+                      working={isWorking}
+                      startedAt={activeWorkStartedAt}
+                      tokens={activeThreadLiveTokenUsage?.usedTokens ?? null}
+                      activity={atlasActivityLabel(timelineEntries)}
+                      steps={activeComposerTaskSteps}
+                    />
+                  ) : null}
                   <div
                     ref={draftHeroComposerAnchorRef}
                     className="relative z-10"
@@ -8547,8 +8561,10 @@ export default function ChatView(props: ChatViewProps) {
                               activeThreadModelSelection={activeThread?.modelSelection}
                               activeProjectId={activeProject?.id ?? null}
                               activeContextWindow={activeContextWindow}
-                              activeTasksProgress={activeComposerTasksProgress}
-                              activeTaskSteps={activeComposerTaskSteps}
+                              activeTasksProgress={
+                                claudeProgressStyle ? null : activeComposerTasksProgress
+                              }
+                              activeTaskSteps={claudeProgressStyle ? null : activeComposerTaskSteps}
                               compactThreadUnavailable={compactThreadUnavailable}
                               compactDisabled={compactDisabled}
                               compactDisabledReason={compactDisabledReason}

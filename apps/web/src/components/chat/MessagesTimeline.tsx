@@ -3600,7 +3600,10 @@ function toolIconAcceptsTint(toolIcon: ToolActivityIcon | undefined): boolean {
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
   const { isCompacting, isPreparingWorktree, backgroundWorktreeSetup } =
     use(TimelineRowActivityCtx);
+  // Code Atlas: the Claude Code style shows elapsed time in the status line above the composer.
+  const claudeStyle = useClientSettings((settings) => settings.workDisplayStyle) === "claude";
   const shimmer = isPreparingWorktree || isCompacting;
+  if (claudeStyle && !shimmer && backgroundWorktreeSetup === null) return null;
   const label = isPreparingWorktree ? (
     "Setting up worktree…"
   ) : isCompacting ? (
@@ -3676,10 +3679,12 @@ function CompactingLabel() {
 function ThinkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "thinking" }> }) {
   const ctx = use(TimelineRowCtx);
   const { isCompacting, isPreparingWorktree } = use(TimelineRowActivityCtx);
+  const claudeStyle = useClientSettings((settings) => settings.workDisplayStyle) === "claude";
   if (isPreparingWorktree || isCompacting) return <WorkLogRow label="" />;
   const activity = <LiveActivityRow label="Thinking" iconName="brain" active shimmer />;
   const { groupId } = row;
-  if (groupId === undefined) return activity;
+  // Code Atlas: in the Claude Code style "Thinking" lives in the status line.
+  if (groupId === undefined) return claudeStyle ? null : activity;
   return (
     <button
       type="button"
