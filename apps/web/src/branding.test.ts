@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
+  formatAppDisplayName,
   resolveServerBackedAppDisplayName,
   resolveServerBackedAppStageLabel,
 } from "./branding.logic";
@@ -47,7 +48,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("nightly");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Nightly");
     expect(branding.APP_STAGE_LABEL).toBe("Nightly");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code (Nightly)");
+    expect(branding.APP_DISPLAY_NAME).toBe("Code Atlas (Nightly)");
   });
 
   it("does not label the latest hosted app channel", async () => {
@@ -58,7 +59,7 @@ describe("branding", () => {
     expect(branding.HOSTED_APP_CHANNEL).toBe("latest");
     expect(branding.HOSTED_APP_CHANNEL_LABEL).toBe("Latest");
     expect(branding.APP_STAGE_LABEL).toBe("Latest");
-    expect(branding.APP_DISPLAY_NAME).toBe("T3 Code");
+    expect(branding.APP_DISPLAY_NAME).toBe("Code Atlas");
   });
 
   it("ignores unknown hosted app channels", async () => {
@@ -72,6 +73,14 @@ describe("branding", () => {
 });
 
 describe("branding logic", () => {
+  it("does not label the stable Beta channel", () => {
+    // Code Atlas ships one stable channel, so Beta shows the bare app name like Latest.
+    expect(formatAppDisplayName({ baseName: "Code Atlas", stageLabel: "Beta" })).toBe("Code Atlas");
+    expect(formatAppDisplayName({ baseName: "Code Atlas", stageLabel: "Dev" })).toBe(
+      "Code Atlas (Dev)",
+    );
+  });
+
   it("returns Nightly for nightly primary server versions", () => {
     expect(
       resolveServerBackedAppStageLabel({
