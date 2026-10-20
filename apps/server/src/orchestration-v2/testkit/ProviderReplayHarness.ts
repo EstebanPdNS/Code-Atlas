@@ -299,6 +299,8 @@ export function layerWithRegistry<Error>(
   );
   const layerServerSettings = ServerSettings.layerTest({
     responseStreamingMode: "turn",
+    // Recorded provider transcripts predate Code Atlas's plan-first instruction.
+    planFirst: false,
     ...(options.continueThreadsAfterServerUpdate === undefined
       ? {}
       : { continueThreadsAfterServerUpdate: options.continueThreadsAfterServerUpdate }),

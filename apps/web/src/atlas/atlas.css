@@ -657,3 +657,15 @@ span[data-atlas-hero-heading] {
     opacity: 0.7;
   }
 }
+
+/* Claude Code progress style: the status line sits 5% in from the composer
+   edge, and the conversation fades out above the plan card and status line
+   instead of scrolling visibly behind them. */
+[data-atlas-claude-progress] {
+  padding-top: 2.5rem;
+  background: linear-gradient(to bottom, transparent, var(--background) 2.5rem);
+}
+
+[data-atlas-status-line] {
+  padding-inline-start: 5%;
+}

@@ -638,6 +638,7 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.enableProviderUpdateChecks !== DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks
       ? ["Provider update checks"]
       : []),
+    ...(settings.planFirst !== DEFAULT_UNIFIED_SETTINGS.planFirst ? ["Plan first"] : []),
     ...(settings.continueThreadsAfterServerUpdate !==
     DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate
       ? ["Continue threads after restarts"]
@@ -761,6 +762,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       snoozeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.snoozeLimitedThreads,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
+      planFirst: DEFAULT_UNIFIED_SETTINGS.planFirst,
       continueThreadsAfterServerUpdate: DEFAULT_UNIFIED_SETTINGS.continueThreadsAfterServerUpdate,
       backgroundActivity: DEFAULT_UNIFIED_SETTINGS.backgroundActivity,
       backgroundActivityProfile: DEFAULT_UNIFIED_SETTINGS.backgroundActivityProfile,
@@ -2873,6 +2875,29 @@ export function GeneralSettingsPanel() {
                 <SelectItem value="steer">Steer</SelectItem>
               </SelectPopup>
             </Select>
+          }
+        />
+
+        <SettingsRow
+          serverScoped
+          settingKeys={["planFirst"]}
+          {...searchableSetting("plan-first")}
+          description="Agents start every request with a task list and work through it step by step, so you can follow each step as it happens. Claude Code applies a change from its next session."
+          resetAction={
+            settings.planFirst !== DEFAULT_UNIFIED_SETTINGS.planFirst ? (
+              <SettingResetButton
+                label="plan first"
+                onClick={() => updateSettings({ planFirst: DEFAULT_UNIFIED_SETTINGS.planFirst })}
+              />
+            ) : null
+          }
+          control={
+            <ScopedSwitch
+              settingKeys={["planFirst"]}
+              checked={settings.planFirst}
+              onCheckedChange={(checked) => updateSettings({ planFirst: Boolean(checked) })}
+              aria-label="Plan first"
+            />
           }
         />
 
