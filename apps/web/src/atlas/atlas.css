@@ -669,3 +669,41 @@ span[data-atlas-hero-heading] {
 [data-atlas-status-line] {
   padding-inline-start: 5%;
 }
+
+/* Sidebar project and group rows: the count sits flush right; on hover it
+   slides left to make room for the row's buttons, which fade in over the
+   space it left. */
+[data-atlas-row="project"] {
+  --atlas-row-actions-width: 2.75rem;
+}
+
+[data-atlas-row="folder"] {
+  --atlas-row-actions-width: 1.5rem;
+}
+
+[data-atlas-row-count] {
+  margin-inline-start: auto;
+  padding-inline-end: 0.25rem;
+  transition: transform 180ms ease-out;
+}
+
+[data-atlas-row-actions] {
+  position: absolute;
+  inset-inline-end: 0.25rem;
+  top: 50%;
+  translate: 0 -50%;
+  transition: opacity 150ms ease-out;
+}
+
+[data-atlas-row]:hover [data-atlas-row-count],
+[data-atlas-row]:focus-within [data-atlas-row-count],
+[data-atlas-row]:has([data-popup-open]) [data-atlas-row-count] {
+  transform: translateX(calc(-1 * var(--atlas-row-actions-width)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-atlas-row-count],
+  [data-atlas-row-actions] {
+    transition: none;
+  }
+}

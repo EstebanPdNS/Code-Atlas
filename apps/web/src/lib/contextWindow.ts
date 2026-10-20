@@ -1,4 +1,5 @@
 import type {
+  OrchestrationV2ContextCategory,
   OrchestrationV2ProviderTurn,
   OrchestrationV2ProviderTurnTokenUsage,
   OrchestrationV2ProviderThread,
@@ -19,6 +20,8 @@ type NullableContextWindowUsage = {
 };
 
 export type ContextWindowSnapshot = NullableContextWindowUsage & {
+  /** Code Atlas: the provider's own breakdown (Claude's /context), when it reported one. */
+  readonly contextCategories?: ReadonlyArray<OrchestrationV2ContextCategory>;
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
@@ -92,6 +95,9 @@ export function deriveLatestContextWindowSnapshot(
       compactsAutomatically: true,
       autoCompactThreshold: liveUsage.autoCompactThreshold ?? null,
       cost: null,
+      ...(liveUsage.contextCategories === undefined
+        ? {}
+        : { contextCategories: liveUsage.contextCategories }),
       updatedAt: liveUsage.updatedAt,
     };
   }
