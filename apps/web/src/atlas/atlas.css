@@ -591,3 +591,34 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
 .composer-tiptap {
   min-height: 2.75rem;
 }
+
+/* Dictation trace: exactly 22 bars wide (2px bars, 2px gaps); the extra bar
+   past the right edge is clipped while the row slides. */
+[data-atlas-waveform] {
+  width: calc(22 * 0.25rem - 0.125rem);
+}
+
+/* Sidebar wordmark: "code atlas." spans nearly the whole sidebar header. A
+   monospace space is a full character wide, so the gap between the words is
+   pulled in to read as one name. */
+[data-atlas-wordmark] {
+  word-spacing: -0.3em;
+}
+
+[data-atlas-wordmark="lg"] {
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+/* "What should we build in <project>?" at 80% of its former 1.5rem. */
+h1[data-atlas-hero-heading],
+span[data-atlas-hero-heading] {
+  font-size: 1.2rem;
+  line-height: 1.6rem;
+}
+
+@media (min-width: 1024px) {
+  [data-inline="true"] > h1[data-atlas-hero-heading] > span:last-child {
+    font-size: 1.2rem;
+  }
+}

@@ -9,6 +9,7 @@ import {
   renameFolder,
   resolveProjectFolders,
   setFolderCollapsed,
+  setFolderIcon,
   type ProjectFoldersState,
 } from "./projectFolders";
 
@@ -41,6 +42,16 @@ describe("project folders", () => {
     ]);
     expect(renameFolder(state, "mac", "")).toBe(state);
     expect(deleteFolder(state, "3ds").folders.map((f) => f.id)).toEqual(["mac"]);
+  });
+
+  it("sets a group icon and restores the default folder icon", () => {
+    let state = withFolders("3DS", "Mac");
+    state = setFolderIcon(state, "3ds", { kind: "emoji", emoji: "🎮" });
+    state = setFolderIcon(state, "mac", { kind: "image", dataUrl: "data:image/png;base64,AA==" });
+    expect(state.folders.map((f) => f.icon?.kind)).toEqual(["emoji", "image"]);
+    state = setFolderIcon(state, "3ds", null);
+    expect("icon" in state.folders[0]!).toBe(false);
+    expect(setFolderIcon(state, "3ds", null)).toBe(state);
   });
 
   it("keeps each project in exactly one folder", () => {

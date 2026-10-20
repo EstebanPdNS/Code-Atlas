@@ -663,6 +663,25 @@ export const make = Effect.gen(function* () {
       quit: () => {
         void runPromise(electronApp.quit);
       },
+      // Code Atlas: with quit confirmation off, Cmd+Q still asks while agents
+      // work. The renderer publishes the count (see atlas/runningAgents.ts).
+      confirmDirectQuit: async () => {
+        if (window.isDestroyed()) return true;
+        const running: unknown = await window.webContents
+          .executeJavaScript("globalThis.codeAtlasRunningAgents ?? 0", true)
+          .catch(() => 0);
+        if (typeof running !== "number" || running <= 0) return true;
+        const { response } = await Electron.dialog.showMessageBox(window, {
+          type: "warning",
+          buttons: ["Quit", "Cancel"],
+          defaultId: 1,
+          cancelId: 1,
+          message:
+            running === 1 ? "An agent is still working." : `${running} agents are still working.`,
+          detail: "Quitting Code Atlas stops them. Quit anyway?",
+        });
+        return response === 0;
+      },
     });
     window.webContents.on("before-input-event", (event, input) => {
       quitShortcutHandler(event, input);

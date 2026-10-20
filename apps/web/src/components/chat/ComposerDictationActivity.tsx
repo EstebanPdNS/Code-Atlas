@@ -6,42 +6,48 @@ import { WAVEFORM_REST_SCALE, driveScrollingWaveform } from "~/dictation/dictati
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 
-// Code Atlas: a longer, scrolling trace (see driveScrollingWaveform).
+// Code Atlas: a longer, scrolling trace (see driveScrollingWaveform). One extra
+// bar sits past the right edge so the slide never opens a gap.
 const BAR_COUNT = 22;
-const BARS = Array.from({ length: BAR_COUNT }, (_, index) => index);
+const BARS = Array.from({ length: BAR_COUNT + 1 }, (_, index) => index);
 
 /**
  * Bars that follow the microphone while it is live. They rest as dots while
  * transcribing, while idle, and under reduced motion.
  */
 function DictationWaveform(props: { readonly level: DictationLevel; readonly live: boolean }) {
-  const containerRef = useRef<HTMLSpanElement>(null);
+  const rowRef = useRef<HTMLSpanElement>(null);
   const reduceMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const animate = props.live && !reduceMotion;
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const bars = Array.from(container.children).filter(
+    const row = rowRef.current;
+    if (!row) return;
+    const bars = Array.from(row.children).filter(
       (child): child is HTMLElement => child instanceof HTMLElement,
     );
-    if (animate) return driveScrollingWaveform(bars, props.level);
+    if (animate) return driveScrollingWaveform(row, bars, props.level);
     for (const bar of bars) bar.style.transform = `scaleY(${WAVEFORM_REST_SCALE})`;
     return undefined;
   }, [animate, props.level]);
 
   return (
-    <span ref={containerRef} className="flex h-4 items-center gap-0.5" aria-hidden="true">
-      {BARS.map((index) => (
-        <span
-          key={index}
-          className={cn(
-            "h-4 w-0.5 rounded-full bg-muted-foreground",
-            animate && "will-change-transform",
-          )}
-          style={{ transform: `scaleY(${WAVEFORM_REST_SCALE})` }}
-        />
-      ))}
+    <span data-atlas-waveform className="flex h-4 overflow-hidden" aria-hidden="true">
+      <span
+        ref={rowRef}
+        className={cn("flex h-4 shrink-0 items-center gap-0.5", animate && "will-change-transform")}
+      >
+        {BARS.map((index) => (
+          <span
+            key={index}
+            className={cn(
+              "h-4 w-0.5 shrink-0 rounded-full bg-muted-foreground",
+              animate && "will-change-transform",
+            )}
+            style={{ transform: `scaleY(${WAVEFORM_REST_SCALE})` }}
+          />
+        ))}
+      </span>
     </span>
   );
 }
