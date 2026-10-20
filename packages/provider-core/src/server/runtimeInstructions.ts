@@ -25,3 +25,12 @@ export function buildRuntimeInstructions(runtime: {
 function toSingleLine(value: string): string {
   return value.replaceAll(/\s+/g, " ").trim();
 }
+
+/**
+ * Code Atlas "plan first": the agent keeps a visible task list for every
+ * request, so the client can show each step as it happens. `tool` is the
+ * harness's task-list tool (TodoWrite for Claude Code, update_plan for Codex).
+ */
+export function buildPlanFirstInstructions(tool: string): string {
+  return `<plan_first>For every request that needs more than one action, start by writing a short task list with the ${tool} tool: one item per concrete step, in the order you will do them. Then work through the list step by step. Keep exactly one item in progress, mark each item completed as soon as it is done, and update the list when the plan changes. Keep the list current until every item is completed. A single question or a one-step answer needs no list.</plan_first>`;
+}

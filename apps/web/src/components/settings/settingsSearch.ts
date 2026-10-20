@@ -446,6 +446,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["queue steer running turn send default behavior composer"],
   },
   {
+    id: "plan-first",
+    title: "Plan first",
+    to: "/settings/general",
+    searchTerms: ["plan tasks todo step by step task list claude code codex todowrite update_plan"],
+    scope: "environment-defaults",
+  },
+  {
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/general",

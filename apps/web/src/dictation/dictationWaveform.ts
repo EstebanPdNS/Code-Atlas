@@ -101,17 +101,17 @@ export function driveDictationWaveform(
 
 // Code Atlas: one new sample per step; between steps the row slides one bar left.
 const SCROLL_STEP_MS = 90;
-// Bars this close to the left edge shrink and fade as they leave, like Claude's voice input.
-const EDGE_FADE_BARS = 6;
+// Bars this close to the left edge shrink as they leave, like Claude's voice input.
+const EDGE_SHRINK_BARS = 6;
 
 /**
  * Code Atlas: a scrolling level history, like Claude's voice input. The row
  * slides left continuously, a new sample enters at the right edge every step,
- * and the dots shrink and fade as they reach the left edge, so the trace moves
+ * and the dots shrink as they reach the left edge, so the trace moves
  * through pauses too. Levels are scaled against an adapting noise floor and
  * peak, so any microphone shows each syllable as a bar while silence rests as
  * dots. Runs on animation frames only while the microphone is live, and only
- * writes `transform` and `opacity`.
+ * writes `transform`.
  *
  * `row` holds the bars and is translated; `bars` has one more bar than fits, so
  * the slide never shows a gap at the right edge.
@@ -148,11 +148,9 @@ export function driveScrollingWaveform(
     const phase = (now - lastStep) / SCROLL_STEP_MS;
     row.style.transform = `translateX(${(-phase * pitch).toFixed(2)}px)`;
     for (let index = 0; index < count; index++) {
-      const edge = Math.min(1, Math.max(0, (index - phase) / EDGE_FADE_BARS));
-      const size = 0.3 + 0.7 * edge;
-      const bar = bars[index]!;
-      bar.style.transform = `scale(${size.toFixed(3)}, ${(values[index]! * size).toFixed(3)})`;
-      bar.style.opacity = edge.toFixed(3);
+      const edge = Math.min(1, Math.max(0, (index - phase) / EDGE_SHRINK_BARS));
+      const size = 0.15 + 0.85 * edge;
+      bars[index]!.style.transform = `scale(${size.toFixed(3)}, ${(values[index]! * size).toFixed(3)})`;
     }
     frame = requestAnimationFrame(draw);
   };
@@ -161,9 +159,6 @@ export function driveScrollingWaveform(
   return () => {
     cancelAnimationFrame(frame);
     row.style.transform = "";
-    for (const bar of bars) {
-      bar.style.transform = `scaleY(${WAVEFORM_REST_SCALE})`;
-      bar.style.opacity = "";
-    }
+    for (const bar of bars) bar.style.transform = `scaleY(${WAVEFORM_REST_SCALE})`;
   };
 }

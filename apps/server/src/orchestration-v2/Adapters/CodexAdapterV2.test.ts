@@ -493,6 +493,24 @@ describe("CodexAdapterV2 runtime policy", () => {
     }),
   );
 
+  it.effect("asks Codex to plan with update_plan when plan first is on, except in Plan mode", () =>
+    Effect.gen(function* () {
+      const modelSelection = { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" };
+      const build = (interactionMode: "default" | "plan", planFirst: boolean) =>
+        CodexAdapterV2.buildCodexTurnStartParams({
+          nativeThreadId: "native-plan-first",
+          codexInput: [{ type: "text", text: "fix the build" }],
+          runtimePolicy: { runtimeMode: "full-access", interactionMode, cwd: null },
+          modelSelection,
+          planFirst,
+        });
+      const on = yield* build("default", true);
+      assert.include(on.additionalContext?.["t3_plan_first"]?.value ?? "", "update_plan");
+      assert.isUndefined((yield* build("default", false)).additionalContext);
+      assert.isUndefined((yield* build("plan", true)).additionalContext?.["t3_plan_first"]);
+    }),
+  );
+
   it.effect("adds default-mode developer instructions when the T3 MCP server is attached", () =>
     Effect.gen(function* () {
       const params = yield* CodexAdapterV2.buildCodexTurnStartParams({

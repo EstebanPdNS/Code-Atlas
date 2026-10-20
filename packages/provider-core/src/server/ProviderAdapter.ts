@@ -436,6 +436,8 @@ export interface ProviderAdapterV2TurnInput {
   readonly modelSelection: ModelSelection;
   readonly runtimePolicy: ProviderAdapterV2RuntimePolicy;
   readonly appContext?: ReadonlyArray<{ readonly key: string; readonly text: string }>;
+  /** Code Atlas: ask the agent to keep a visible task list (Settings → Plan first). */
+  readonly planFirst?: boolean;
 }
 
 export interface ProviderAdapterV2SteerInput {
