@@ -8,7 +8,7 @@
 <p align="center">A Mac workspace for coding agents, with local voice dictation and organized projects. Based on T3 Code.</p>
 
 <p align="center">
-  <a href="https://github.com/EstebanPdNS/Code-Atlas/releases/tag/v1.1"><img src="docs/images/badges/release.svg" alt="Release: v1.1" height="22"></a>
+  <a href="https://github.com/EstebanPdNS/Code-Atlas/releases/tag/v1.2"><img src="docs/images/badges/release.svg" alt="Release: v1.2" height="22"></a>
   <a href="docs/getting-started.md"><img src="docs/images/badges/macos.svg" alt="macOS 13+ · Apple Silicon" height="22"></a>
   <a href="https://github.com/EstebanPdNS/Code-Atlas/commits/main/"><img src="docs/images/badges/development.svg" alt="Development: active" height="22"></a>
   <a href="LICENSE"><img src="docs/images/badges/license.svg" alt="License: MIT" height="22"></a>
@@ -24,9 +24,9 @@ This project was developed with the help of [OpenAI Codex](https://openai.com/co
 
 ## Download
 
-<a href="https://github.com/EstebanPdNS/Code-Atlas/releases/download/v1.1/Code-Atlas-v1.1.zip"><img src="docs/images/download.svg" alt="Download for macOS" width="226" height="46"></a>
+<a href="https://github.com/EstebanPdNS/Code-Atlas/releases/download/v1.2/Code-Atlas-v1.2.zip"><img src="docs/images/download.svg" alt="Download for macOS" width="226" height="46"></a>
 
-**v1.1 · macOS 13+ · Apple Silicon.** Move the app to Applications and follow the [installation guide](docs/getting-started.md).
+**v1.2 · macOS 13+ · Apple Silicon.** Move the app to Applications and follow the [installation guide](docs/getting-started.md).
 
 ## Features
 
@@ -34,7 +34,8 @@ This project was developed with the help of [OpenAI Codex](https://openai.com/co
 - Dictate locally in Spanish, English and Portuguese, including mixed programming vocabulary, with Whisper running on the Mac GPU. Right-click the microphone to choose the input.
 - Organize projects in collapsible groups with drag and drop and their own icons, and keep Pinned and Needs attention threads at the top. Your folders are never moved.
 - Start each thread from the Code Atlas terminal: project, agents, weekly usage, this week's commits and GitHub accounts.
-- Follow a running agent in the Claude Code style: its plan as a card and one live line with time, tokens and the current step. The Codex style is one setting away.
+- Follow a running agent in the Claude Code style: it plans every request as a task list, shown as a card with one live line for time, tokens and the current step. Pause, resume or stop it from the composer.
+- See the context window row by row and your Codex and Claude Code limits beside the conversation and in the usage statistics.
 - Keep Environment, Context and Usage beside the conversation.
 - Run alongside T3 Code with separate data in `~/.code-atlas`.
 
