@@ -88,6 +88,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   getClientPlatform: () => clientPlatform,
   setNotificationBadge: (badge) =>
     ipcRenderer.invoke(IpcChannels.SET_NOTIFICATION_BADGE_CHANNEL, badge),
+  setAgentControlOverlay: (target) =>
+    ipcRenderer.invoke(IpcChannels.SET_AGENT_CONTROL_OVERLAY_CHANNEL, target),
   onNotificationBadgeClear: (listener) => {
     const handler = () => listener();
     ipcRenderer.on(IpcChannels.SET_NOTIFICATION_BADGE_CHANNEL, handler);
