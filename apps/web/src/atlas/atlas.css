@@ -233,12 +233,11 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
 }
 
 [data-atlas-art] {
-  --atlas-art-size: clamp(6px, min(calc((100cqi - 72px) / 70), calc((100vh - 560px) / 17)), 11px);
+  --atlas-art-size: clamp(6px, min(calc((100cqi - 72px) / 64), calc((100vh - 600px) / 17)), 12px);
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  /* The map and the wordmark read as one logo, like the handbook. */
+  gap: calc(var(--atlas-art-size) * 2.2);
 }
 
 [data-atlas-ascii] {
@@ -271,8 +270,37 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   transition: opacity 300ms ease;
 }
 
-[data-atlas-reveal="off"] {
+[data-atlas-chrome="off"] {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+[data-atlas-chrome="off"] [data-atlas-reveal] {
   opacity: 0;
+}
+
+[data-atlas-intro-camera] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+[data-atlas-meter] {
+  display: inline-block;
+  width: 3.5rem;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+[data-atlas-meter] > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
 }
 
 [data-atlas-palette] {
@@ -351,4 +379,33 @@ html.dark {
   [data-atlas-terminal] {
     display: none;
   }
+}
+
+/* ---------- Thread details as stacked cards (Claude Code style) ---------- */
+/* The floating details card becomes a column of separate cards: Environment,
+   Version control, Context, Usage and Background tasks. Only in the inline
+   (right-side) presentation; the narrow-window popover keeps one surface. */
+[data-thread-details-panel="inline"] [data-thread-details-card] {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+[data-thread-details-panel="inline"] [data-thread-details-card] section {
+  margin-bottom: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+}
+
+[data-thread-details-panel="inline"] [data-thread-details-card] section:last-child {
+  margin-bottom: 0;
+}
+
+[data-thread-details-card] section h3 {
+  color: var(--foreground);
+  font-size: 0.8125rem;
 }

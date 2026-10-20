@@ -22,6 +22,13 @@ import { OpenInPicker } from "./OpenInPicker";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
+import type { OrchestrationV2PendingBackgroundTask } from "@t3tools/contracts";
+import {
+  AtlasBackgroundSection,
+  AtlasContextSection,
+  AtlasUsageSection,
+} from "~/atlas/AtlasRailSections";
+import type { ContextWindowSnapshot } from "~/lib/contextWindow";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -66,6 +73,9 @@ export interface ThreadDetailsPanelProps extends Pick<
     input: NewProjectScriptInput,
   ) => Promise<ProjectScriptActionResult>;
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
+  /** Code Atlas cards below the workspace: context window and background work. */
+  contextWindow?: ContextWindowSnapshot | null;
+  backgroundTasks?: readonly OrchestrationV2PendingBackgroundTask[];
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
@@ -111,9 +121,8 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
         <>
           <ThreadDetailsSection
             headingId="thread-details-workspace-heading"
-            title="Workspace"
+            title="Environment"
             separated={false}
-            showHeading={false}
           >
             <div className="flex flex-col">
               {density === "full" ? (
@@ -160,8 +169,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           {props.gitCwd ? (
             <ThreadDetailsSection
               headingId="thread-details-version-control-heading"
-              title="Version Control"
-              showHeading={false}
+              title="Version control"
               separated={density === "full"}
             >
               <div className="flex flex-col">
@@ -181,6 +189,18 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               </div>
             </ThreadDetailsSection>
           ) : null}
+
+          {density !== "essential" ? (
+            <AtlasContextSection contextWindow={props.contextWindow ?? null} />
+          ) : null}
+          {density !== "essential" ? (
+            <AtlasUsageSection environmentId={props.environmentId} />
+          ) : null}
+          <AtlasBackgroundSection
+            environmentId={props.environmentId}
+            threadId={props.threadId}
+            backgroundTasks={props.backgroundTasks ?? []}
+          />
 
           {density === "full" && !props.draftId ? (
             <ThreadAutomationsPanel environmentId={props.environmentId} threadId={props.threadId} />

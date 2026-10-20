@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { AtlasLaunchIntro } from "~/atlas/AtlasTerminal";
 import * as Schema from "effect/Schema";
 import {
   useEffect,
@@ -355,6 +356,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
         {children}
+        <AtlasLaunchIntro />
         <SidebarControl />
         <NavigationHistoryShortcuts />
         <MainAppLocationTracker />

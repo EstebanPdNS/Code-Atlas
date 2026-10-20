@@ -407,7 +407,8 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { createUpwardScrollDetector, isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
-import { AtlasTerminal } from "~/atlas/AtlasTerminal";
+import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/AtlasTerminal";
+import { useAtlasAgentSummary } from "~/atlas/AtlasRailSections";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
   BranchRestoreConfirmHost,
@@ -2636,6 +2637,7 @@ export default function ChatView(props: ChatViewProps) {
     isConnecting ||
     isCompacting ||
     runlessWorkStartedAt !== null;
+  const atlasAgentSummary = useAtlasAgentSummary(activeThread?.environmentId ?? null);
   const activeContextWindow = deriveLatestContextWindowSnapshot(
     serverVisibleTurnItems ?? [],
     activeThreadLiveTokenUsage,
@@ -8385,7 +8387,12 @@ export default function ChatView(props: ChatViewProps) {
                       >
                         {/* Code Atlas: the handbook terminal greets every new thread. */}
                         <div className="mb-5 hidden sm:block">
-                          <AtlasTerminal projectName={activeProject?.title ?? null} />
+                          <AtlasTerminal
+                            meta={{
+                              projectName: activeProject?.title ?? null,
+                              ...atlasAgentSummary,
+                            }}
+                          />
                         </div>
                         <DraftHeroHeadline
                           draftId={draftId}
@@ -8706,11 +8713,16 @@ export default function ChatView(props: ChatViewProps) {
               onConfirm={handleSwitchCheckoutToThreadStable}
             />
 
+            <AtlasTerminalMetaPublisher
+              meta={{ projectName: activeProject?.title ?? null, ...atlasAgentSummary }}
+            />
             <ThreadDetailsPanel
               anchor={threadPanelPopoverAnchorRef}
               handle={threadPanelPopoverHandle}
               onPresentationChange={setThreadPanelPresentation}
               forceNewWorktree={multipleModelSelections !== null}
+              contextWindow={activeContextWindow}
+              backgroundTasks={pendingBackgroundTasks}
               environmentId={activeThread.environmentId}
               threadId={activeThread.id}
               projectId={activeThread.projectId}
