@@ -1,4 +1,5 @@
 import { useRenderedAppearance } from "../../hooks/useTheme";
+import { AtlasEmptyThreadTerminal } from "~/atlas/AtlasTerminal";
 import type { Root, RootContent } from "mdast";
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { shallow } from "zustand/vanilla/shallow";
@@ -1491,9 +1492,15 @@ const ConversationTimeline = memo(function ConversationTimeline({
         className="flex h-full items-center justify-center ps-(--chat-lane-inset-start) pe-(--chat-lane-inset-end)"
         style={{ paddingBottom: emptyPlaceholderInset }}
       >
-        <p className="text-sm text-muted-foreground/30">
-          Send a message to start the conversation.
-        </p>
+        {/* Code Atlas: an empty thread greets with the handbook terminal too. */}
+        <div className="flex w-full max-w-(--chat-content-max-width) flex-col items-center gap-6">
+          <div className="hidden w-full sm:block">
+            <AtlasEmptyThreadTerminal />
+          </div>
+          <p className="text-sm text-muted-foreground/50">
+            Send a message to start the conversation.
+          </p>
+        </div>
       </div>
     );
   }

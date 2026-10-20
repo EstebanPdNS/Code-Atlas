@@ -22,6 +22,10 @@
   --atlas-ascii-2: #d98442;
   --atlas-font-console:
     ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  /* The handbook's typeface everywhere. Settings -> Appearance still overrides it. */
+  --font-sans: var(--atlas-font-console);
+  /* Monospace runs wide: a slightly smaller root keeps the UI as dense as the handbook. */
+  font-size: 15px;
 }
 
 html.dark {
@@ -309,8 +313,9 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   transition: opacity 300ms ease;
 }
 
+/* Like the handbook's frame 01: the terminal window stays outlined while the
+   title bar and metadata wait for the zoom-out. */
 [data-atlas-chrome="off"] {
-  border-color: transparent;
   box-shadow: none;
 }
 
@@ -452,4 +457,68 @@ html.dark {
 [data-thread-details-card] section h3 {
   color: var(--foreground);
   font-size: 0.8125rem;
+}
+
+/* ---------- Window structure: title bar, sidebar, subwindows ---------- */
+/* Like Codex: one title bar across the window (traffic lights, sidebar and
+   navigation controls, the thread breadcrumb), the sidebar on the same chrome
+   surface below it, and the conversation as an inset rounded subwindow. */
+html:not([data-theme-id]) {
+  --atlas-chrome: #f1efe8;
+}
+
+html.dark:not([data-theme-id]) {
+  --atlas-chrome: #1c1b19;
+}
+
+html:not([data-theme-id]) [data-slot="sidebar-wrapper"],
+html:not([data-theme-id]) [data-slot="sidebar-inset"],
+html:not([data-theme-id]) [data-slot="sidebar-inset"] > div,
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
+  background: var(--atlas-chrome);
+}
+
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
+  border-right: 0;
+}
+
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"] {
+  border-right-color: transparent;
+}
+
+html:not([data-theme-id]) [data-atlas-topbar],
+html:not([data-theme-id]) [data-chat-column] > header {
+  background: var(--atlas-chrome);
+  border-bottom: 1px solid var(--border);
+}
+
+html:not([data-theme-id]) [data-chat-column] > header + div {
+  margin: 0.5rem 0.5rem 0.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: var(--background);
+  overflow: hidden;
+}
+
+html:not([data-theme-id])
+  [data-slot="sidebar-wrapper"][data-sidebar-state="collapsed"]
+  [data-chat-column]
+  > header
+  + div {
+  margin-left: 0.5rem;
+}
+
+/* ---------- Composer controls: model, effort, access ---------- */
+[data-chat-composer-footer] [data-chat-composer-controls] button {
+  font-size: 0.8rem;
+}
+
+[data-chat-composer-footer] [data-chat-composer-controls] button svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* The handbook intro: a darker room around the terminal window. */
+[data-atlas-intro-backdrop] {
+  background: var(--atlas-chrome, var(--background));
 }

@@ -37,11 +37,28 @@ export function CodeAtlasGlyph({ className }: { className?: string }) {
 }
 
 /** "code atlas." lockup used in the sidebar header, like the handbook site. */
-export function CodeAtlasWordmark({ className }: { className?: string }) {
+export function CodeAtlasWordmark({
+  className,
+  size = "sm",
+}: {
+  className?: string;
+  size?: "sm" | "lg";
+}) {
   return (
-    <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
-      <CodeAtlasGlyph className="size-4 shrink-0" />
-      <span className="truncate font-mono text-sm font-bold tracking-tight">
+    <span
+      className={cn(
+        "inline-flex min-w-0 items-center",
+        size === "lg" ? "gap-2" : "gap-1.5",
+        className,
+      )}
+    >
+      <CodeAtlasGlyph className={cn("shrink-0", size === "lg" ? "size-5" : "size-4")} />
+      <span
+        className={cn(
+          "truncate font-mono font-bold tracking-tight",
+          size === "lg" ? "text-base" : "text-sm",
+        )}
+      >
         code atlas<span className="text-primary">.</span>
       </span>
     </span>

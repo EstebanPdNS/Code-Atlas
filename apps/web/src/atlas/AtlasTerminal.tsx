@@ -270,6 +270,12 @@ export function AtlasTerminal({ meta }: { readonly meta: AtlasTerminalMeta }) {
   );
 }
 
+/** The terminal for an empty thread, fed by the active thread's published meta. */
+export function AtlasEmptyThreadTerminal() {
+  const meta = useAtlasTerminalMeta();
+  return <AtlasTerminal meta={meta} />;
+}
+
 type IntroPhase = "typing" | "logo" | "zoom" | "reveal";
 
 function findLandedTerminal(): Element | null {
@@ -347,10 +353,13 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
         (window.innerHeight - top - 40) / (artBottom - commandTop),
       ),
     );
-    const left = edge - commandLeft * scale;
+    // As in the handbook: centre the whole window when it fits, else pin the prompt to the edge.
+    const scaledWidth = width * scale;
+    const left =
+      scaledWidth < viewportWidth ? (viewportWidth - scaledWidth) / 2 : edge - commandLeft * scale;
     startTransform.current = `translate(${left}px, ${top - commandTop * scale}px) scale(${scale})`;
     camera.style.transform = startTransform.current;
-  }, []);
+  }, [width]);
 
   useEffect(() => {
     const timers: number[] = [];
@@ -462,7 +471,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       onClick={() => setAtlasIntroStatus("done")}
       className="fixed inset-0 z-100 overflow-hidden"
     >
-      <div ref={backdropRef} data-atlas-intro-backdrop className="absolute inset-0 bg-card" />
+      <div ref={backdropRef} data-atlas-intro-backdrop className="absolute inset-0" />
       <div ref={cameraRef} data-atlas-intro-camera style={{ width }}>
         <AtlasTerminalFrame
           meta={meta}
