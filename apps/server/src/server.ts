@@ -19,6 +19,10 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
+import * as Crypto from "effect/Crypto";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { ChildProcessSpawner } from "effect/process";
 import * as Stream from "effect/Stream";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/http";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
@@ -615,11 +619,10 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
-  Layer.provideMerge(Layer.merge(ProjectStore.layer, ThreadSearch.layer)),
+  // Dictation shares a step with the stores: one more pipe step overflows the
+  // typed pipe arity and widens the server's requirements to any.
+  Layer.provideMerge(Layer.mergeAll(ProjectStore.layer, ThreadSearch.layer, layerDictation)),
   Layer.provideMerge(layerServerSettings),
-  Layer.provideMerge(layerDictation),
-  // The asset route uses the registry's GitHub credential for private PR media, which the
-  // built-in drivers' layer provides alongside the registry.
   Layer.provideMerge(layerSourceControlProviderRegistry),
   Layer.provideMerge(layerGit),
   Layer.provideMerge(layerVcs),
@@ -1080,4 +1083,15 @@ const layerMakeServer = Layer.unwrap(
   }),
 ).pipe(Layer.provide(ProcessRunner.layer));
 
-export const runServer = Layer.launch(layerMakeServer);
+// Annotated: modules that import runServer otherwise see its inferred
+// requirements collapse to any once the server graph grew past the checker's
+// depth for cross-module inference (it surfaced with the dictation service).
+export const runServer: Effect.Effect<
+  never,
+  Layer.Error<typeof layerMakeServer>,
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Crypto.Crypto
+  | FileSystem.FileSystem
+  | Path.Path
+  | ServerConfig.ServerConfig
+> = Layer.launch(layerMakeServer);
