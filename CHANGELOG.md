@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.1
+
+- Show a running agent in the Claude Code style: the plan as a card and one live line with elapsed time, tokens and the current activity. Choose Claude Code or Codex in Settings → Appearance → Progress style.
+- Right-click a project or a group for Rename and Settings.
+- Give groups a built-in icon, an emoji, a monogram or your own image; the folder stays the default.
+- Rename the sidebar sections to Groups and Ungrouped.
+- Microphone dots scroll left continuously and fade at the edge while you dictate.
+- With quit confirmation disabled, Cmd+Q asks before quitting while agents are working.
+- Larger sidebar wordmark with a tighter space between the words, and a smaller new-thread headline.
+- Repository: Code Atlas logo in the README, and T3 Code's vendored references, review-bot and editor configs removed from the published files.
+
 ## v1.0
 
 Based on T3 Code 0.1.1 (nightly 20261020.3411, upstream commit `7e289ae`).
