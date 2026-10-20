@@ -49,3 +49,6 @@ node_modules/
 native/whisper-server/.source/
 native/whisper-server/.build/
 native/whisper-server/dist/
+
+# Code Atlas: vendored reference sources for coding agents stay local; fetch them with `vp run sync:repos`.
+/.repos/
