@@ -46,17 +46,18 @@ export function CodeAtlasWordmark({
 }) {
   return (
     <span
+      data-atlas-wordmark={size}
       className={cn(
         "inline-flex min-w-0 items-center",
         size === "lg" ? "gap-2" : "gap-1.5",
         className,
       )}
     >
-      <CodeAtlasGlyph className={cn("shrink-0", size === "lg" ? "size-5" : "size-4")} />
+      <CodeAtlasGlyph className={cn("shrink-0", size === "lg" ? "size-[1.15em]" : "size-4")} />
       <span
         className={cn(
           "truncate font-mono font-bold tracking-tight",
-          size === "lg" ? "text-base" : "text-sm",
+          size === "lg" ? undefined : "text-sm",
         )}
       >
         code atlas<span className="text-primary">.</span>

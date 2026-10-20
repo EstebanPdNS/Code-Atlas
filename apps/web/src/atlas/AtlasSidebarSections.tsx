@@ -34,8 +34,11 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "~/components/ui/menu";
+import { readLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
 import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
+import { projectEnvironment } from "~/state/projects";
+import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { useUiStateStore } from "~/uiStateStore";
 
 import {
@@ -44,6 +47,8 @@ import {
   resolveAtlasThreadPlacement,
   type AtlasAttentionReason,
 } from "./atlasThreadSections";
+import { GroupIcon, GroupSettingsDialog } from "./GroupSettingsDialog";
+import { usePublishRunningAgents } from "./runningAgents";
 import {
   resolveProjectFolders,
   useProjectFoldersStore,
@@ -81,6 +86,24 @@ function threadKeyOf(thread: Pick<EnvironmentThreadShell, "environmentId" | "id"
   return scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
 }
 
+type RowMenuAction = "rename" | "settings";
+const ROW_MENU_ITEMS = [
+  { id: "rename", label: "Rename" },
+  { id: "settings", label: "Settings" },
+] as const;
+
+/** Right-click on a project or group: the native Rename / Settings menu. */
+async function showRowMenu(event: ReactMouseEvent<HTMLElement>): Promise<RowMenuAction | null> {
+  event.preventDefault();
+  event.stopPropagation();
+  const api = readLocalApi();
+  if (!api) return null;
+  return api.contextMenu.show<RowMenuAction>(ROW_MENU_ITEMS, {
+    x: event.clientX,
+    y: event.clientY,
+  });
+}
+
 function draggedKind(event: ReactDragEvent): "project" | "folder" | null {
   const types = event.dataTransfer.types;
   if (types.includes(PROJECT_DRAG_TYPE)) return "project";
@@ -109,6 +132,22 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renamingProjectKey, setRenamingProjectKey] = useState<string | null>(null);
+  const [settingsFolderId, setSettingsFolderId] = useState<string | null>(null);
+  const updateProject = useOrchestrationCommand(projectEnvironment.update);
+
+  // Same rename as Settings → Projects: every member checkout gets the new title.
+  const renameProject = async (project: SidebarProjectSnapshot, name: string) => {
+    const title = name.trim();
+    if (title.length === 0 || title === project.displayName) return;
+    for (const member of project.memberProjects) {
+      const result = await updateProject({
+        environmentId: member.environmentId,
+        input: { projectId: member.id, title },
+      });
+      if (result._tag === "Failure") return;
+    }
+  };
 
   const projectKeyByMember = new Map<string, string>();
   for (const project of projects) {
@@ -223,7 +262,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
         <div
           role="button"
           tabIndex={0}
-          draggable
+          draggable={renamingProjectKey !== project.projectKey}
           aria-expanded={expanded}
           onDragStart={(event) => {
             event.dataTransfer.setData(PROJECT_DRAG_TYPE, project.projectKey);
@@ -240,7 +279,12 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
               store.toggleProjectExpanded(project.projectKey);
             }
           }}
-          onContextMenu={(event) => props.onProjectSettings(event, project)}
+          onContextMenu={(event) => {
+            void showRowMenu(event).then((action) => {
+              if (action === "rename") setRenamingProjectKey(project.projectKey);
+              else if (action === "settings") props.onProjectSettings(event, project);
+            });
+          }}
           className={cn(
             "group/atlas-project relative flex h-8 cursor-pointer items-center gap-2 rounded-md pr-1 pl-2 text-sm text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
             folderId !== null && "ml-3",
@@ -249,7 +293,19 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           )}
         >
           <ProjectFavicon project={project} className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
+          {renamingProjectKey === project.projectKey ? (
+            <FolderNameInput
+              initialValue={project.displayName}
+              ariaLabel="Project name"
+              onCommit={(name) => {
+                setRenamingProjectKey(null);
+                void renameProject(project, name);
+              }}
+              onCancel={() => setRenamingProjectKey(null)}
+            />
+          ) : (
+            <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
+          )}
           {active.length > 0 && !expanded ? (
             <span className="text-2xs text-sidebar-muted-foreground tabular-nums">
               {active.length}
@@ -338,6 +394,12 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           onDrop={(event) => handleDrop(event, target, folder.id)}
           onClick={() => store.toggleFolder(folder.id)}
           onDoubleClick={() => setRenamingFolderId(folder.id)}
+          onContextMenu={(event) => {
+            void showRowMenu(event).then((action) => {
+              if (action === "rename") setRenamingFolderId(folder.id);
+              else if (action === "settings") setSettingsFolderId(folder.id);
+            });
+          }}
           onKeyDown={(event) => {
             if (event.target !== event.currentTarget) return;
             if (event.key === "Enter" || event.key === " ") {
@@ -359,7 +421,9 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
               !folder.collapsed && "rotate-90",
             )}
           />
-          {folder.collapsed ? (
+          {folder.icon ? (
+            <GroupIcon icon={folder.icon} />
+          ) : folder.collapsed ? (
             <FolderIcon aria-hidden className="size-4 shrink-0 text-sidebar-muted-foreground" />
           ) : (
             <FolderOpenIcon aria-hidden className="size-4 shrink-0 text-sidebar-muted-foreground" />
@@ -385,6 +449,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           <span className="flex items-center opacity-0 group-hover/atlas-folder:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100">
             <FolderMenu
               onRename={() => setRenamingFolderId(folder.id)}
+              onSettings={() => setSettingsFolderId(folder.id)}
               onDelete={() => store.deleteFolder(folder.id)}
             />
           </span>
@@ -402,6 +467,20 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
       </li>
     );
   };
+
+  // Pinned threads keep their row in Pinned, so count their running agents too.
+  usePublishRunningAgents(
+    working.length +
+      pinnedThreads.filter((thread) => {
+        const status = resolveSidebarThreadStatus(thread);
+        return status === "working" || status === "waiting";
+      }).length,
+  );
+
+  const settingsFolder =
+    settingsFolderId === null
+      ? null
+      : (store.folders.find((folder) => folder.id === settingsFolderId) ?? null);
 
   return (
     <>
@@ -445,12 +524,12 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
       <li className="mt-3 list-none">
         <div className="flex h-7 items-center gap-1 pr-1 pl-2">
           <span className="flex-1 font-mono text-2xs tracking-wider text-sidebar-muted-foreground uppercase">
-            Project groups
+            Groups
           </span>
           <Button
             size="icon-micro"
             variant="ghost-muted"
-            aria-label="New project group"
+            aria-label="New group"
             onClick={() => setCreatingFolder(true)}
           >
             <FolderPlusIcon />
@@ -518,7 +597,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
             )}
           >
             <span className="flex-1 font-mono text-2xs tracking-wider text-sidebar-muted-foreground uppercase">
-              {folders.length > 0 ? "Ungrouped" : "Projects"}
+              Ungrouped
             </span>
             <span className="text-2xs text-sidebar-muted-foreground tabular-nums">
               {ungrouped.length}
@@ -537,6 +616,19 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
             </ul>
           ) : null}
         </li>
+      ) : null}
+      {settingsFolder ? (
+        <GroupSettingsDialog
+          key={settingsFolder.id}
+          folder={settingsFolder}
+          onOpenChange={(open) => {
+            if (!open) setSettingsFolderId(null);
+          }}
+          onSave={({ name, icon }) => {
+            store.renameFolder(settingsFolder.id, name);
+            store.setFolderIcon(settingsFolder.id, icon);
+          }}
+        />
       ) : null}
     </>
   );
@@ -605,6 +697,7 @@ export function AtlasActivityDots({ className }: { className?: string }) {
 
 function FolderNameInput(props: {
   readonly initialValue: string;
+  readonly ariaLabel?: string;
   readonly placeholder?: string;
   readonly onCommit: (name: string) => void;
   readonly onCancel: () => void;
@@ -619,7 +712,7 @@ function FolderNameInput(props: {
       autoFocus
       value={value}
       placeholder={props.placeholder}
-      aria-label="Group name"
+      aria-label={props.ariaLabel ?? "Group name"}
       onChange={(event) => setValue(event.target.value)}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {
@@ -633,7 +726,11 @@ function FolderNameInput(props: {
   );
 }
 
-function FolderMenu(props: { readonly onRename: () => void; readonly onDelete: () => void }) {
+function FolderMenu(props: {
+  readonly onRename: () => void;
+  readonly onSettings: () => void;
+  readonly onDelete: () => void;
+}) {
   return (
     <Menu>
       <MenuTrigger
@@ -650,6 +747,7 @@ function FolderMenu(props: { readonly onRename: () => void; readonly onDelete: (
       </MenuTrigger>
       <MenuPopup align="end" side="bottom">
         <MenuItem onClick={props.onRename}>Rename group</MenuItem>
+        <MenuItem onClick={props.onSettings}>Group settings</MenuItem>
         <MenuItem variant="destructive" onClick={props.onDelete}>
           Delete group
         </MenuItem>

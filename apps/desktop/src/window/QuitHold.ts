@@ -30,6 +30,11 @@ export interface QuitShortcutOptions {
   readonly notify: (event: QuitShortcutHintEvent) => void;
   readonly concealWindow: () => void;
   readonly quit: () => void;
+  /**
+   * Code Atlas: asked before a direct-mode quit (no hold or double press);
+   * resolves false to stay open, e.g. while agents are still working.
+   */
+  readonly confirmDirectQuit?: () => Promise<boolean>;
 }
 
 export function makeQuitShortcutHandler(
@@ -164,7 +169,14 @@ export function makeQuitShortcutHandler(
       (resolvedMode) => {
         if (generation !== pressGeneration) return;
         if (resolvedMode === "direct") {
-          quitNow();
+          if (!options.confirmDirectQuit) {
+            quitNow();
+            return;
+          }
+          release();
+          void options.confirmDirectQuit().then((confirmed) => {
+            if (confirmed) quitNow();
+          }, quitNow);
           return;
         }
         if (resolvedMode === "double-click") {

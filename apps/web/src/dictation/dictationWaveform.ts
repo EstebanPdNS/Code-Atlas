@@ -99,30 +99,36 @@ export function driveDictationWaveform(
   };
 }
 
+// Code Atlas: one new sample per step; between steps the row slides one bar left.
+const SCROLL_STEP_MS = 90;
+// Bars this close to the left edge shrink and fade as they leave, like Claude's voice input.
+const EDGE_FADE_BARS = 6;
+
 /**
- * Code Atlas: a scrolling level history, like Claude's voice input. The level
- * is sampled on a fixed clock (so the trace keeps sliding left through pauses),
- * enters at the right edge, and is scaled against an adapting noise floor and
- * peak, so any microphone, loud or quiet, shows each syllable as a bar while
- * silence rests as dots. Only `transform` is written.
+ * Code Atlas: a scrolling level history, like Claude's voice input. The row
+ * slides left continuously, a new sample enters at the right edge every step,
+ * and the dots shrink and fade as they reach the left edge, so the trace moves
+ * through pauses too. Levels are scaled against an adapting noise floor and
+ * peak, so any microphone shows each syllable as a bar while silence rests as
+ * dots. Runs on animation frames only while the microphone is live, and only
+ * writes `transform` and `opacity`.
+ *
+ * `row` holds the bars and is translated; `bars` has one more bar than fits, so
+ * the slide never shows a gap at the right edge.
  */
 export function driveScrollingWaveform(
+  row: HTMLElement,
   bars: ReadonlyArray<HTMLElement>,
   level: DictationLevel,
 ): () => void {
   const count = bars.length;
   const values = new Float32Array(count).fill(WAVEFORM_REST_SCALE);
-  const written = new Float32Array(count).fill(-1);
+  const pitch = count > 1 ? bars[1]!.offsetLeft - bars[0]!.offsetLeft : (bars[0]?.offsetWidth ?? 0);
   let floor = 1;
   let peak = 0;
-  const write = () => {
-    for (let index = 0; index < count; index++) {
-      const value = values[index]!;
-      if (Math.abs(value - written[index]!) < 0.001) continue;
-      written[index] = value;
-      bars[index]!.style.transform = `scaleY(${value.toFixed(3)})`;
-    }
-  };
+  let lastStep = performance.now();
+  let frame = 0;
+
   const sample = () => {
     const raw = level.read();
     // The floor follows the quietest recent level (room noise); the peak the loudest speech.
@@ -132,9 +138,32 @@ export function driveScrollingWaveform(
     const shaped = raw <= 0 ? 0 : Math.min(1, Math.max(0, relative) ** 1.2);
     values.copyWithin(0, 1);
     values[count - 1] = Math.max(WAVEFORM_REST_SCALE, shaped);
-    write();
   };
-  write();
-  const interval = window.setInterval(sample, 45);
-  return () => window.clearInterval(interval);
+
+  const draw = (now: number) => {
+    while (now - lastStep >= SCROLL_STEP_MS) {
+      sample();
+      lastStep += SCROLL_STEP_MS;
+    }
+    const phase = (now - lastStep) / SCROLL_STEP_MS;
+    row.style.transform = `translateX(${(-phase * pitch).toFixed(2)}px)`;
+    for (let index = 0; index < count; index++) {
+      const edge = Math.min(1, Math.max(0, (index - phase) / EDGE_FADE_BARS));
+      const size = 0.3 + 0.7 * edge;
+      const bar = bars[index]!;
+      bar.style.transform = `scale(${size.toFixed(3)}, ${(values[index]! * size).toFixed(3)})`;
+      bar.style.opacity = edge.toFixed(3);
+    }
+    frame = requestAnimationFrame(draw);
+  };
+
+  frame = requestAnimationFrame(draw);
+  return () => {
+    cancelAnimationFrame(frame);
+    row.style.transform = "";
+    for (const bar of bars) {
+      bar.style.transform = `scaleY(${WAVEFORM_REST_SCALE})`;
+      bar.style.opacity = "";
+    }
+  };
 }

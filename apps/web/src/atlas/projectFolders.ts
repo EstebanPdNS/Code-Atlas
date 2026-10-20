@@ -8,16 +8,24 @@
  * automatic same-repository merge in sidebarProjectGrouping.ts, hence
  * "folder" in code.)
  */
+import type { ProjectIconOverride } from "@t3tools/contracts";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { resolveStorage } from "~/lib/storage";
+
+/** A group's chosen icon: one of the project icons, or a small custom image. */
+export type ProjectFolderIcon =
+  | ProjectIconOverride
+  | { readonly kind: "image"; readonly dataUrl: string };
 
 export interface ProjectFolder {
   readonly id: string;
   readonly name: string;
   readonly projectKeys: readonly string[];
   readonly collapsed: boolean;
+  /** Absent means the default folder icon. */
+  readonly icon?: ProjectFolderIcon;
 }
 
 export interface ProjectFoldersState {
@@ -65,6 +73,22 @@ export function renameFolder(
   return mapFolder(state, folderId, (folder) =>
     folder.name === normalized ? folder : { ...folder, name: normalized },
   );
+}
+
+/** `null` restores the default folder icon. */
+export function setFolderIcon(
+  state: ProjectFoldersState,
+  folderId: string,
+  icon: ProjectFolderIcon | null,
+): ProjectFoldersState {
+  return mapFolder(state, folderId, (folder) => {
+    if (icon === null) {
+      if (folder.icon === undefined) return folder;
+      const { icon: _removed, ...rest } = folder;
+      return rest;
+    }
+    return { ...folder, icon };
+  });
 }
 
 /** Deleting a folder only ungroups its projects. */
@@ -188,6 +212,7 @@ function newFolderId(): string {
 interface ProjectFoldersStore extends ProjectFoldersState {
   readonly createFolder: (name: string) => string | null;
   readonly renameFolder: (folderId: string, name: string) => void;
+  readonly setFolderIcon: (folderId: string, icon: ProjectFolderIcon | null) => void;
   readonly deleteFolder: (folderId: string) => void;
   readonly toggleFolder: (folderId: string) => void;
   readonly moveProject: (input: {
@@ -214,6 +239,7 @@ export const useProjectFoldersStore = create<ProjectFoldersStore>()(
         return id;
       },
       renameFolder: (folderId, name) => set((state) => renameFolder(state, folderId, name)),
+      setFolderIcon: (folderId, icon) => set((state) => setFolderIcon(state, folderId, icon)),
       deleteFolder: (folderId) => set((state) => deleteFolder(state, folderId)),
       toggleFolder: (folderId) =>
         set((state) => {

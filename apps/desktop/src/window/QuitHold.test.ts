@@ -30,6 +30,7 @@ function makeHarness(options?: {
   mode?: QuitConfirmationMode;
   platform?: NodeJS.Platform;
   getMode?: () => Promise<QuitConfirmationMode>;
+  confirmDirectQuit?: () => Promise<boolean>;
 }) {
   const notifications: Array<QuitShortcutHintEvent> = [];
   const concealWindow = vi.fn();
@@ -40,6 +41,7 @@ function makeHarness(options?: {
     notify: (event) => notifications.push(event),
     concealWindow,
     quit,
+    ...(options?.confirmDirectQuit ? { confirmDirectQuit: options.confirmDirectQuit } : {}),
   });
   const preventDefault = vi.fn();
   const send = async (input: QuitHoldKeyInput) => {
@@ -225,6 +227,25 @@ describe("makeQuitShortcutHandler", () => {
     expect(harness.concealWindow).not.toHaveBeenCalled();
     expect(harness.quit).toHaveBeenCalledTimes(1);
     expect(harness.notifications).toEqual([]);
+  });
+
+  it("asks before a direct-mode quit and stays open when declined", async () => {
+    const declined = makeHarness({
+      mode: "direct",
+      confirmDirectQuit: () => Promise.resolve(false),
+    });
+    await declined.send(makeInput({}));
+    await Promise.resolve();
+    expect(declined.quit).not.toHaveBeenCalled();
+
+    const confirmed = makeHarness({
+      mode: "direct",
+      confirmDirectQuit: () => Promise.resolve(true),
+    });
+    await confirmed.send(makeInput({}));
+    await Promise.resolve();
+    expect(confirmed.quit).toHaveBeenCalledTimes(1);
+    expect(confirmed.notifications).toEqual([]);
   });
 
   it("honors direct mode when the key is released before its mode read settles", async () => {
