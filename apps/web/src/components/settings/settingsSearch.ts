@@ -239,6 +239,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["wide full width column layout messages composer monitor"],
   },
   {
+    id: "work-display-style",
+    title: "Progress style",
+    to: "/settings/appearance",
+    searchTerms: ["claude code codex tasks plan todo working tokens status thinking"],
+  },
+  {
     id: "math-rendering",
     title: "Render math",
     to: "/settings/appearance",

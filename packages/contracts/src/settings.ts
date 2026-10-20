@@ -296,6 +296,10 @@ export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
 export type ChatWidth = typeof ChatWidth.Type;
 
+/** Code Atlas: how agent progress (plan, elapsed time, tokens) is shown while a turn runs. */
+export const WorkDisplayStyle = Schema.Literals(["claude", "codex"]);
+export type WorkDisplayStyle = typeof WorkDisplayStyle.Type;
+
 export const ModelFavorite = Schema.Struct({
   provider: ProviderInstanceId,
   model: TrimmedNonEmptyString,
@@ -322,6 +326,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
+  workDisplayStyle: WorkDisplayStyle.pipe(
+    Schema.withDecodingDefault(Effect.succeed("claude" as const)),
+  ),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   /** Environment that transcribes this device's dictation; null picks one automatically. */
@@ -1600,6 +1607,7 @@ export const ClientSettingsPatch = Schema.Struct({
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),
+  workDisplayStyle: Schema.optionalKey(WorkDisplayStyle),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
   dictationEnvironmentId: Schema.optionalKey(Schema.NullOr(EnvironmentId)),

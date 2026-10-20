@@ -392,6 +392,18 @@ describe("ClientSettings chat width", () => {
   });
 });
 
+describe("ClientSettings work display style", () => {
+  it("defaults to the Claude Code style", () => {
+    expect(decodeClientSettings({}).workDisplayStyle).toBe("claude");
+  });
+
+  it.each(["claude", "codex"])("round-trips the %s style", (workDisplayStyle) => {
+    const settings = decodeClientSettings({ workDisplayStyle });
+    expect(encodeClientSettings(settings).workDisplayStyle).toBe(workDisplayStyle);
+    expect(decodeClientSettingsPatch({ workDisplayStyle }).workDisplayStyle).toBe(workDisplayStyle);
+  });
+});
+
 describe("ClientSettings load balancing", () => {
   it("requires opt-in when settings are new or omit load balancing", () => {
     expect(decodeClientSettings({}).loadBalancingEnabled).toBe(false);
