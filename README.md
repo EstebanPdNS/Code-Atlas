@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/code-atlas-v1.0-rounded.png" alt="Code Atlas with a new thread: the Code Atlas terminal above the composer, and the Environment, Context and Usage cards on the right" width="1200">
+  <img src="docs/images/code-atlas-v1.1-rounded.png" alt="Code Atlas with a new thread: the Code Atlas terminal above the composer, and the Environment, Context and Usage cards on the right" width="1200">
 </p>
 
 Code Atlas is a personal edition of [T3 Code](https://github.com/pingdotgg/t3code) 0.1.1 for macOS. It controls the coding agents you already use, such as Claude Code and Codex, with the look and method of the [Code Atlas handbook](https://code-atlas.estebanpdn.chatgpt.site/).
