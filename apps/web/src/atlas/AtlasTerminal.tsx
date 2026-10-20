@@ -359,12 +359,16 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
   const [typed, setTyped] = useState(0);
   const [rows, setRows] = useState(0);
   const [phase, setPhase] = useState<IntroPhase>("typing");
-  // Same box as the terminal it lands in, so the zoom-out ends pixel for pixel on it.
+  // The landing terminal's box when it already exists. The app usually mounts
+  // it later, so the zoom-out also animates the size to wherever it is by then.
   const [{ width, height }] = useState(() => {
     const rect = findLandedTerminal()?.getBoundingClientRect();
     return rect && rect.width > 0
       ? { width: rect.width, height: rect.height }
-      : { width: Math.min(704, window.innerWidth - 64), height: null };
+      : {
+          width: Math.min(704, window.innerWidth - 64),
+          height: Math.max(360, Math.min(620, window.innerHeight - 240)),
+        };
   });
   const overlayRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -389,7 +393,8 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
     const artBottom = artRect.bottom - cameraRect.top;
     const viewportWidth = window.innerWidth;
     const edge = Math.min(40, Math.max(18, viewportWidth * 0.035));
-    const top = 36;
+    // Well below the macOS window buttons, which sit over the fullscreen intro.
+    const top = 104;
     // Like the handbook: the logo spans most of the window width, limited only
     // by the window height.
     const scale = Math.max(
@@ -418,11 +423,20 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       finished = true;
       setAtlasIntroStatus("done");
     };
-    const reveal = () => {
+    const reveal = (zoom: Animation | null) => {
       setPhase("reveal");
       const backdrop = backdropRef.current;
       const overlay = overlayRef.current;
       if (!backdrop || !overlay) return finish();
+      // Data can still reflow the page during the zoom; follow the terminal to where it is now.
+      const camera = cameraRef.current;
+      const target = findLandedTerminal()?.getBoundingClientRect();
+      if (zoom && camera && target && target.width > 0) {
+        zoom.cancel();
+        camera.style.transform = `translate(${target.left}px, ${target.top}px)`;
+        camera.style.width = `${target.width}px`;
+        camera.style.height = `${target.height}px`;
+      }
       animations.push(
         backdrop.animate([{ opacity: 1 }, { opacity: 0 }], {
           duration: 650,
@@ -445,19 +459,32 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       const camera = cameraRef.current;
       if (!camera) return finish();
       const target = findLandedTerminal()?.getBoundingClientRect();
-      const destination =
+      const landed =
         target && target.width > 0
-          ? `translate(${target.left}px, ${target.top}px) scale(${target.width / width})`
-          : `translate(${(window.innerWidth - width) / 2}px, ${Math.max(
-              48,
-              window.innerHeight * 0.18,
-            )}px) scale(1)`;
+          ? { left: target.left, top: target.top, width: target.width, height: target.height }
+          : {
+              left: (window.innerWidth - width) / 2,
+              top: Math.max(48, window.innerHeight * 0.18),
+              width,
+              height,
+            };
+      // Size and position both end on the landed terminal, so the reveal has nothing to jump.
       const zoom = camera.animate(
-        [{ transform: startTransform.current }, { transform: destination }],
+        [
+          { transform: startTransform.current, width: `${width}px`, height: `${height}px` },
+          {
+            transform: `translate(${landed.left}px, ${landed.top}px) scale(1)`,
+            width: `${landed.width}px`,
+            height: `${landed.height}px`,
+          },
+        ],
         { duration: 1400, easing: "cubic-bezier(.4,0,.15,1)", fill: "forwards" },
       );
       animations.push(zoom);
-      zoom.finished.then(reveal, () => undefined);
+      zoom.finished.then(
+        () => reveal(target && target.width > 0 ? zoom : null),
+        () => undefined,
+      );
     };
     let revealed = 0;
     let zoomStarted = false;
@@ -505,7 +532,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       // Aurora keeps playing into the app unless the intro was skipped early.
       if (!finished) audio?.pause();
     };
-  }, [command, width]);
+  }, [command, width, height]);
 
   return (
     <div
@@ -516,12 +543,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       className="fixed inset-0 z-100 overflow-hidden"
     >
       <div ref={backdropRef} data-atlas-intro-backdrop className="absolute inset-0 bg-card" />
-      <div
-        ref={cameraRef}
-        data-atlas-intro-camera
-        data-atlas-fill={height === null ? undefined : ""}
-        style={height === null ? { width } : { width, height }}
-      >
+      <div ref={cameraRef} data-atlas-intro-camera data-atlas-fill style={{ width, height }}>
         <AtlasTerminalFrame
           meta={meta}
           typed={typed}

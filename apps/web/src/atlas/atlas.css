@@ -646,3 +646,9 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
 [data-atlas-hero-heading] {
   column-gap: 1ch;
 }
+
+/* A shorter empty composer: about two lines before the controls instead of
+   three. It still grows with the text up to its max height. */
+.composer-tiptap {
+  min-height: 2.75rem;
+}
