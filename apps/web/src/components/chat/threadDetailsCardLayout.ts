@@ -2,6 +2,8 @@ import type { PreviewMiniPlayerFrame } from "../preview/previewMiniPlayerLayout"
 import { DETAILS_CARD_CLEARANCE } from "./chatCanvasLayout";
 
 export const THREAD_DETAILS_CARD_GAP = 12;
+// Code Atlas: the inline card keeps the chat lane's 32px gap from the window edge and top bar.
+export const ATLAS_THREAD_DETAILS_CARD_GAP = DETAILS_CARD_CLEARANCE;
 // Keep in sync with --thread-details-panel-width, which sizes the popover and the find bar.
 const THREAD_DETAILS_CARD_WIDTH = 280;
 
@@ -20,14 +22,15 @@ export function resolveThreadDetailsCardLayout({
   frame,
   overlapsDetailsCard = false,
   topInset = 0,
+  gap = THREAD_DETAILS_CARD_GAP,
 }: {
   container: { width: number; height: number };
   lane: { padding: number; minChatWidth: number };
   frame: PreviewMiniPlayerFrame | null;
   overlapsDetailsCard?: boolean;
   topInset?: number;
+  gap?: number;
 }) {
-  const gap = THREAD_DETAILS_CARD_GAP;
   const width = THREAD_DETAILS_CARD_WIDTH;
   const x = container.width - width - gap;
   if (x - DETAILS_CARD_CLEARANCE - lane.padding < lane.minChatWidth) return null;

@@ -251,32 +251,6 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   border-top: 1px solid var(--border);
 }
 
-/* Wide terminals: logo on the left, project data on the right. */
-@container (min-width: 880px) {
-  [data-atlas-layout] {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 2.5rem;
-  }
-
-  [data-atlas-layout] [data-atlas-art] {
-    --atlas-art-size: clamp(
-      6px,
-      min(calc((100cqi * 0.62 - 48px) / 40), calc((100vh - 480px) / 16.5)),
-      22px
-    );
-  }
-
-  [data-atlas-info] {
-    margin-top: 0;
-    padding-top: 0;
-    padding-left: 2rem;
-    border-top: 0;
-    border-left: 1px solid var(--border);
-  }
-}
-
 [data-atlas-caret-idle] {
   margin-left: 0;
   animation-iteration-count: 3;
@@ -404,12 +378,12 @@ html.dark {
 }
 
 /* New-thread layout with the terminal: the terminal's top lines up with the
-   details cards (12px from the canvas top), the composer sits at the bottom,
+   details cards (2rem from the canvas top), the composer's spacer keeps it 2rem from the bottom,
    and the headline is centred in the space between them. */
 [data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
   align-items: stretch;
-  padding-top: 12px;
-  padding-bottom: 1.5rem;
+  padding-top: 2rem;
+  padding-bottom: 0;
 }
 
 [data-chat-composer-overlay="true"]:has([data-atlas-terminal]) .chat-composer-lane {
@@ -583,41 +557,6 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
     min(calc((100cqw - 40px) / 38.5), calc((100cqh - 19rem) / 16.6)),
     28px
   );
-}
-
-[data-atlas-fill] [data-atlas-layout] [data-atlas-info] {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  padding-left: 0;
-  border-top: 1px solid var(--border);
-  border-left: 0;
-}
-
-/* Very wide windows: logo on the left, project data on the right. */
-@container (min-width: 1180px) {
-  [data-atlas-fill] [data-atlas-layout] {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-content: center;
-    align-items: center;
-    gap: 2.5rem;
-  }
-
-  [data-atlas-fill] [data-atlas-layout] [data-atlas-art] {
-    --atlas-art-size: clamp(
-      6px,
-      min(calc((100cqw - 40px) * 0.62 / 38.5), calc((100cqh - 8rem) / 16.6)),
-      28px
-    );
-  }
-
-  [data-atlas-fill] [data-atlas-layout] [data-atlas-info] {
-    margin-top: 0;
-    padding-top: 0;
-    padding-left: 2rem;
-    border-top: 0;
-    border-left: 1px solid var(--border);
-  }
 }
 
 /* Beside the details rail the chat fills the free lane (see fillBesideDetailsCard).

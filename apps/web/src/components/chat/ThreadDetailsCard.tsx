@@ -7,6 +7,7 @@ import { selectThreadPanelOpen, useRightPanelStore } from "../../rightPanelStore
 import type { ThreadPanelPresentation } from "../../rightPanelLayout";
 import { useChatCanvas } from "./ChatCanvasContext";
 import {
+  ATLAS_THREAD_DETAILS_CARD_GAP,
   THREAD_DETAILS_CARD_GAP,
   resolveThreadDetailsCardDensity,
   resolveThreadDetailsCardLayout,
@@ -33,6 +34,7 @@ export function ThreadDetailsCard({
         lane: canvas.lane,
         frame: null,
         topInset: canvas.detailsCardTopInset,
+        gap: ATLAS_THREAD_DETAILS_CARD_GAP,
       })
     : null;
   const placement = canvas
@@ -42,6 +44,7 @@ export function ThreadDetailsCard({
         frame: canvas.layout.frame,
         overlapsDetailsCard: canvas.layout.overlapsDetailsCard,
         topInset: canvas.detailsCardTopInset,
+        gap: ATLAS_THREAD_DETAILS_CARD_GAP,
       })
     : null;
   const mode = placement ? "inline" : "popover";
