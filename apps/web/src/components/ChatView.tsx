@@ -1665,6 +1665,13 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadRef = useActiveThreadRef(activeThread);
   const terminalActions = useThreadTerminalActions(activeThreadRef);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
+  // Code Atlas: Stop on a paused task hides Resume for that run on this thread.
+  const resumeKey =
+    resumableRunId !== null || hasHeldQueuedRuns
+      ? `${activeThreadKey ?? ""}:${resumableRunId ?? "held"}`
+      : null;
+  const [dismissedResumeKey, setDismissedResumeKey] = useState<string | null>(null);
+  const canResumeTask = resumeKey !== null && resumeKey !== dismissedResumeKey;
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );
@@ -8505,7 +8512,8 @@ export default function ChatView(props: ChatViewProps) {
                                 queuedRunEdit.isSaving ||
                                 isResuming
                               }
-                              canResume={resumableRunId !== null || hasHeldQueuedRuns}
+                              canResume={canResumeTask}
+                              onDismissResume={() => setDismissedResumeKey(resumeKey)}
                               isRevertingCheckpoint={isRevertingCheckpoint}
                               sendDisabledReason={
                                 !canOperateThread

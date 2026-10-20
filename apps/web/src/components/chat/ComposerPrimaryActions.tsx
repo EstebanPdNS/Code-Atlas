@@ -1,5 +1,12 @@
 import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  Minimize2Icon,
+  PauseIcon,
+  PlayIcon,
+} from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
@@ -263,8 +270,29 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
+  // Code Atlas: a running task pauses (interrupts, resumable); Stop lives beside Resume.
   if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
-    return renderStopGenerationButton(false);
+    return (
+      <Tooltip key="pause">
+        <TooltipTrigger
+          render={
+            <button
+              type="button"
+              className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-message-action text-message-action-foreground shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-message-action-hover active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none"
+              {...pointerFocusProps}
+              disabled={!canOperateThread}
+              onClick={() => {
+                if (canOperateThread) onInterrupt();
+              }}
+              aria-label="Pause task"
+            />
+          }
+        >
+          <PauseIcon className="size-3.5 fill-current" aria-hidden="true" />
+        </TooltipTrigger>
+        <TooltipPopup>Pause</TooltipPopup>
+      </Tooltip>
+    );
   }
 
   const showResume = canResume && !hasSendableContent && !isEditingQueuedMessage;

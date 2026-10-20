@@ -34,6 +34,8 @@ export function ComposerDictationControl(props: {
   readonly dictation: ComposerDictation;
   readonly disabled: boolean;
   readonly shortcutLabel: string | null;
+  /** Code Atlas: stop recording and send the prompt with the transcript. */
+  readonly onStopAndSend?: () => void;
 }) {
   const { dictation } = props;
   const phase = dictation.state.phase;
@@ -68,8 +70,8 @@ export function ComposerDictationControl(props: {
             size="icon-sm"
             disabled={phase !== "recording"}
             onPointerDown={keepComposerFocus}
-            onClick={dictation.stop}
-            aria-label="Insert dictation"
+            onClick={props.onStopAndSend ?? dictation.stop}
+            aria-label={props.onStopAndSend ? "Send dictation" : "Insert dictation"}
           >
             <CornerDownLeftIcon />
           </Button>
