@@ -123,7 +123,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
       </div>
       <div className="px-5 py-4 font-mono">
         <p ref={commandRef} aria-hidden className="w-fit text-xs">
-          <span className="text-primary">~/code_atlas/</span>
+          <span className="text-primary">C:/code_atlas/</span>
           <span className="mx-1.5 text-muted-foreground">&gt;</span>
           <span>{command.slice(0, props.typed)}</span>
           {props.caret ? <span data-atlas-caret /> : null}
@@ -288,7 +288,9 @@ export function AtlasLaunchIntro() {
     }
     setAtlasIntroStatus("playing");
   }, [status]);
-  if (status !== "playing") return null;
+  // Mount while still "pending" too, so the first painted frame is already the
+  // fullscreen terminal rather than the app flashing in underneath it.
+  if (status === "done") return null;
   return createPortal(<AtlasLaunchIntroScene meta={meta} />, document.body);
 }
 
@@ -315,6 +317,8 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
     const commandEl = commandRef.current;
     const art = artRef.current;
     if (!camera || !commandEl || !art) return;
+    // Measure untransformed: effects can run again after the camera was framed.
+    camera.style.transform = "none";
     const cameraRect = camera.getBoundingClientRect();
     const commandRect = commandEl.getBoundingClientRect();
     const artRect = art.getBoundingClientRect();
@@ -324,12 +328,14 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
     const viewportWidth = window.innerWidth;
     const edge = Math.min(40, Math.max(18, viewportWidth * 0.035));
     const top = 36;
+    // Like the handbook: the logo spans most of the window width, limited only
+    // by the window height.
     const scale = Math.max(
       1.03,
       Math.min(
-        2.6,
-        (viewportWidth - edge * 2) / Math.max(artRect.width, commandEl.scrollWidth),
-        (window.innerHeight - top - 32) / (artBottom - commandTop),
+        6,
+        (viewportWidth * 0.8) / Math.max(artRect.width, commandEl.scrollWidth),
+        (window.innerHeight - top - 40) / (artBottom - commandTop),
       ),
     );
     const left = edge - commandLeft * scale;
