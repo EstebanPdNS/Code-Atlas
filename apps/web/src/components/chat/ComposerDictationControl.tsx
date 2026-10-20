@@ -1,8 +1,22 @@
 import { MicIcon } from "lucide-react";
-import type { PointerEvent } from "react";
+import { useRef, useState, type PointerEvent } from "react";
+
+import {
+  readPreferredInputDeviceId,
+  useInputDevices,
+  writePreferredInputDeviceId,
+} from "~/atlas/dictationInputDevice";
 
 import type { ComposerDictation } from "~/dictation/useComposerDictation";
 import { Button } from "../ui/button";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+} from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ComposerDictationActivity } from "./ComposerDictationActivity";
 
@@ -25,13 +39,18 @@ export function ComposerDictationControl(props: {
   const phase = dictation.state.phase;
   const active = phase === "preparing" || phase === "recording" || phase === "transcribing";
   const label = dictation.environmentId === null ? "Set up dictation" : "Dictate";
+  // Code Atlas: right-click the mic to choose which microphone dictation uses.
+  const micRef = useRef<HTMLSpanElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [preferredDevice, setPreferredDevice] = useState(readPreferredInputDeviceId);
+  const devices = useInputDevices(pickerOpen);
 
   return (
     <div
       role="group"
       aria-label="Dictation"
       data-active={active ? "" : undefined}
-      className="group flex h-8 items-center rounded-full border border-transparent transition-[border-color] duration-200 ease-out data-active:border-border motion-reduce:transition-none"
+      className="group flex h-8 items-center"
     >
       <div
         className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-data-active:grid-cols-[1fr] motion-reduce:transition-none"
@@ -57,28 +76,59 @@ export function ComposerDictationControl(props: {
           <span className="size-2.5 rounded-xs bg-current" />
         </button>
       ) : (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                disabled={props.disabled}
-                onPointerDown={keepComposerFocus}
-                onClick={dictation.start}
-                aria-label={label}
-              />
-            }
-          >
-            <MicIcon />
-          </TooltipTrigger>
-          <TooltipPopup>
-            {props.shortcutLabel && dictation.environmentId !== null
-              ? `${label} (hold ${props.shortcutLabel})`
-              : label}
-          </TooltipPopup>
-        </Tooltip>
+        <span
+          ref={micRef}
+          className="inline-flex"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            setPickerOpen(true);
+          }}
+        >
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={props.disabled}
+                  onPointerDown={keepComposerFocus}
+                  onClick={dictation.start}
+                  aria-label={label}
+                />
+              }
+            >
+              <MicIcon />
+            </TooltipTrigger>
+            <TooltipPopup>
+              {props.shortcutLabel && dictation.environmentId !== null
+                ? `${label} (hold ${props.shortcutLabel}) · right-click to pick a microphone`
+                : label}
+            </TooltipPopup>
+          </Tooltip>
+          <Menu open={pickerOpen} onOpenChange={setPickerOpen}>
+            <MenuPopup anchor={micRef} side="top" align="end">
+              <MenuGroup>
+                <MenuGroupLabel>Microphone</MenuGroupLabel>
+                <MenuRadioGroup
+                  value={preferredDevice ?? "default"}
+                  onValueChange={(value) => {
+                    const next = value === "default" ? null : String(value);
+                    writePreferredInputDeviceId(next);
+                    setPreferredDevice(next);
+                  }}
+                >
+                  <MenuRadioItem value="default">System default</MenuRadioItem>
+                  {devices.map((device) => (
+                    <MenuRadioItem key={device.deviceId} value={device.deviceId}>
+                      {device.label}
+                    </MenuRadioItem>
+                  ))}
+                </MenuRadioGroup>
+              </MenuGroup>
+            </MenuPopup>
+          </Menu>
+        </span>
       )}
     </div>
   );

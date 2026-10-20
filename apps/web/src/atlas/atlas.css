@@ -238,7 +238,7 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
    The art is ~40em wide (60 monospace columns plus the gap), so the font
    size follows the container; on short windows the height wins. */
 [data-atlas-art] {
-  --atlas-art-size: clamp(6px, min(calc((100cqi - 48px) / 40), calc((100vh - 600px) / 16.5)), 22px);
+  --atlas-art-size: clamp(6px, min(calc((100cqi - 48px) / 40), calc((100vh - 680px) / 16.5)), 22px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -411,7 +411,7 @@ html.dark {
   padding-bottom: 5vh;
 }
 
-@media (max-height: 780px) {
+@media (max-height: 1000px) {
   [data-atlas-terminal] [data-atlas-palette] {
     display: none;
   }
@@ -485,15 +485,23 @@ html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"] {
   border-right-color: transparent;
 }
 
+/* No ruled lines: the title bar, sidebar and subwindow separate by surface
+   tone alone, so the window never reads as a grid. */
 html:not([data-theme-id]) [data-atlas-topbar],
 html:not([data-theme-id]) [data-chat-column] > header {
   background: var(--atlas-chrome);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"],
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
+  border: 0;
+  box-shadow: none;
 }
 
 html:not([data-theme-id]) [data-chat-column] > header + div {
-  margin: 0.5rem 0.5rem 0.5rem 0;
-  border: 1px solid var(--border);
+  margin: 0 0.5rem 0.5rem 0;
+  border: 0;
   border-radius: 0.875rem;
   background: var(--background);
   overflow: hidden;
@@ -520,4 +528,9 @@ html:not([data-theme-id])
 /* The handbook intro: a darker room around the terminal window. */
 [data-atlas-intro-backdrop] {
   background: var(--atlas-chrome, var(--background));
+}
+
+/* Breathing room above the new-thread terminal, so it never touches the top. */
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) [data-atlas-terminal] {
+  margin-top: 1.25rem;
 }

@@ -1,5 +1,6 @@
 import { DICTATION_SAMPLE_RATE } from "@t3tools/contracts";
 
+import { preferredInputDeviceConstraint } from "~/atlas/dictationInputDevice";
 import processorUrl from "./pcmProcessor.worklet.ts?worker&url";
 
 // Must match the name pcmProcessor.worklet.ts registers.
@@ -68,6 +69,8 @@ export class PcmCapture {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          // Code Atlas: the microphone picked from the dictation button's menu.
+          ...preferredInputDeviceConstraint(),
         },
       });
     } catch (error) {

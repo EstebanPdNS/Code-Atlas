@@ -29,6 +29,7 @@ import {
   AtlasUsageSection,
 } from "~/atlas/AtlasRailSections";
 import type { ContextWindowSnapshot } from "~/lib/contextWindow";
+import { useAtlasBackgroundTasksCard } from "~/atlas/AtlasSettingsSection";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -79,6 +80,7 @@ export interface ThreadDetailsPanelProps extends Pick<
 }
 
 export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
+  const [showBackgroundTasks] = useAtlasBackgroundTasksCard();
   const fileScripts = useT3ProjectFileScripts(
     props.environmentId,
     props.activeProjectScripts ? props.gitCwd : null,
@@ -164,31 +166,27 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
                 />
               ) : null}
             </div>
-          </ThreadDetailsSection>
-
-          {props.gitCwd ? (
-            <ThreadDetailsSection
-              headingId="thread-details-version-control-heading"
-              title="Version control"
-              separated={density === "full"}
-            >
-              <div className="flex flex-col">
-                {props.isGitRepo ? (
-                  <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
-                ) : null}
-                {props.activeProjectName ? (
-                  <GitActionsControl
-                    displayMode="panel"
-                    compact={density !== "full"}
-                    gitCwd={props.gitCwd}
-                    activeThreadRef={activeThreadRef}
-                    {...(props.draftId ? { draftId: props.draftId } : {})}
-                    {...(props.onOpenChanges ? { onOpenChanges: props.onOpenChanges } : {})}
-                  />
-                ) : null}
+            {/* Code Atlas: version control lives inside the Environment card. */}
+            {props.gitCwd ? (
+              <div className="mt-1 border-t border-border/65 pt-1">
+                <div className="flex flex-col">
+                  {props.isGitRepo ? (
+                    <BranchToolbar layout="panel" panelSection="branch" {...branchToolbarProps} />
+                  ) : null}
+                  {props.activeProjectName ? (
+                    <GitActionsControl
+                      displayMode="panel"
+                      compact={density !== "full"}
+                      gitCwd={props.gitCwd}
+                      activeThreadRef={activeThreadRef}
+                      {...(props.draftId ? { draftId: props.draftId } : {})}
+                      {...(props.onOpenChanges ? { onOpenChanges: props.onOpenChanges } : {})}
+                    />
+                  ) : null}
+                </div>
               </div>
-            </ThreadDetailsSection>
-          ) : null}
+            ) : null}
+          </ThreadDetailsSection>
 
           {density !== "essential" ? (
             <AtlasContextSection contextWindow={props.contextWindow ?? null} />
@@ -196,11 +194,13 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           {density !== "essential" ? (
             <AtlasUsageSection environmentId={props.environmentId} />
           ) : null}
-          <AtlasBackgroundSection
-            environmentId={props.environmentId}
-            threadId={props.threadId}
-            backgroundTasks={props.backgroundTasks ?? []}
-          />
+          {showBackgroundTasks ? (
+            <AtlasBackgroundSection
+              environmentId={props.environmentId}
+              threadId={props.threadId}
+              backgroundTasks={props.backgroundTasks ?? []}
+            />
+          ) : null}
 
           {density === "full" && !props.draftId ? (
             <ThreadAutomationsPanel environmentId={props.environmentId} threadId={props.threadId} />

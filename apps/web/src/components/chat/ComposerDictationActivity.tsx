@@ -3,12 +3,13 @@ import { XIcon } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 
 import type { DictationLevel } from "~/dictation/dictationLevel";
-import { WAVEFORM_REST_SCALE, driveDictationWaveform } from "~/dictation/dictationWaveform";
+import { WAVEFORM_REST_SCALE, driveScrollingWaveform } from "~/dictation/dictationWaveform";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 
-const BAR_COUNT = 11;
+// Code Atlas: a longer, scrolling trace (see driveScrollingWaveform).
+const BAR_COUNT = 22;
 const BARS = Array.from({ length: BAR_COUNT }, (_, index) => index);
 
 const keepComposerFocus = (event: PointerEvent) => event.preventDefault();
@@ -42,7 +43,7 @@ function DictationWaveform(props: { readonly level: DictationLevel; readonly liv
     const bars = Array.from(container.children).filter(
       (child): child is HTMLElement => child instanceof HTMLElement,
     );
-    if (animate) return driveDictationWaveform(bars, props.level);
+    if (animate) return driveScrollingWaveform(bars, props.level);
     for (const bar of bars) bar.style.transform = `scaleY(${WAVEFORM_REST_SCALE})`;
     return undefined;
   }, [animate, props.level]);
@@ -52,7 +53,10 @@ function DictationWaveform(props: { readonly level: DictationLevel; readonly liv
       {BARS.map((index) => (
         <span
           key={index}
-          className={cn("h-4 w-[2px] rounded-full bg-primary", animate && "will-change-transform")}
+          className={cn(
+            "h-4 w-0.5 rounded-full bg-muted-foreground",
+            animate && "will-change-transform",
+          )}
           style={{ transform: `scaleY(${WAVEFORM_REST_SCALE})` }}
         />
       ))}

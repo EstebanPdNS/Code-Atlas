@@ -44,7 +44,7 @@ function useAgentProviders(environmentId: EnvironmentId | null): readonly Server
     );
 }
 
-/** Installed agents and the busiest usage window of each, for the terminal. */
+/** Installed agents and each one's weekly usage, for the terminal (session lives in the Usage card). */
 export function useAtlasAgentSummary(environmentId: EnvironmentId | null): {
   readonly agents: readonly string[];
   readonly usage: readonly AtlasUsageEntry[];
@@ -53,11 +53,8 @@ export function useAtlasAgentSummary(environmentId: EnvironmentId | null): {
   const agents = [...new Set(providers.map(providerLabel))];
   const usage = providersWithLimits(providers).map((provider) => {
     const windows = provider.usageLimits?.windows ?? [];
-    const busiest = windows.reduce<number | null>(
-      (max, window) => (max === null || window.usedPercent > max ? window.usedPercent : max),
-      null,
-    );
-    return { label: providerLabel(provider), percent: busiest };
+    const weekly = windows.find((window) => window.kind === "weekly") ?? windows[0];
+    return { label: providerLabel(provider), percent: weekly?.usedPercent ?? null };
   });
   return { agents, usage };
 }
@@ -85,7 +82,19 @@ export function AtlasContextSection({
 }: {
   readonly contextWindow: ContextWindowSnapshot | null;
 }) {
-  if (contextWindow === null || contextWindow.maxTokens == null) return null;
+  if (contextWindow === null || contextWindow.maxTokens == null) {
+    return (
+      <ThreadDetailsSection headingId="atlas-context-heading" title="Context">
+        <div className="px-1.5 pb-1">
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="font-medium tabular-nums">0% used</span>
+            <span className="text-xs text-muted-foreground">nothing sent yet</span>
+          </div>
+          <Meter percent={0} className="mt-2" />
+        </div>
+      </ThreadDetailsSection>
+    );
+  }
   const percent = Math.round(contextWindow.usedPercentage ?? 0);
   const rows = [
     { label: "Input", value: contextWindow.inputTokens, tone: "bg-primary" },

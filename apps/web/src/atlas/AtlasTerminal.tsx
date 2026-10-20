@@ -171,7 +171,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
                 </dd>
               </div>
               <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
-                <dt className="font-semibold text-primary">Usage</dt>
+                <dt className="font-semibold text-primary">Weekly</dt>
                 <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
                   {meta.usage.length === 0 ? <span>No usage data yet</span> : null}
                   {meta.usage.map((entry) => (

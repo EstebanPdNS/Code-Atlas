@@ -98,3 +98,43 @@ export function driveDictationWaveform(
     frame = null;
   };
 }
+
+/**
+ * Code Atlas: a scrolling level history, like a voice memo. Every level push
+ * (about 25 a second) enters at the right edge and older readings slide left,
+ * so speech reads as a moving trace; silence rests as a row of dots. Only
+ * `transform` is written, once per push, with no frame loop of its own.
+ */
+export function driveScrollingWaveform(
+  bars: ReadonlyArray<HTMLElement>,
+  level: DictationLevel,
+): () => void {
+  const count = bars.length;
+  const values = new Float32Array(count).fill(WAVEFORM_REST_SCALE);
+  const written = new Float32Array(count).fill(-1);
+  const write = () => {
+    for (let index = 0; index < count; index++) {
+      const value = values[index]!;
+      if (Math.abs(value - written[index]!) < 0.001) continue;
+      written[index] = value;
+      bars[index]!.style.transform = `scaleY(${value.toFixed(3)})`;
+    }
+  };
+  // A slowly adapting floor and ceiling: auto gain keeps speech loud, so bars
+  // follow syllables relative to the recent range rather than absolute level.
+  let floor = 0;
+  let ceiling = 0.35;
+  const onLevel = (raw: number) => {
+    const gated = Math.max(0, (raw - NOISE_GATE) / (1 - NOISE_GATE));
+    ceiling = Math.max(gated, ceiling * 0.985, 0.35);
+    floor = gated < floor ? gated : floor + (gated - floor) * 0.02;
+    const span = Math.max(0.2, ceiling - floor);
+    const shaped = gated <= 0 ? 0 : Math.min(1, Math.max(0, (gated - floor) / span) ** 1.3);
+    values.copyWithin(0, 1);
+    values[count - 1] = Math.max(WAVEFORM_REST_SCALE, shaped);
+    write();
+  };
+  write();
+  const unsubscribe = level.subscribe(onLevel);
+  return unsubscribe;
+}
