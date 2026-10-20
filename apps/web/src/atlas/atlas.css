@@ -194,7 +194,6 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
 /* ---------- Code Atlas terminal (new-thread screen) ---------- */
 [data-atlas-terminal] {
   container-type: inline-size;
-  max-width: 44rem;
 }
 
 [data-atlas-light] {
@@ -232,12 +231,52 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   }
 }
 
+/* Like the handbook: the map and the wordmark fill the terminal's width.
+   The art is ~40em wide (60 monospace columns plus the gap), so the font
+   size follows the container; on short windows the height wins. */
 [data-atlas-art] {
-  --atlas-art-size: clamp(6px, min(calc((100cqi - 72px) / 64), calc((100vh - 600px) / 17)), 12px);
+  --atlas-art-size: clamp(6px, min(calc((100cqi - 48px) / 40), calc((100vh - 600px) / 16.5)), 22px);
   display: flex;
   align-items: center;
-  /* The map and the wordmark read as one logo, like the handbook. */
+  justify-content: center;
   gap: calc(var(--atlas-art-size) * 2.2);
+}
+
+[data-atlas-info] {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Wide terminals: logo on the left, project data on the right. */
+@container (min-width: 880px) {
+  [data-atlas-layout] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 2.5rem;
+  }
+
+  [data-atlas-layout] [data-atlas-art] {
+    --atlas-art-size: clamp(
+      6px,
+      min(calc((100cqi * 0.62 - 48px) / 40), calc((100vh - 480px) / 16.5)),
+      22px
+    );
+  }
+
+  [data-atlas-info] {
+    margin-top: 0;
+    padding-top: 0;
+    padding-left: 2rem;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+
+[data-atlas-caret-idle] {
+  margin-left: 0;
+  animation-iteration-count: 3;
 }
 
 [data-atlas-ascii] {
@@ -365,12 +404,17 @@ html.dark {
    instead of the middle so the intro has room on short windows. */
 [data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
   align-items: flex-end;
-  padding-bottom: 14vh;
+  padding-bottom: 5vh;
 }
 
-@media (max-height: 760px) {
-  [data-atlas-terminal] dl,
+@media (max-height: 780px) {
   [data-atlas-terminal] [data-atlas-palette] {
+    display: none;
+  }
+}
+
+@media (max-height: 680px) {
+  [data-atlas-terminal] [data-atlas-info] {
     display: none;
   }
 }

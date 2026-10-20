@@ -128,73 +128,82 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
           <span>{command.slice(0, props.typed)}</span>
           {props.caret ? <span data-atlas-caret /> : null}
         </p>
-        <div ref={artRef} aria-hidden data-atlas-art className="my-4 w-fit">
-          <pre data-atlas-ascii>
-            {MAP_ROWS.map((segments, index) => (
-              <span
-                key={MAP_ROW_KEYS[index]}
-                data-atlas-row
-                data-hidden={index >= props.rows || undefined}
-              >
-                <span data-tone="0">{segments[0]}</span>
-                <span data-tone="1">{segments[1]}</span>
-                <span data-tone="2">{segments[2]}</span>
-                {"\n"}
-              </span>
-            ))}
-          </pre>
-          <pre data-atlas-ascii>
-            {TITLE_ROWS.map((row, index) => (
-              <span
-                key={row.key}
-                data-atlas-row
-                data-tone={row.tone}
-                data-hidden={index >= props.rows || undefined}
-              >
-                {row.text}
-                {"\n"}
-              </span>
-            ))}
-          </pre>
-        </div>
-        <div data-atlas-reveal>
-          <dl className="grid gap-y-0.5 border-t border-border pt-3 text-2xs leading-relaxed">
-            <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
-              <dt className="font-semibold text-primary">Project</dt>
-              <dd className="truncate text-foreground">{meta.projectName ?? "No project"}</dd>
-            </div>
-            <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
-              <dt className="font-semibold text-primary">Agents</dt>
-              <dd className="text-muted-foreground">
-                {meta.agents.length > 0 ? meta.agents.join(" · ") : "Claude Code · Codex"}
-              </dd>
-            </div>
-            <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
-              <dt className="font-semibold text-primary">Usage</dt>
-              <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
-                {meta.usage.length === 0 ? <span>No usage data yet</span> : null}
-                {meta.usage.map((entry) => (
-                  <span key={entry.label} className="inline-flex items-center gap-1.5">
-                    {entry.label}
-                    <span data-atlas-meter aria-hidden>
-                      <span style={{ width: `${entry.percent ?? 0}%` }} />
-                    </span>
-                    <strong className="font-medium text-foreground tabular-nums">
-                      {entry.percent === null ? "—" : `${Math.round(entry.percent)}%`}
-                    </strong>
-                  </span>
-                ))}
-              </dd>
-            </div>
-          </dl>
-          <div aria-hidden data-atlas-palette className="mt-3">
-            {PALETTE_KEYS.map((key) => (
-              <span key={key} />
-            ))}
+        <div data-atlas-layout className="my-4">
+          <div ref={artRef} aria-hidden data-atlas-art>
+            <pre data-atlas-ascii>
+              {MAP_ROWS.map((segments, index) => (
+                <span
+                  key={MAP_ROW_KEYS[index]}
+                  data-atlas-row
+                  data-hidden={index >= props.rows || undefined}
+                >
+                  <span data-tone="0">{segments[0]}</span>
+                  <span data-tone="1">{segments[1]}</span>
+                  <span data-tone="2">{segments[2]}</span>
+                  {"\n"}
+                </span>
+              ))}
+            </pre>
+            <pre data-atlas-ascii>
+              {TITLE_ROWS.map((row, index) => (
+                <span
+                  key={row.key}
+                  data-atlas-row
+                  data-tone={row.tone}
+                  data-hidden={index >= props.rows || undefined}
+                >
+                  {row.text}
+                  {"\n"}
+                </span>
+              ))}
+            </pre>
           </div>
-          <p className="mt-3 text-2xs text-muted-foreground">
+          <div data-atlas-reveal data-atlas-info>
+            <dl className="grid gap-y-0.5 text-2xs leading-relaxed">
+              <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
+                <dt className="font-semibold text-primary">Project</dt>
+                <dd className="truncate text-foreground">{meta.projectName ?? "No project"}</dd>
+              </div>
+              <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
+                <dt className="font-semibold text-primary">Agents</dt>
+                <dd className="text-muted-foreground">
+                  {meta.agents.length > 0 ? meta.agents.join(" · ") : "Claude Code · Codex"}
+                </dd>
+              </div>
+              <div className="grid grid-cols-[8ch_minmax(0,1fr)] gap-3">
+                <dt className="font-semibold text-primary">Usage</dt>
+                <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+                  {meta.usage.length === 0 ? <span>No usage data yet</span> : null}
+                  {meta.usage.map((entry) => (
+                    <span key={entry.label} className="inline-flex items-center gap-1.5">
+                      {entry.label}
+                      <span data-atlas-meter aria-hidden>
+                        <span style={{ width: `${entry.percent ?? 0}%` }} />
+                      </span>
+                      <strong className="font-medium text-foreground tabular-nums">
+                        {entry.percent === null ? "—" : `${Math.round(entry.percent)}%`}
+                      </strong>
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            </dl>
+            <div aria-hidden data-atlas-palette className="mt-3">
+              {PALETTE_KEYS.map((key) => (
+                <span key={key} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div data-atlas-reveal className="text-2xs">
+          <p className="text-muted-foreground">
             <span className="text-primary">[ready]</span> workspace loaded · describe your next task
             below
+          </p>
+          <p aria-hidden className="mt-2">
+            <span className="text-primary">C:/code_atlas/</span>
+            <span className="mx-1.5 text-muted-foreground">&gt;</span>
+            <span data-atlas-caret data-atlas-caret-idle />
           </p>
         </div>
       </div>
