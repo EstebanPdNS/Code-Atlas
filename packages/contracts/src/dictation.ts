@@ -15,8 +15,12 @@ import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 /** Sample rate every client sends. The server never resamples or decodes containers. */
 export const DICTATION_SAMPLE_RATE = 16_000;
 
-export const DEFAULT_DICTATION_VOCABULARY =
-  "Code Atlas, Claude Code, Codex, T3 Code, worktree, git rebase, pull request, merge conflict, upstream, commit, build, TypeScript, React, Electron, macOS, Xcode, 3DS, citro2d, devkitPro";
+export const DEFAULT_DICTATION_VOCABULARY = [
+  "Code Atlas, Claude Code, Codex, T3 Code, worktree, git rebase, pull request, merge conflict,",
+  "upstream, commit, build, TypeScript, React, Electron, macOS, Xcode, 3DS, citro2d, devkitPro,",
+  "ChatComposer, Starwing, Starfox, Mario Kart 64, Mario 64 DS, Zelda Minish Cap, Worms 3D,",
+  "Virtual Boy, Libronix, Ludus, Notion, Discord, My Money, Slides",
+].join(" ");
 
 /** Matches the client recording cap in `client-runtime/voice-input`. */
 export const DICTATION_MAX_SECONDS = 5 * 60;
