@@ -407,6 +407,7 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { createUpwardScrollDetector, isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
+import { AtlasTerminal } from "~/atlas/AtlasTerminal";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
   BranchRestoreConfirmHost,
@@ -8382,6 +8383,10 @@ export default function ChatView(props: ChatViewProps) {
                             : undefined
                         }
                       >
+                        {/* Code Atlas: the handbook terminal greets every new thread. */}
+                        <div className="mb-5 hidden sm:block">
+                          <AtlasTerminal projectName={activeProject?.title ?? null} />
+                        </div>
                         <DraftHeroHeadline
                           draftId={draftId}
                           activeProjectRef={activeProjectRef}

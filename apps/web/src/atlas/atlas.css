@@ -13,6 +13,10 @@
   --atlas-orange-strong: #f79443;
   --atlas-orange-deep: #df721f;
   --atlas-orange-ink: #a84200;
+  --atlas-glyph-0: #ffd7b0;
+  --atlas-glyph-1: #ffad66;
+  --atlas-glyph-2: #f79443;
+  --atlas-glyph-3: #df721f;
   --atlas-ascii-0: #ffe0c5;
   --atlas-ascii-1: #ffad66;
   --atlas-ascii-2: #d98442;
@@ -154,28 +158,6 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   --sidebar-stage-fade: #1f1e1d;
 }
 
-/* ---------- Code Atlas sidebar sections ---------- */
-.atlas-section-label {
-  font-family: var(--atlas-font-console);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.atlas-wordmark {
-  font-family: var(--atlas-font-console);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.atlas-wordmark-dot {
-  color: var(--atlas-orange);
-}
-
-html:not(.dark) .atlas-wordmark-dot {
-  color: var(--atlas-orange-ink);
-}
-
 /* Code Atlas activity spinner: three dots that orbit in sequence. Only runs
    while an agent is actually working, then stops (no idle repaint). */
 @keyframes atlas-dot-orbit {
@@ -190,21 +172,183 @@ html:not(.dark) .atlas-wordmark-dot {
   }
 }
 
-.atlas-activity-dots > span {
+[data-atlas-activity] > span {
   animation: atlas-dot-orbit 1.2s ease-in-out infinite;
 }
 
-.atlas-activity-dots > span:nth-child(2) {
+[data-atlas-activity] > span:nth-child(2) {
   animation-delay: 0.2s;
 }
 
-.atlas-activity-dots > span:nth-child(3) {
+[data-atlas-activity] > span:nth-child(3) {
   animation-delay: 0.4s;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .atlas-activity-dots > span {
+  [data-atlas-activity] > span {
     animation: none;
     opacity: 1;
+  }
+}
+
+/* ---------- Code Atlas terminal (new-thread screen) ---------- */
+[data-atlas-terminal] {
+  container-type: inline-size;
+  max-width: 44rem;
+}
+
+[data-atlas-light] {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  border: 1px solid rgb(0 0 0 / 12%);
+}
+
+[data-atlas-light="close"] {
+  background: #ff5f57;
+}
+
+[data-atlas-light="minimize"] {
+  background: #febc2e;
+}
+
+[data-atlas-light="maximize"] {
+  background: #28c840;
+}
+
+[data-atlas-caret] {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  margin-left: 0.35em;
+  vertical-align: -0.2em;
+  background: var(--primary);
+  animation: atlas-caret 0.8s step-end infinite;
+}
+
+@keyframes atlas-caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+[data-atlas-art] {
+  --atlas-art-size: clamp(6px, min(calc((100cqi - 72px) / 70), calc((100vh - 560px) / 17)), 11px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+[data-atlas-ascii] {
+  margin: 0;
+  font-family: var(--atlas-font-console);
+  font-size: var(--atlas-art-size);
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: pre;
+  font-variant-ligatures: none;
+}
+
+[data-atlas-ascii] [data-tone="0"] {
+  color: var(--atlas-ascii-0);
+}
+
+[data-atlas-ascii] [data-tone="1"] {
+  color: var(--atlas-ascii-1);
+}
+
+[data-atlas-ascii] [data-tone="2"] {
+  color: var(--atlas-ascii-2);
+}
+
+[data-atlas-row][data-hidden] {
+  visibility: hidden;
+}
+
+[data-atlas-reveal] {
+  transition: opacity 300ms ease;
+}
+
+[data-atlas-reveal="off"] {
+  opacity: 0;
+}
+
+[data-atlas-palette] {
+  display: flex;
+  width: 144px;
+  height: 10px;
+}
+
+[data-atlas-palette] > span {
+  flex: 1;
+}
+
+[data-atlas-palette] > span:nth-child(1) {
+  background: #713207;
+}
+[data-atlas-palette] > span:nth-child(2) {
+  background: #914411;
+}
+[data-atlas-palette] > span:nth-child(3) {
+  background: #b65c20;
+}
+[data-atlas-palette] > span:nth-child(4) {
+  background: #d98442;
+}
+[data-atlas-palette] > span:nth-child(5) {
+  background: #f09a55;
+}
+[data-atlas-palette] > span:nth-child(6) {
+  background: #ffad66;
+}
+[data-atlas-palette] > span:nth-child(7) {
+  background: #ffc99b;
+}
+[data-atlas-palette] > span:nth-child(8) {
+  background: #ffe0c5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-atlas-caret] {
+    animation: none;
+  }
+}
+
+/* Dev builds paint a stage artwork behind the sidebar header; keep it on brand. */
+:root {
+  --stage-art-top: #ffc99b;
+  --stage-art-mid: #f09a55;
+  --stage-art-bottom: #b65c20;
+  --stage-art-highlight: #ffe0c5;
+  --stage-art-secondary: #ffad66;
+  --stage-art-tertiary: #d98442;
+  --stage-art-line: #ffe0c5;
+}
+
+html.dark {
+  --stage-art-top: #d98442;
+  --stage-art-mid: #914411;
+  --stage-art-bottom: #4a2408;
+}
+
+/* With the terminal above it, the new-thread composer sits in the lower third
+   instead of the middle so the intro has room on short windows. */
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
+  align-items: flex-end;
+  padding-bottom: 14vh;
+}
+
+@media (max-height: 760px) {
+  [data-atlas-terminal] dl,
+  [data-atlas-terminal] [data-atlas-palette] {
+    display: none;
+  }
+}
+
+@media (max-height: 600px) {
+  [data-atlas-terminal] {
+    display: none;
   }
 }

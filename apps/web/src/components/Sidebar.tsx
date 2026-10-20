@@ -142,6 +142,7 @@ import {
 } from "../threadSelectionStore";
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { AtlasSidebarSections } from "~/atlas/AtlasSidebarSections";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
@@ -363,6 +364,10 @@ const EMPTY_PROVIDER_ENTRIES: ReadonlyMap<string, SidebarProviderEntry> = new Ma
 // Collapsed shelves share one empty list so a route change alone does not
 // give the sidebar list a new identity.
 const EMPTY_THREADS: readonly EnvironmentThreadShell[] = [];
+
+// Code Atlas replaces the flat inbox with Pinned / Needs attention / Working
+// sections and user-defined project groups (src/atlas/AtlasSidebarSections.tsx).
+const CODE_ATLAS_SIDEBAR = true;
 
 const SETTLED_TAIL_INITIAL_COUNT = 10;
 const SETTLED_TAIL_PAGE_COUNT = 25;
@@ -4811,19 +4816,23 @@ export default function Sidebar() {
                       const renderThreadRow = (
                         thread: EnvironmentThreadShell,
                         section: SidebarSection,
+                        variantOverride?: "card" | "slim",
                       ) => {
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
                         const isCard =
                           section === "active" || section === "pinned" || section === "working";
-                        const rowVariant = isCard ? "card" : "slim";
+                        const rowVariant = variantOverride ?? (isCard ? "card" : "slim");
                         return (
                           <SortableThreadRow
                             key={threadKey}
                             sortableId={threadKey}
                             contextDrag={isContextDrag}
                             sortableDisabled={
+                              // Code Atlas lays rows out by project group, where the
+                              // section drag model does not apply.
+                              CODE_ATLAS_SIDEBAR ||
                               renamingThreadKey === threadKey ||
                               !draggableThreadKeys.has(threadKey) ||
                               optimisticDrop !== null
@@ -4929,6 +4938,36 @@ export default function Sidebar() {
                           onDraftContextMenu={handleDraftContextMenu}
                         />,
                       ];
+                      if (CODE_ATLAS_SIDEBAR) {
+                        items.push(
+                          <AtlasSidebarSections
+                            key="code-atlas-sections"
+                            pinnedThreads={pinnedThreads}
+                            activeThreads={activeThreads}
+                            workingThreads={workingThreads}
+                            snoozedThreads={snoozedThreads}
+                            settledThreads={settledThreads}
+                            projects={projectGroups}
+                            snoozeNow={snoozeNow}
+                            renderThreadRow={(thread, section) =>
+                              renderThreadRow(thread, section, "slim")
+                            }
+                            onNewThreadInProject={(project) => {
+                              if (isMobile) setOpenMobile(false);
+                              void newThreadContext.handleNewThread(
+                                scopeProjectRef(project.environmentId, project.id),
+                              );
+                            }}
+                            onProjectSettings={(event, project) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              openProjectSettings(project);
+                            }}
+                            onAddProject={openAddProjectCommandPalette}
+                          />,
+                        );
+                        return items;
+                      }
                       for (const item of sidebarListItems) {
                         if (item.kind === "thread") {
                           items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
@@ -5055,7 +5094,7 @@ export default function Sidebar() {
                       }
                       return items;
                     })()}
-                    {settledShelfExpanded && hiddenSettledCount > 0 ? (
+                    {!CODE_ATLAS_SIDEBAR && settledShelfExpanded && hiddenSettledCount > 0 ? (
                       <li className="list-none">
                         <button
                           type="button"

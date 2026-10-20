@@ -16,10 +16,10 @@ export function CodeAtlasGlyph({ className }: { className?: string }) {
           x2="30"
           y2="42"
         >
-          <stop stopColor="#ffd7b0" />
-          <stop offset="0.34" stopColor="#ffad66" />
-          <stop offset="0.72" stopColor="#f79443" />
-          <stop offset="1" stopColor="#df721f" />
+          <stop stopColor="var(--atlas-glyph-0)" />
+          <stop offset="0.34" stopColor="var(--atlas-glyph-1)" />
+          <stop offset="0.72" stopColor="var(--atlas-glyph-2)" />
+          <stop offset="1" stopColor="var(--atlas-glyph-3)" />
         </linearGradient>
       </defs>
       <g
@@ -41,8 +41,8 @@ export function CodeAtlasWordmark({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
       <CodeAtlasGlyph className="size-4 shrink-0" />
-      <span className="atlas-wordmark truncate text-sm">
-        code atlas<span className="atlas-wordmark-dot">.</span>
+      <span className="truncate font-mono text-sm font-bold tracking-tight">
+        code atlas<span className="text-primary">.</span>
       </span>
     </span>
   );
