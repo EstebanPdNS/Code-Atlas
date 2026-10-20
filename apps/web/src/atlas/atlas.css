@@ -1,0 +1,210 @@
+/*
+ * Code Atlas visual language.
+ *
+ * Loaded after index.css (see main.tsx) and scoped to the default theme only:
+ * any theme the user picks in Settings -> Appearance sets data-theme-id and
+ * keeps full control. Warm graphite surfaces, card panels and the Code Atlas
+ * orange (#ffad66 dark / #a84200 light) replace the upstream neutral-blue
+ * defaults. Keeping every override here keeps upstream rebases conflict-free.
+ */
+
+:root {
+  --atlas-orange: #ffad66;
+  --atlas-orange-strong: #f79443;
+  --atlas-orange-deep: #df721f;
+  --atlas-orange-ink: #a84200;
+  --atlas-ascii-0: #ffe0c5;
+  --atlas-ascii-1: #ffad66;
+  --atlas-ascii-2: #d98442;
+  --atlas-font-console:
+    ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+html.dark {
+  --atlas-ascii-0: #ffe0c5;
+  --atlas-ascii-1: #ffad66;
+  --atlas-ascii-2: #d98442;
+}
+
+html:not(.dark) {
+  --atlas-ascii-0: #9e4000;
+  --atlas-ascii-1: #a84200;
+  --atlas-ascii-2: #713207;
+}
+
+/* ---------- Light: paper and clay ---------- */
+html:not(.dark):not([data-theme-id]) {
+  --radius: 0.75rem;
+  --background: #faf9f5;
+  --app-chrome-background: #f5f4ee;
+  --toolbar-background: #f5f4ee;
+  --toolbar-border: #e8e6dc;
+  --toolbar-control: #ffffff;
+  --toolbar-control-hover: #efede4;
+  --surface-raised: #ffffff;
+  --foreground: #1f1e1b;
+  --card: #ffffff;
+  --card-foreground: #1f1e1b;
+  --popover: #ffffff;
+  --popover-foreground: #1f1e1b;
+  --primary: #b4541a;
+  --primary-foreground: #ffffff;
+  --secondary: #f0eee6;
+  --secondary-foreground: #1f1e1b;
+  --muted: #f0eee6;
+  --muted-foreground: #73716a;
+  --accent: #efede4;
+  --accent-foreground: #1f1e1b;
+  --message-surface: #f0eee6;
+  --border: #e6e3d8;
+  --input: #d8d5c9;
+  --ring: #b4541a;
+  --update: #b4541a;
+  --update-foreground: #a84200;
+  --code-background: #f3f1ea;
+  --terminal-background: #faf9f5;
+  --terminal-cursor: #a84200;
+  --terminal-selection-background: rgb(168 66 0 / 18%);
+}
+
+html:not(.dark):not([data-theme-id]) [data-app-sidebar] {
+  --background: #f5f4ee;
+  --foreground: #1f1e1b;
+  --card: #ffffff;
+  --accent: #ebe9df;
+  --muted: #f0eee6;
+  --muted-foreground: #73716a;
+  --border: #e6e3d8;
+  --sidebar: #f5f4ee;
+  --sidebar-foreground: #1f1e1b;
+  --sidebar-muted-foreground: #73716a;
+  --sidebar-control-surface: #ebe9df;
+  --sidebar-row-hover: #ebe9df;
+  --sidebar-row-active: #e4e1d5;
+  --sidebar-row-selected: #e4e1d5;
+  --sidebar-border: #e6e3d8;
+  --sidebar-stage-fade: #f5f4ee;
+}
+
+/* ---------- Dark: warm graphite ---------- */
+html.dark:not([data-theme-id]) {
+  --radius: 0.75rem;
+  --background: #262624;
+  --app-chrome-background: #1f1e1d;
+  --toolbar-background: #1f1e1d;
+  --toolbar-foreground: #ecebe6;
+  --toolbar-border: #34332f;
+  --toolbar-control: #30302d;
+  --toolbar-control-hover: #3a3936;
+  --surface-raised: #2e2d2b;
+  --foreground: #ecebe6;
+  --card: #2b2a28;
+  --card-foreground: #ecebe6;
+  --popover: #30302d;
+  --popover-foreground: #ecebe6;
+  --primary: #ffad66;
+  --primary-foreground: #2a1708;
+  --secondary: #30302d;
+  --secondary-foreground: #ecebe6;
+  --muted: #2e2d2b;
+  --muted-foreground: #a3a199;
+  --placeholder: #8a887f;
+  --secondary-label: #a3a199;
+  --icon-muted: #a3a199;
+  --accent: #34332f;
+  --accent-foreground: #f4f3ee;
+  --message-surface: #34332f;
+  --message-foreground: #ecebe6;
+  --message-action: #ffad66;
+  --message-action-foreground: #2a1708;
+  --message-action-hover: #f79443;
+  --border: #3a3935;
+  --input: #46443f;
+  --ring: #ffad66;
+  --update: #ffad66;
+  --update-foreground: #ffbf88;
+  --update-surface: rgb(255 173 102 / 14%);
+  --code-background: #1f1e1d;
+  --code-foreground: #ecebe6;
+  --terminal-background: #1f1e1d;
+  --terminal-foreground: #ecebe6;
+  --terminal-cursor: #ffad66;
+  --terminal-selection-background: rgb(255 173 102 / 22%);
+}
+
+html.dark:not([data-theme-id]) [data-app-sidebar] {
+  --background: #1f1e1d;
+  --foreground: #ecebe6;
+  --card: #262624;
+  --card-foreground: #ecebe6;
+  --accent: #2f2e2b;
+  --accent-foreground: #f4f3ee;
+  --muted: #262624;
+  --muted-foreground: #a3a199;
+  --border: #34332f;
+  --input: #46443f;
+  --sidebar: #1f1e1d;
+  --sidebar-foreground: #ecebe6;
+  --sidebar-muted-foreground: #a3a199;
+  --sidebar-control-surface: #2a2927;
+  --sidebar-row-hover: #2a2927;
+  --sidebar-row-active: #33322f;
+  --sidebar-row-selected: #2e2d2a;
+  --sidebar-border: #34332f;
+  --sidebar-stage-fade: #1f1e1d;
+}
+
+/* ---------- Code Atlas sidebar sections ---------- */
+.atlas-section-label {
+  font-family: var(--atlas-font-console);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.atlas-wordmark {
+  font-family: var(--atlas-font-console);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.atlas-wordmark-dot {
+  color: var(--atlas-orange);
+}
+
+html:not(.dark) .atlas-wordmark-dot {
+  color: var(--atlas-orange-ink);
+}
+
+/* Code Atlas activity spinner: three dots that orbit in sequence. Only runs
+   while an agent is actually working, then stops (no idle repaint). */
+@keyframes atlas-dot-orbit {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.atlas-activity-dots > span {
+  animation: atlas-dot-orbit 1.2s ease-in-out infinite;
+}
+
+.atlas-activity-dots > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.atlas-activity-dots > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-activity-dots > span {
+    animation: none;
+    opacity: 1;
+  }
+}

@@ -1,12 +1,12 @@
 {
   "id": "/",
-  "name": "T3 Code",
-  "short_name": "T3 Code",
+  "name": "Code Atlas",
+  "short_name": "Code Atlas",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#161616",
-  "theme_color": "#161616",
+  "background_color": "#1f1e1d",
+  "theme_color": "#1f1e1d",
   "icons": [
     {
       "src": "/favicon-32x32.png",
