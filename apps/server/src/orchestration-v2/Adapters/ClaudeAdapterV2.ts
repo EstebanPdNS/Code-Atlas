@@ -40,6 +40,7 @@ import {
   type SpawnedProcess as ClaudeSpawnedProcess,
   type SDKAssistantMessage,
   type SDKAPIRetryMessage,
+  type SDKControlGetContextUsageResponse,
   type SDKMessage,
   type SDKRateLimitInfo,
   type SDKResultMessage,
@@ -232,6 +233,42 @@ function claudeMessageInputTokens(usage: {
     (usage.cache_creation_input_tokens ?? 0) +
     (usage.cache_read_input_tokens ?? 0)
   );
+}
+
+/**
+ * Code Atlas: adds Claude's /context categories, and its real auto-compact
+ * threshold when auto-compact is on, to a turn's context usage.
+ */
+export function withClaudeContextBreakdown<
+  Usage extends { readonly autoCompactThreshold?: number },
+>(
+  usage: Usage,
+  breakdown: Pick<
+    SDKControlGetContextUsageResponse,
+    "categories" | "autoCompactThreshold" | "isAutoCompactEnabled"
+  >,
+): Usage & {
+  readonly contextCategories: ReadonlyArray<{
+    readonly name: string;
+    readonly tokens: number;
+    readonly kind: "used" | "free" | "buffer" | "deferred";
+  }>;
+} {
+  const threshold =
+    breakdown.isAutoCompactEnabled && breakdown.autoCompactThreshold !== undefined
+      ? Math.round(breakdown.autoCompactThreshold)
+      : undefined;
+  return {
+    ...usage,
+    ...(threshold !== undefined && threshold > 0 ? { autoCompactThreshold: threshold } : {}),
+    contextCategories: breakdown.categories
+      .filter((category) => category.name.trim().length > 0)
+      .map((category) => ({
+        name: category.name,
+        tokens: Math.max(0, Math.round(category.tokens)),
+        kind: category.kind,
+      })),
+  };
 }
 
 export function claudeProviderTurnTokenUsage(
@@ -495,6 +532,11 @@ export interface ClaudeAgentSdkQuerySession {
   ) => Effect.Effect<boolean, ClaudeAgentSdkQueryRunnerError>;
   readonly interrupt: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
   readonly close: Effect.Effect<void, ClaudeAgentSdkQueryRunnerError>;
+  /** Code Atlas: Claude's /context breakdown, from local estimates (no token-count API calls). */
+  readonly getContextUsage?: Effect.Effect<
+    SDKControlGetContextUsageResponse,
+    ClaudeAgentSdkQueryRunnerError
+  >;
 }
 
 type ClaudeQueryStreamExit = Exit.Exit<void, ClaudeAgentSdkQueryRunnerError>;
@@ -1013,6 +1055,10 @@ export const layerQueryRunner: Layer.Layer<
                 }),
               ),
             ),
+          getContextUsage: Effect.tryPromise({
+            try: () => queryRuntime.getContextUsage({ detail: "summary" }),
+            catch: (cause) => queryRunnerError(cause, "getContextUsage"),
+          }),
           setModel: (model) =>
             Effect.tryPromise({
               try: () => queryRuntime.setModel(model),
@@ -4210,6 +4256,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           context: ActiveClaudeTurnContext,
           usage: ClaudeMessageUsage,
           requestStarted = false,
+          breakdown?: SDKControlGetContextUsageResponse,
         ) {
           const now = yield* DateTime.now;
           // Only message_start marks the request start; an assistant snapshot
@@ -4223,6 +4270,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             context.streamUsage?.requestedAt,
           );
           if (tokenUsage.inputTokens <= 0) return;
+          const detailedUsage =
+            breakdown === undefined
+              ? tokenUsage
+              : withClaudeContextBreakdown(tokenUsage, breakdown);
           yield* emitProviderEvent({
             type: "provider_turn.updated",
             driver: CLAUDE_PROVIDER,
@@ -4241,9 +4292,27 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               status: "running",
               startedAt: context.startedAt,
               completedAt: null,
-              tokenUsage,
+              tokenUsage: detailedUsage,
             },
           });
+        });
+
+        // Code Atlas: once a turn ends, refresh the context card with Claude's
+        // own breakdown. Bounded so a slow CLI never holds up the turn.
+        const emitContextBreakdown = Effect.fnUntraced(function* (
+          context: ActiveClaudeTurnContext,
+        ) {
+          const usage = context.streamUsage?.usage;
+          const live = yield* Ref.get(queryContext);
+          if (usage == null || live === null || live.stopping) return;
+          const getContextUsage = live.query.getContextUsage;
+          if (getContextUsage === undefined) return;
+          const breakdown = yield* getContextUsage.pipe(
+            Effect.timeoutOption("2 seconds"),
+            Effect.orElseSucceed(() => Option.none<SDKControlGetContextUsageResponse>()),
+          );
+          if (Option.isSome(breakdown))
+            yield* emitContextUsage(context, usage, false, breakdown.value);
         });
 
         // Claude emits retry progress but no recovered frame; the next
@@ -8420,6 +8489,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               context.steeredSegmentUsage.push(message.usage);
               return;
             }
+            if (!interrupted) yield* emitContextBreakdown(context);
             yield* Ref.update(steeredTurns, (current) => {
               const next = new Set(current);
               next.delete(context.providerTurnId);

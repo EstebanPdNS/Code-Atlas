@@ -285,6 +285,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
               else if (action === "settings") props.onProjectSettings(event, project);
             });
           }}
+          data-atlas-row="project"
           className={cn(
             "group/atlas-project relative flex h-8 cursor-pointer items-center gap-2 rounded-md pr-1 pl-2 text-sm text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
             folderId !== null && "ml-3",
@@ -307,11 +308,17 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
             <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
           )}
           {active.length > 0 && !expanded ? (
-            <span className="text-2xs text-sidebar-muted-foreground tabular-nums">
-              {active.length}
+            <span
+              data-atlas-row-count
+              className="text-2xs text-sidebar-muted-foreground tabular-nums"
+            >
+              {active.length} {active.length === 1 ? "thread" : "threads"}
             </span>
           ) : null}
-          <span className="flex items-center opacity-0 group-hover/atlas-project:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100">
+          <span
+            data-atlas-row-actions
+            className="flex items-center opacity-0 group-hover/atlas-project:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100"
+          >
             <Button
               size="icon-micro"
               variant="ghost-muted"
@@ -409,8 +416,9 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
               setRenamingFolderId(folder.id);
             }
           }}
+          data-atlas-row="folder"
           className={cn(
-            "group/atlas-folder flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 text-sm font-medium text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+            "group/atlas-folder relative flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 text-sm font-medium text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
             isDropTarget(target) && "bg-primary/10 ring-1 ring-primary/40",
           )}
         >
@@ -443,10 +451,16 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           {folder.collapsed && hasAttention ? (
             <span aria-label="Needs attention" className="size-1.5 rounded-full bg-primary" />
           ) : null}
-          <span className="shrink-0 text-2xs font-normal text-sidebar-muted-foreground tabular-nums">
+          <span
+            data-atlas-row-count
+            className="shrink-0 text-2xs font-normal text-sidebar-muted-foreground tabular-nums"
+          >
             {members.length} {members.length === 1 ? "project" : "projects"}
           </span>
-          <span className="flex items-center opacity-0 group-hover/atlas-folder:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100">
+          <span
+            data-atlas-row-actions
+            className="flex items-center opacity-0 group-hover/atlas-folder:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100"
+          >
             <FolderMenu
               onRename={() => setRenamingFolderId(folder.id)}
               onSettings={() => setSettingsFolderId(folder.id)}

@@ -7,9 +7,14 @@ import type {
 } from "@t3tools/contracts";
 import { presentPendingBackgroundWork } from "@t3tools/client-runtime/state/thread-execution";
 import { formatResetsIn, limitsNotice, providersWithLimits } from "@t3tools/shared/usageLimits";
+import { useNavigate } from "@tanstack/react-router";
 import { SquareTerminalIcon, WorkflowIcon } from "lucide-react";
 
 import { ThreadDetailsSection } from "~/components/chat/ThreadDetailsSection";
+import {
+  readUsagePagePreferences,
+  saveUsagePagePreferences,
+} from "~/components/usage/usagePagePreferences";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { formatContextWindowTokens, type ContextWindowSnapshot } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
@@ -115,13 +120,66 @@ function Meter({ percent, className }: { readonly percent: number; readonly clas
   );
 }
 
-/** "Context": how full the active provider thread's context window is. */
+// Fixed colors for the breakdown, in the order rows appear (Claude's /context: messages,
+// system tools, system prompt, then smaller rows); the reserve and free space stay neutral.
+const CONTEXT_ROW_TONES = [
+  "bg-info",
+  "bg-primary",
+  "bg-success",
+  "bg-warning",
+  "bg-muted-foreground/80",
+  "bg-muted-foreground/60",
+  "bg-muted-foreground/45",
+];
+
+interface ContextRow {
+  readonly name: string;
+  readonly tokens: number;
+  readonly kind: "used" | "free" | "buffer" | "deferred";
+}
+
+/** The provider's own categories, or what every provider reports: input, cache, output. */
+function contextRows(contextWindow: ContextWindowSnapshot, maxTokens: number): ContextRow[] {
+  if (contextWindow.contextCategories && contextWindow.contextCategories.length > 0) {
+    return contextWindow.contextCategories.filter((row) => row.tokens > 0 || row.kind === "free");
+  }
+  const cached = contextWindow.cachedInputTokens ?? 0;
+  const input = Math.max(0, (contextWindow.inputTokens ?? 0) - cached);
+  const rows: ContextRow[] = [
+    { name: "Input", tokens: input, kind: "used" },
+    { name: "Cached input", tokens: cached, kind: "used" },
+    { name: "Output", tokens: contextWindow.outputTokens ?? 0, kind: "used" },
+    { name: "Reasoning", tokens: contextWindow.reasoningOutputTokens ?? 0, kind: "used" },
+  ];
+  return [
+    ...rows.filter((row) => row.tokens > 0),
+    { name: "Free space", tokens: Math.max(0, maxTokens - contextWindow.usedTokens), kind: "free" },
+  ];
+}
+
+function contextRowTone(row: ContextRow, usedIndex: number): string {
+  if (row.kind === "free") return "bg-foreground/10";
+  if (row.kind === "buffer") return "bg-muted-foreground/30";
+  if (row.kind === "deferred") return "bg-muted-foreground/20";
+  return CONTEXT_ROW_TONES[Math.min(usedIndex, CONTEXT_ROW_TONES.length - 1)]!;
+}
+
+function withContextTones(rows: readonly ContextRow[]) {
+  const usedRows = rows.filter((row) => row.kind === "used");
+  return rows.map((row) => ({ ...row, tone: contextRowTone(row, usedRows.indexOf(row)) }));
+}
+
+function formatShare(tokens: number, maxTokens: number): string {
+  return `${((tokens / maxTokens) * 100).toFixed(1)}%`;
+}
+
+/** "Context": how full the context window is, row by row like Claude Code's /context. */
 export function AtlasContextSection({
   contextWindow,
 }: {
   readonly contextWindow: ContextWindowSnapshot | null;
 }) {
-  if (contextWindow === null || contextWindow.maxTokens == null) {
+  if (contextWindow === null || contextWindow.maxTokens == null || contextWindow.maxTokens <= 0) {
     return (
       <ThreadDetailsSection headingId="atlas-context-heading" title="Context">
         <div className="px-1.5 pb-1">
@@ -134,14 +192,14 @@ export function AtlasContextSection({
       </ThreadDetailsSection>
     );
   }
+  const maxTokens = contextWindow.maxTokens;
   const percent = Math.round(contextWindow.usedPercentage ?? 0);
-  const rows = [
-    { label: "Input", value: contextWindow.inputTokens, tone: "bg-primary" },
-    { label: "Cached", value: contextWindow.cachedInputTokens, tone: "bg-info" },
-    { label: "Output", value: contextWindow.outputTokens, tone: "bg-success" },
-  ].flatMap((row) =>
-    typeof row.value === "number" && row.value > 0 ? [{ ...row, value: row.value }] : [],
-  );
+  const rows = withContextTones(contextRows(contextWindow, maxTokens));
+  const barRows = rows.filter((row) => row.kind === "used" || row.kind === "buffer");
+  const untilCompact =
+    contextWindow.autoCompactThreshold != null
+      ? Math.max(0, contextWindow.autoCompactThreshold - contextWindow.usedTokens)
+      : null;
   return (
     <ThreadDetailsSection headingId="atlas-context-heading" title="Context">
       <div className="px-1.5 pb-1">
@@ -149,20 +207,45 @@ export function AtlasContextSection({
           <span className="font-medium tabular-nums">{percent}% used</span>
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatContextWindowTokens(contextWindow.usedTokens)} /{" "}
-            {formatContextWindowTokens(contextWindow.maxTokens ?? null)}
+            {formatContextWindowTokens(maxTokens)}
           </span>
         </div>
-        <Meter percent={percent} className="mt-2" />
-        {rows.length > 0 ? (
-          <dl className="mt-3 grid gap-1.5 text-xs">
-            {rows.map((row) => (
-              <div key={row.label} className="flex items-center gap-2">
-                <span aria-hidden className={cn("size-2 rounded-xs", row.tone)} />
-                <dt className="flex-1 text-muted-foreground">{row.label}</dt>
-                <dd className="tabular-nums">{formatContextWindowTokens(row.value)}</dd>
-              </div>
-            ))}
-          </dl>
+        <div
+          aria-hidden
+          className="mt-2 flex h-1.5 gap-px overflow-hidden rounded-full bg-foreground/10"
+        >
+          {barRows.map((row) => (
+            <span
+              key={row.name}
+              className={cn("h-full", row.tone)}
+              style={{ width: `${Math.min(100, (row.tokens / maxTokens) * 100)}%` }}
+            />
+          ))}
+        </div>
+        <dl className="mt-3 grid gap-1.5 text-xs">
+          {rows.map((row) => (
+            <div
+              key={row.name}
+              className={cn(
+                "flex items-center gap-2",
+                row.kind === "deferred" && "mt-1 text-muted-foreground",
+              )}
+            >
+              <span aria-hidden className={cn("size-2.5 shrink-0 rounded-xs", row.tone)} />
+              <dt className="min-w-0 flex-1 truncate text-muted-foreground">{row.name}</dt>
+              <dd className="w-14 text-right text-muted-foreground tabular-nums">
+                {formatContextWindowTokens(row.tokens)}
+              </dd>
+              <dd className="w-12 text-right tabular-nums">
+                {row.kind === "deferred" ? "—" : formatShare(row.tokens, maxTokens)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+        {untilCompact !== null ? (
+          <p className="mt-3 text-xs text-muted-foreground tabular-nums">
+            {formatContextWindowTokens(untilCompact)} until auto-compact
+          </p>
         ) : null}
       </div>
     </ThreadDetailsSection>
@@ -171,13 +254,27 @@ export function AtlasContextSection({
 
 /** "Usage": subscription windows (session, weekly) for Claude Code and Codex. */
 export function AtlasUsageSection({ environmentId }: { readonly environmentId: EnvironmentId }) {
-  const providers = providersWithLimits(useAgentProviders(environmentId));
+  const navigate = useNavigate();
+  // Codex first, then Claude Code.
+  const providers = providersWithLimits(useAgentProviders(environmentId)).toSorted(
+    (left, right) => Number(right.driver === "codex") - Number(left.driver === "codex"),
+  );
+  // Clicking the card opens the usage statistics on the Tokens view.
+  const openUsage = () => {
+    saveUsagePagePreferences({ ...readUsagePagePreferences(), metric: "tokens" });
+    void navigate({ to: "/usage" });
+  };
   // useNowMinute is a UTC ISO minute without a zone suffix.
   const now = Date.parse(`${useNowMinute()}Z`);
   if (providers.length === 0) return null;
   return (
     <ThreadDetailsSection headingId="atlas-usage-heading" title="Usage">
-      <div className="grid gap-3 px-1.5 pb-1">
+      <button
+        type="button"
+        onClick={openUsage}
+        aria-label="Open usage statistics"
+        className="grid w-full cursor-pointer gap-3 rounded-lg px-1.5 pb-1 text-left hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden"
+      >
         {providers.map((provider) => {
           const limits = provider.usageLimits;
           const notice = limits ? limitsNotice(limits) : null;
@@ -206,7 +303,7 @@ export function AtlasUsageSection({ environmentId }: { readonly environmentId: E
             </div>
           );
         })}
-      </div>
+      </button>
     </ThreadDetailsSection>
   );
 }

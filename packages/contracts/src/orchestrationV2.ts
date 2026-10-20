@@ -163,6 +163,14 @@ export const OrchestrationV2ContextTransferResolution = Schema.Union([
 export type OrchestrationV2ContextTransferResolution =
   typeof OrchestrationV2ContextTransferResolution.Type;
 
+/** Code Atlas: one row of a provider's own context breakdown (Claude's /context categories). */
+export const OrchestrationV2ContextCategory = Schema.Struct({
+  name: Schema.String,
+  tokens: NonNegativeInt,
+  kind: Schema.Literals(["used", "free", "buffer", "deferred"]),
+});
+export type OrchestrationV2ContextCategory = typeof OrchestrationV2ContextCategory.Type;
+
 export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   usedTokens: NonNegativeInt,
   maxTokens: Schema.optional(Schema.NullOr(NonNegativeInt)),
@@ -173,6 +181,7 @@ export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   promptCacheTtlMs: Schema.optional(PositiveInt),
   autoCompactThreshold: Schema.optional(PositiveInt),
   promptCacheExpiresAt: Schema.optional(Schema.String),
+  contextCategories: Schema.optional(Schema.Array(OrchestrationV2ContextCategory)),
   updatedAt: Schema.String,
 });
 export type OrchestrationV2ProviderTurnTokenUsage =
