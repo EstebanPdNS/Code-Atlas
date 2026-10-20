@@ -3,6 +3,7 @@
 | File | Source |
 | --- | --- |
 | `code-atlas-v1.0-rounded.png` | A capture of Code Atlas v1.0 at 3024 × 1800 with the sidebar collapsed, with transparent rounded corners (76 px radius, 2.5% of the width). |
+| `code-atlas-logo-dark.png`, `code-atlas-logo-light.png` | The Code Atlas glyph and "code atlas." wordmark, rendered with transparent backgrounds for GitHub's dark and light themes. |
 | `download.svg` | Download button drawn for this repository. |
 | `badges/*.svg` | Static badges drawn for this repository; they describe the release, platform, development status and license. |
 
