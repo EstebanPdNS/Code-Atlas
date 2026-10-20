@@ -14,6 +14,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as ServerConfig from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as NetService from "@t3tools/shared/Net";
 import * as Dictation from "./Dictation.ts";
 import * as DictationArtifacts from "./DictationArtifacts.ts";
 import * as DictationRecognizer from "./DictationRecognizer.ts";
@@ -65,6 +66,7 @@ it.live.skipIf(!fixture)(
         Layer.provide(
           ServerConfig.layerTest(process.cwd(), home ?? { prefix: "t3-dictation-e2e-" }),
         ),
+        Layer.provide(NetService.layer),
       );
       yield* Effect.gen(function* () {
         const service = yield* Dictation.Dictation;

@@ -726,6 +726,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["speech transcription automatic detect english spoken"],
   },
   {
+    id: "dictation-vocabulary",
+    title: "Dictation vocabulary",
+    to: "/settings/integrations",
+    targetId: "dictation",
+    searchTerms: ["dictionary words names jargon terms prompt whisper spelling"],
+  },
+  {
     id: "browser-profiles",
     title: "Browser profiles",
     to: "/settings/integrations",

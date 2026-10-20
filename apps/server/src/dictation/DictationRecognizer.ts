@@ -14,6 +14,17 @@ import * as Schema from "effect/Schema";
 import { isQuiet } from "./audio.ts";
 import { models, resolveLanguage } from "./models.ts";
 import * as DictationArtifacts from "./DictationArtifacts.ts";
+import * as ServerConfig from "../config.ts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as NetService from "@t3tools/shared/Net";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import { ChildProcessSpawner } from "effect/process";
+import {
+  findWhisperServerBinary,
+  loadWhisperServerRecognizer,
+  whisperServerCandidates,
+} from "./WhisperServerRecognizer.ts";
 
 interface OfflineConfig {
   featConfig: { sampleRate: number; featureDim: number };
@@ -46,6 +57,8 @@ export interface Recognizer {
   readonly decode: (
     samples: Float32Array,
     language: string,
+    /** Vocabulary for models that take an initial prompt; others ignore it. */
+    prompt?: string,
   ) => Effect.Effect<DictationFinishResult, DictationError>;
   /** Drop the N-API external handle; its native finalizer owns freeing model memory. */
   readonly release: Effect.Effect<void>;
@@ -64,8 +77,40 @@ export class DictationRecognizer extends Context.Service<
 const make = Effect.gen(function* () {
   const path = yield* Path.Path;
   const artifacts = yield* DictationArtifacts.DictationArtifacts;
+  const config = yield* ServerConfig.ServerConfig;
+  const environment = yield* HostProcess.Environment;
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const net = yield* NetService.NetService;
+  const http = yield* HttpClient.HttpClient;
   const load = Effect.fnUntraced(function* (model: DictationModelId, language: string) {
     const locations = artifacts.paths(model);
+    const definition = models[model];
+    if ("backend" in definition && definition.backend === "whisper-server") {
+      const file = definition.files[0];
+      const binary = yield* findWhisperServerBinary(
+        whisperServerCandidates(path, {
+          override: environment.CODE_ATLAS_WHISPER_SERVER_PATH,
+          resourceMonitorPath: config.resourceMonitorPath,
+          moduleDirectory: import.meta.dirname,
+        }),
+      ).pipe(Effect.provideService(FileSystem.FileSystem, fs));
+      return yield* loadWhisperServerRecognizer({
+        binary,
+        modelFile: path.join(locations.model, file?.name ?? ""),
+        threads: Math.min(8, Math.max(2, NodeOS.availableParallelism() - 2)),
+        cleanText: definition.cleanText,
+        resolveLanguage: (requested) => resolveLanguage(model, requested),
+        languageCodes: new Map(
+          definition.languageOptions.map((option) => [option.label.toLowerCase(), option.code]),
+        ),
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+        Effect.provideService(NetService.NetService, net),
+        Effect.provideService(HttpClient.HttpClient, http),
+      );
+    }
     const addon = yield* Effect.try({
       // The pinned addon is the native boundary, with only the methods used here typed locally.
       try: () =>

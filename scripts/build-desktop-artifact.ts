@@ -1113,6 +1113,13 @@ export const DESKTOP_EXTRA_RESOURCES = [
     to: "resource-monitor",
   },
 ] as const;
+// Code Atlas: whisper.cpp with Metal for GPU dictation (macOS arm64 only).
+export const MAC_WHISPER_EXTRA_RESOURCES = [
+  {
+    from: "apps/desktop/prod-resources/whisper-server",
+    to: "whisper-server",
+  },
+] as const;
 export const LINUX_CAPTURE_EXTRA_RESOURCES = [
   {
     from: "apps/desktop/prod-resources/hyprland-capture",
@@ -2391,6 +2398,31 @@ export const stageLinuxCaptureHelper = Effect.fn("stageLinuxCaptureHelper")(func
   }
 });
 
+/** Builds (once) and stages whisper.cpp's Metal `whisper-server` for dictation. */
+export const stageWhisperServer = Effect.fn("stageWhisperServer")(function* (input: {
+  readonly repoRoot: string;
+  readonly stageResourcesDir: string;
+  readonly verbose: boolean;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const binaryPath = path.join(input.repoRoot, "native/whisper-server/dist/whisper-server");
+  if (!(yield* fs.exists(binaryPath))) {
+    yield* runCommand(
+      ChildProcess.make("bash", [path.join(input.repoRoot, "native/whisper-server/build.sh")], {
+        cwd: input.repoRoot,
+      }),
+      { label: "build whisper.cpp Metal server", verbose: input.verbose },
+    );
+  }
+  const destinationDirectory = path.join(input.stageResourcesDir, "whisper-server");
+  yield* fs.remove(destinationDirectory, { recursive: true, force: true }).pipe(Effect.ignore);
+  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
+  const destinationPath = path.join(destinationDirectory, "whisper-server");
+  yield* fs.copyFile(binaryPath, destinationPath);
+  yield* fs.chmod(destinationPath, 0o755);
+});
+
 export const stageResourceMonitor = Effect.fn("stageResourceMonitor")(function* (input: {
   readonly repoRoot: string;
   readonly stageResourcesDir: string;
@@ -2852,6 +2884,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       : {}),
     extraResources: [
       ...DESKTOP_EXTRA_RESOURCES,
+      ...(platform === "mac" && arch === "arm64" ? MAC_WHISPER_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_CAPTURE_EXTRA_RESOURCES : []),
       ...(platform === "linux" ? LINUX_BROWSER_SECRET_EXTRA_RESOURCES : []),
       ...(platform === "win" ? WINDOWS_SERVER_EXTRA_RESOURCES : []),
@@ -3772,6 +3805,9 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     arch: options.arch,
     verbose: options.verbose,
   });
+  if (options.platform === "mac" && options.arch === "arm64") {
+    yield* stageWhisperServer({ repoRoot, stageResourcesDir, verbose: options.verbose });
+  }
   if (options.platform === "linux") {
     for (const backend of ["kde", "hyprland"] as const)
       yield* stageLinuxCaptureHelper({

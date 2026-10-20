@@ -25,6 +25,7 @@ import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
 import { EnvironmentRow, environmentTransportLabel } from "./EnvironmentRow";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
@@ -217,6 +218,19 @@ export function DictationSettingsSection() {
               </Select>
             }
           />
+          <SettingsRow
+            {...searchableSetting("dictation-vocabulary")}
+            serverScoped
+            settingKeys={["dictation"]}
+            description="Project names and technical terms, separated by commas. Whisper on Metal uses them to spell jargon and mixed-language terms."
+            control={
+              <DictationVocabularyField
+                value={settings.vocabulary}
+                disabled={locked}
+                onCommit={(vocabulary) => updateSettings({ dictation: { vocabulary } })}
+              />
+            }
+          />
           {connectedEnvironments.map((target) => (
             <InactiveDictationModels
               key={target.environmentId}
@@ -228,6 +242,30 @@ export function DictationSettingsSection() {
         </>
       )}
     </SettingsSection>
+  );
+}
+
+/** Saves on blur so typing a long list does not write settings on every key. */
+function DictationVocabularyField(props: {
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly onCommit: (vocabulary: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <Textarea
+      size="sm"
+      className="w-72"
+      rows={3}
+      aria-label="Dictation vocabulary"
+      disabled={props.disabled}
+      value={draft ?? props.value}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (draft !== null && draft !== props.value) props.onCommit(draft.trim());
+        setDraft(null);
+      }}
+    />
   );
 }
 

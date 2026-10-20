@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off globalConsole:off - A one-shot icon export script.
 // Code Atlas fork: renders assets/code-atlas/code-atlas-icon.svg into every
 // brand slot the desktop and web builds read (see scripts/lib/brand-assets.ts),
 // so the upstream build pipeline stays untouched.

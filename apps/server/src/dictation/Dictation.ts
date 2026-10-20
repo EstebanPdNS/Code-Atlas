@@ -48,6 +48,7 @@ interface Session {
   id: DictationSessionId;
   model: LoadedModel;
   language: string;
+  vocabulary: string;
   chunks: Map<number, Float32Array>;
   next: number;
   samples: number;
@@ -276,7 +277,11 @@ const make = Effect.gen(function* () {
     const current = yield* SubscriptionRef.get(state);
     const activationChanged =
       current.settings.engine !== next.engine || current.settings.localModel !== next.localModel;
-    if (activationChanged || current.settings.language !== next.language) {
+    if (
+      activationChanged ||
+      current.settings.language !== next.language ||
+      current.settings.vocabulary !== next.vocabulary
+    ) {
       yield* update((current) => ({
         ...current,
         settings: next,
@@ -462,6 +467,7 @@ const make = Effect.gen(function* () {
       id,
       model,
       language: resolveLanguage(current.settings.localModel, current.settings.language),
+      vocabulary: current.settings.vocabulary,
       chunks: new Map(),
       next: 0,
       samples: 0,
@@ -502,7 +508,7 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         if (session.closed || !session.model.recognizer) return;
         const result = yield* session.model.recognizer
-          .decode(samples, session.language)
+          .decode(samples, session.language, session.vocabulary)
           .pipe(Effect.uninterruptible);
         if (!session.closed && result.text.trim()) {
           session.texts.push(result.text);

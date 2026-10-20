@@ -41,6 +41,49 @@ const filesAt = (
     url: `https://huggingface.co/csukuangfj/${repository}/resolve/${revision}/${file.name}`,
   }));
 
+const whisperLanguageOptions = [
+  { code: "en", label: "English" },
+  { code: "nl", label: "Dutch" },
+  { code: "de", label: "German" },
+  { code: "fr", label: "French" },
+  { code: "es", label: "Spanish" },
+  { code: "it", label: "Italian" },
+  { code: "pt", label: "Portuguese" },
+  { code: "pl", label: "Polish" },
+  { code: "sv", label: "Swedish" },
+  { code: "da", label: "Danish" },
+  { code: "no", label: "Norwegian" },
+  { code: "fi", label: "Finnish" },
+  { code: "cs", label: "Czech" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "ru", label: "Russian" },
+  { code: "tr", label: "Turkish" },
+  { code: "ar", label: "Arabic" },
+  { code: "he", label: "Hebrew" },
+  { code: "hi", label: "Hindi" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+  { code: "zh", label: "Chinese" },
+  { code: "id", label: "Indonesian" },
+  { code: "vi", label: "Vietnamese" },
+  { code: "th", label: "Thai" },
+  { code: "el", label: "Greek" },
+  { code: "hu", label: "Hungarian" },
+  { code: "ro", label: "Romanian" },
+  { code: "bg", label: "Bulgarian" },
+  { code: "hr", label: "Croatian" },
+  { code: "sk", label: "Slovak" },
+  { code: "sl", label: "Slovenian" },
+  { code: "et", label: "Estonian" },
+  { code: "lv", label: "Latvian" },
+  { code: "lt", label: "Lithuanian" },
+  { code: "fa", label: "Persian" },
+  { code: "bn", label: "Bengali" },
+  { code: "ta", label: "Tamil" },
+  { code: "ur", label: "Urdu" },
+  { code: "ms", label: "Malay" },
+];
+
 /** Pinned artifact sizes/hashes come from HF LFS metadata; regular token files also match their Git blob IDs. */
 export const models = {
   "parakeet-v3": {
@@ -84,48 +127,7 @@ export const models = {
     languages: "99 languages",
     // Measured 6 to 14 s from release to text on a 2 vCPU host.
     note: "Slow without a GPU",
-    languageOptions: [
-      { code: "en", label: "English" },
-      { code: "nl", label: "Dutch" },
-      { code: "de", label: "German" },
-      { code: "fr", label: "French" },
-      { code: "es", label: "Spanish" },
-      { code: "it", label: "Italian" },
-      { code: "pt", label: "Portuguese" },
-      { code: "pl", label: "Polish" },
-      { code: "sv", label: "Swedish" },
-      { code: "da", label: "Danish" },
-      { code: "no", label: "Norwegian" },
-      { code: "fi", label: "Finnish" },
-      { code: "cs", label: "Czech" },
-      { code: "uk", label: "Ukrainian" },
-      { code: "ru", label: "Russian" },
-      { code: "tr", label: "Turkish" },
-      { code: "ar", label: "Arabic" },
-      { code: "he", label: "Hebrew" },
-      { code: "hi", label: "Hindi" },
-      { code: "ja", label: "Japanese" },
-      { code: "ko", label: "Korean" },
-      { code: "zh", label: "Chinese" },
-      { code: "id", label: "Indonesian" },
-      { code: "vi", label: "Vietnamese" },
-      { code: "th", label: "Thai" },
-      { code: "el", label: "Greek" },
-      { code: "hu", label: "Hungarian" },
-      { code: "ro", label: "Romanian" },
-      { code: "bg", label: "Bulgarian" },
-      { code: "hr", label: "Croatian" },
-      { code: "sk", label: "Slovak" },
-      { code: "sl", label: "Slovenian" },
-      { code: "et", label: "Estonian" },
-      { code: "lv", label: "Latvian" },
-      { code: "lt", label: "Lithuanian" },
-      { code: "fa", label: "Persian" },
-      { code: "bn", label: "Bengali" },
-      { code: "ta", label: "Tamil" },
-      { code: "ur", label: "Urdu" },
-      { code: "ms", label: "Malay" },
-    ],
+    languageOptions: whisperLanguageOptions,
     featureDim: 128,
     modelConfig: whisperConfig,
     skipSilence: true,
@@ -147,6 +149,26 @@ export const models = {
         sha256: "b34b360dbb493e781e479794586d661700670d65564001f23024971d1f2fa126",
       },
     ]),
+  },
+  "whisper-metal": {
+    label: "Whisper turbo · Metal",
+    languages: "99 languages, uses your vocabulary",
+    note: "Runs on the Mac GPU through whisper.cpp",
+    languageOptions: whisperLanguageOptions,
+    backend: "whisper-server",
+    featureDim: 128,
+    modelConfig: () => ({}),
+    skipSilence: true,
+    cleanText: cleanWhisperText,
+    // Official whisper.cpp conversion, 8-bit: near full-precision accuracy at half the size.
+    files: [
+      {
+        name: "ggml-large-v3-turbo-q8_0.bin",
+        bytes: 874188075,
+        sha256: "317eb69c11673c9de1e1f0d459b253999804ec71ac4c23c17ecf5fbe24e259a1",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo-q8_0.bin",
+      },
+    ],
   },
   "moonshine-base": {
     label: "Moonshine base",
@@ -196,6 +218,8 @@ export const models = {
     languages: string;
     note: string | null;
     languageOptions: readonly { code: string; label: string }[];
+    /** Which engine decodes: the sherpa-onnx addon (default) or a whisper.cpp server. */
+    backend?: "sherpa" | "whisper-server";
     featureDim: number;
     modelConfig: (resolve: ResolveFile, language: string) => Readonly<Record<string, unknown>>;
     skipSilence: boolean;

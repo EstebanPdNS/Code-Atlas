@@ -15,10 +15,19 @@ import { NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
 /** Sample rate every client sends. The server never resamples or decodes containers. */
 export const DICTATION_SAMPLE_RATE = 16_000;
 
+export const DEFAULT_DICTATION_VOCABULARY =
+  "Code Atlas, Claude Code, Codex, T3 Code, worktree, git rebase, pull request, merge conflict, upstream, commit, build, TypeScript, React, Electron, macOS, Xcode, 3DS, citro2d, devkitPro";
+
 /** Matches the client recording cap in `client-runtime/voice-input`. */
 export const DICTATION_MAX_SECONDS = 5 * 60;
 
-export const DictationModelId = Schema.Literals(["parakeet-v3", "whisper-turbo", "moonshine-base"]);
+export const DictationModelId = Schema.Literals([
+  "parakeet-v3",
+  "whisper-turbo",
+  "moonshine-base",
+  // Code Atlas: Whisper large-v3-turbo on the Mac GPU through whisper.cpp.
+  "whisper-metal",
+]);
 export type DictationModelId = typeof DictationModelId.Type;
 
 export const DictationEngine = Schema.Literals(["off", "local"]);
@@ -35,10 +44,20 @@ export type DictationLanguage = typeof DictationLanguage.Type;
  */
 export const DictationSettings = Schema.Struct({
   engine: DictationEngine.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
+  // Code Atlas defaults to Whisper on Metal: it spells mixed Spanish/English
+  // jargon far better than Parakeet in our benchmark, at ~0.5 s per phrase.
   localModel: DictationModelId.pipe(
-    Schema.withDecodingDefault(Effect.succeed("parakeet-v3" as const)),
+    Schema.withDecodingDefault(Effect.succeed("whisper-metal" as const)),
   ),
   language: DictationLanguage.pipe(Schema.withDecodingDefault(Effect.succeed("auto"))),
+  /**
+   * Names and technical terms the model should prefer, comma separated. Models
+   * that accept a prompt (Whisper on Metal) use it to spell jargon and
+   * mixed-language terms; the others ignore it.
+   */
+  vocabulary: Schema.String.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_DICTATION_VOCABULARY)),
+  ),
 });
 export type DictationSettings = typeof DictationSettings.Type;
 
@@ -46,6 +65,7 @@ export const DictationSettingsPatch = Schema.Struct({
   engine: Schema.optionalKey(DictationEngine),
   localModel: Schema.optionalKey(DictationModelId),
   language: Schema.optionalKey(DictationLanguage),
+  vocabulary: Schema.optionalKey(Schema.String),
 });
 export type DictationSettingsPatch = typeof DictationSettingsPatch.Type;
 
