@@ -6,14 +6,17 @@
 - A conversation that gets too full is compacted automatically and the message is sent again, instead of failing; very long messages become an attachment.
 - When the connection to this Mac drops, Code Atlas shows Reconnecting… and recovers by itself, also after sleep.
 - Codex follows the reasoning effort set in its config; Claude's Ultrathink uses maximum effort, and Opus, Fable and Sonnet 5.x start at High.
+- Goals work like Codex: open a goal to edit it full screen, pause and resume it, or clear it.
+- The Context card shows Claude Code's full breakdown, with skills and memory files, and an estimated one for Codex; Compact session is one click away.
+- A redesigned Code Atlas terminal: a framed map, a grid with the project, usage, this week and GitHub, the version and a blinking prompt. This week counts the lines your agents changed in the project, without needing git.
 - Subagents have names and faces: "Ronny is working on: …", with the model below.
 - The task list is written in one step, folds to the current steps and scrolls when long.
-- Claude Code's composer: one line with the controls below, ⏎ to send, the microphone beside it, and the stop button while it works. A paused task shows Resume beside it; Stop really cancels it, and typing starts a new action.
-- The Context card shows Claude Code's full breakdown during long tasks, with its memory files.
+- ⏎ sends and the microphone sits beside it; while an agent works, the stop button pauses it. A paused task shows Resume beside it; Stop really cancels it, and typing starts a new action.
+- Settings → Appearance → Typeface: Code Atlas monospace or a Claude-style system font; the terminal stays monospace.
 - Pinned threads show when they are working; only stopped threads turn gray. Drag to reorder them.
 - Agents use the in-app browser; links open there too. A new preview opens beside the details card.
-- The conversation lines up with the composer and no longer shows through below it.
-- The macOS icon has Apple's exact size, and Code Atlas replaces T3 everywhere in the app.
+- Code Atlas tells you when T3 Code publishes a new release; nothing is installed.
+- The macOS icon has Apple's exact size, the logo is centred, and Code Atlas replaces T3 everywhere in the app.
 
 ## v1.2
 

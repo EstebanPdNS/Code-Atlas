@@ -280,6 +280,9 @@ row above the composer shows the goal and its progress.
 - `/goal` alone shows the current goal. `/goal clear` removes it.
 - Codex also supports `/goal pause` and `/goal resume`. Stopping a Codex goal
   pauses it.
+- Open the goal row to edit the objective. Codex can also pause, resume, or
+  clear the goal from the row while it works, and picks up an edited objective
+  in the running turn. Claude applies an edit after the current turn.
 - Stopping Claude ends the current turn, but the goal stays set. Claude checks it
   again at the end of your next message.
 
