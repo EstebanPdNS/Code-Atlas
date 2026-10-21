@@ -28,6 +28,8 @@ This project was developed with the help of [OpenAI Codex](https://openai.com/co
 
 **v1.2 · macOS 13+ · Apple Silicon.** Move the app to Applications and follow the [installation guide](docs/getting-started.md).
 
+Code Atlas is ad-hoc signed and not notarized: on first launch, choose **Open Anyway** in System Settings → Privacy & Security. It does not update itself; to update, replace the app in Applications with the new version. Settings, projects, threads and groups carry over.
+
 ## Features
 
 - Work with Claude Code, Codex and the other agents T3 Code supports, using your own subscriptions.
@@ -49,4 +51,4 @@ This project was developed with the help of [OpenAI Codex](https://openai.com/co
 
 [MIT license](LICENSE) · [Image credits](docs/images/README.md) · [T3 Code](https://github.com/pingdotgg/t3code)
 
-Code Atlas is an independent project based on T3 Code by T3 Tools Inc. It is not affiliated with or endorsed by T3 Tools, Anthropic or OpenAI.
+Code Atlas is an independent project based on T3 Code 0.1.1 by T3 Tools Inc. (MIT). It includes the local dictation work from T3 Code pull request #19273 by Wout Stiens and [whisper.cpp](https://github.com/ggml-org/whisper.cpp) with OpenAI's Whisper model. It is not affiliated with or endorsed by T3 Tools, Anthropic or OpenAI.
