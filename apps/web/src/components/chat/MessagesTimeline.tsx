@@ -2,6 +2,11 @@ import { useRenderedAppearance } from "../../hooks/useTheme";
 import { AtlasEmptyThreadTerminal } from "~/atlas/intro/AtlasTerminal";
 // Code Atlas: countdown and Retry now under a transient provider failure.
 import { AtlasTransientRetry } from "~/atlas/progress/AtlasTransientRetry";
+// Code Atlas: Edit and Remove on a message sent while the thread compacts.
+import {
+  AtlasCompactionFollowUpActions,
+  type AtlasCompactionFollowUps,
+} from "~/atlas/compaction/AtlasCompactionFollowUps";
 import type { Root, RootContent } from "mdast";
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { shallow } from "zustand/vanilla/shallow";
@@ -357,6 +362,7 @@ interface TimelineRowSharedState {
   onWorktreeSetupWorkLocally: (() => void) | null;
   onOpenWorktreeSetupTerminal: ((terminalId: string) => void) | null;
   workGroupViewState: WorkGroupViewState;
+  atlasCompactionFollowUps: AtlasCompactionFollowUps | null;
 }
 
 interface TimelineRowActivityState {
@@ -461,6 +467,8 @@ interface MessagesTimelineProps {
   onOpenWorktreeSetupTerminal?: (terminalId: string) => void;
   isPreparingWorktree?: boolean;
   isCompacting?: boolean;
+  /** Code Atlas: messages sent while the thread compacts, not yet delivered. */
+  atlasCompactionFollowUps?: AtlasCompactionFollowUps | null;
   awaitingUser?: boolean;
   footer?: ReactNode;
 
@@ -568,6 +576,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
   onOpenWorktreeSetupTerminal,
   isPreparingWorktree = false,
   isCompacting = false,
+  atlasCompactionFollowUps = null,
   awaitingUser = false,
   listRef,
   timelineEntries,
@@ -1322,6 +1331,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     onWorktreeSetupWorkLocally: onWorktreeSetupWorkLocally ?? null,
     onOpenWorktreeSetupTerminal: onOpenWorktreeSetupTerminal ?? null,
     workGroupViewState,
+    atlasCompactionFollowUps,
   };
   const compactionAwaitingRow =
     isCompacting && !rows.some((row) => row.kind === "context-compaction" && row.active);
@@ -2484,6 +2494,11 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
             </TooltipPopup>
           </Tooltip>
           <div className="flex items-center gap-0.5">
+            {/* Code Atlas: Edit and Remove while a message sent mid-compaction waits. */}
+            <AtlasCompactionFollowUpActions
+              followUps={ctx.atlasCompactionFollowUps}
+              messageId={row.message.id}
+            />
             {typeof revertTurnCount === "number" && (
               <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
             )}

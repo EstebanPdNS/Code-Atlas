@@ -74,6 +74,8 @@ import {
 import { isWindowsAbsolutePath } from "@t3tools/shared/path";
 // Code Atlas: hides the retry turns and superseded errors of a transient-failure chain.
 import { withoutTransientRetryChains } from "~/atlas/progress/transientRetry";
+// Code Atlas: /compact shows only as its "Compacting context" row.
+import { withoutCompactCommandMessages } from "~/atlas/compaction/compactionMessages";
 
 function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   if (entry.kind === "message") {
@@ -1323,9 +1325,10 @@ function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
 }
 
 function timelineRowEntries(entries: ReadonlyArray<TimelineEntry>) {
-  // Code Atlas: a chain of server retries after a transient failure reads as one card.
+  // Code Atlas: a chain of server retries after a transient failure reads as one card,
+  // and /compact reads as its "Compacting context" row alone.
   return withoutSubagentDelegationRows(
-    settleSupersededReasoning(withoutTransientRetryChains(entries)),
+    settleSupersededReasoning(withoutCompactCommandMessages(withoutTransientRetryChains(entries))),
   );
 }
 

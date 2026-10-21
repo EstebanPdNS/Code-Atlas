@@ -76,6 +76,10 @@ export function QueuedRunsControl({
   readonly editingRunId: RunId | null;
   readonly onEditQueuedRun: (request: EditQueuedRunRequest) => void;
   readonly onCancelEdit: () => void;
+  /** Code Atlas: messages sent mid-compaction show in the conversation instead. */
+  readonly inlineMessageIds?: ReadonlyMap<string, unknown>;
+  /** Code Atlas: why Steer waits, such as while the active turn compacts. */
+  readonly steerBlockedReason?: string | null;
 }) {
   const projection = useThreadProjection(
     scopeThreadRef(props.environmentId, props.threadId),
@@ -104,8 +108,11 @@ export function QueuedRunsControl({
     queuedImageAttachmentResources,
   );
   const workflow = projection ? deriveThreadQueueWorkflowState(projection) : null;
-  const queued = workflow?.queuedRuns ?? [];
+  const queued = (workflow?.queuedRuns ?? []).filter(
+    ({ run }) => props.inlineMessageIds?.has(run.userMessageId) !== true,
+  );
   const activeRun = workflow?.activeRun ?? null;
+  const canSteer = workflow?.canPromoteToSteer === true && !props.steerBlockedReason;
   const canReorder = workflow?.canReorder === true;
   const queuedImageUrlById = new Map(
     queuedImageAttachmentUrls.flatMap((url, index) => {
@@ -114,7 +121,10 @@ export function QueuedRunsControl({
     }),
   );
   const optimisticQueued = props.optimisticMessages.filter(
-    (message) => message.inputIntent === "queued_turn" && !acknowledgedMessageIds.has(message.id),
+    (message) =>
+      message.inputIntent === "queued_turn" &&
+      !acknowledgedMessageIds.has(message.id) &&
+      props.inlineMessageIds?.has(message.id) !== true,
   );
   const items = [
     ...queued.map(({ run, text, attachments }, serverIndex) => ({
@@ -171,7 +181,7 @@ export function QueuedRunsControl({
   };
 
   const steer = async (queuedRunId: RunId) => {
-    if (activeRun === null || !workflow?.canPromoteToSteer || steerInFlightRef.current) return;
+    if (activeRun === null || !canSteer || steerInFlightRef.current) return;
     steerInFlightRef.current = true;
     setBusyRunId(queuedRunId);
     await promote({
@@ -185,7 +195,7 @@ export function QueuedRunsControl({
   useImperativeHandle(ref, () => ({
     steerNext(repeat) {
       const next = queued[0];
-      if (!next || !workflow?.canPromoteToSteer) return false;
+      if (!next || !canSteer) return false;
       if (!repeat && busyRunId === null) void steer(next.run.id);
       return true;
     },
@@ -424,11 +434,7 @@ export function QueuedRunsControl({
                             <Button
                               size="xs"
                               variant="ghost-muted"
-                              disabled={
-                                item.runId === null ||
-                                busyRunId !== null ||
-                                !workflow?.canPromoteToSteer
-                              }
+                              disabled={item.runId === null || busyRunId !== null || !canSteer}
                               onClick={() => {
                                 if (item.runId !== null) {
                                   void steer(item.runId);
@@ -442,7 +448,9 @@ export function QueuedRunsControl({
                           <TooltipPopup>
                             {activeRun === null
                               ? "There is no active run to steer"
-                              : `Send as a steer instead${item.serverIndex === 0 && props.steerShortcutLabel ? ` (${props.steerShortcutLabel})` : ""}`}
+                              : props.steerBlockedReason
+                                ? props.steerBlockedReason
+                                : `Send as a steer instead${item.serverIndex === 0 && props.steerShortcutLabel ? ` (${props.steerShortcutLabel})` : ""}`}
                           </TooltipPopup>
                         </Tooltip>
                         <Tooltip>

@@ -419,6 +419,8 @@ import {
   parseAtlasGoalCommand,
 } from "~/atlas/goal/goalPresentation";
 import { atlasActivityLabel } from "~/atlas/progress/claudeProgress";
+import { deriveCompactionFollowUps } from "~/atlas/compaction/compactionMessages";
+import { isCompactCommandMessage as isAtlasCompactCommand } from "@t3tools/shared/compactionFollowUps";
 import { useAtlasPausedTask } from "~/atlas/progress/pausedTask";
 import { useAtlasRunLines } from "~/atlas/progress/useAtlasRunLines";
 import { useAtlasGoalUpdate } from "~/atlas/goal/useAtlasGoalUpdate";
@@ -2670,6 +2672,14 @@ export default function ChatView(props: ChatViewProps) {
     isConnecting ||
     isCompacting ||
     runlessWorkStartedAt !== null;
+  // Code Atlas: messages sent while the thread compacts read as sent, not queued.
+  const compactionFollowUps = deriveCompactionFollowUps({
+    projection: serverProjection,
+    visibleTurnItems: serverVisibleTurnItems,
+    optimisticMessages: optimisticUserMessages,
+    isCompacting,
+    editingRunId: queuedRunEdit.editingRunId,
+  });
   const atlasAgentSummary = useAtlasTerminalSummary(
     activeThread?.environmentId ?? activeProject?.environmentId ?? null,
     activeProject?.workspaceRoot ?? null,
@@ -2948,7 +2958,10 @@ export default function ChatView(props: ChatViewProps) {
   const serverTimelineEntries = useIncrementalTimelineEntries(activeThreadKey, {
     visibleTurnItems: serverVisibleTurnItems,
     optimisticMessages: optimisticUserMessages,
-    anchoredMessages: anchoredTimelineMessages,
+    anchoredMessages:
+      compactionFollowUps.messages.length === 0
+        ? anchoredTimelineMessages
+        : [...anchoredTimelineMessages, ...compactionFollowUps.messages],
     attachmentUrlById: timelineAttachmentUrlById,
     ...(serverProjection === null
       ? {}
@@ -4297,8 +4310,12 @@ export default function ChatView(props: ChatViewProps) {
       hydrated: !isServerThread || (serverProjection !== null && threadStatus === "live"),
       runId: activeActivityRun?.runId ?? null,
       queued: activeActivityRun?.status === "queued",
+      // Code Atlas: /compact has no message row to anchor to; it shows as its compaction row.
       messageId:
-        dispatchedUserItem?.item.type === "user_message" ? dispatchedUserItem.item.messageId : null,
+        dispatchedUserItem?.item.type === "user_message" &&
+        !isAtlasCompactCommand(dispatchedUserItem.item)
+          ? dispatchedUserItem.item.messageId
+          : null,
     });
     observedTimelineActivityRef.current = observation;
     if (messageId === null) return;
@@ -7117,7 +7134,11 @@ export default function ChatView(props: ChatViewProps) {
             ...(attachment.source ? { source: attachment.source } : {}),
           },
     );
-    if (!shouldQueueBehindActiveRun) {
+    // Code Atlas: /compact has no message row to anchor to; it shows as its compaction row.
+    if (
+      !shouldQueueBehindActiveRun &&
+      !isAtlasCompactCommand({ text: messageTextForSend, attachments: composerAttachmentsSnapshot })
+    ) {
       isAtEndRef.current = true;
       timelineScrollModeRef.current = "anchoring-new-turn";
       liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
@@ -7975,6 +7996,8 @@ export default function ChatView(props: ChatViewProps) {
         editingRunId={queuedRunEdit.editingRunId}
         onEditQueuedRun={queuedRunEdit.beginEdit}
         onCancelEdit={queuedRunEdit.cancelEdit}
+        inlineMessageIds={compactionFollowUps.byMessageId}
+        steerBlockedReason={isCompacting ? "Steer waits until compaction finishes" : null}
       />
     ) : null;
   // One-shot: the resend "Work locally" queued fires once, then the marker clears.
@@ -8357,6 +8380,16 @@ export default function ChatView(props: ChatViewProps) {
                   !paintOnlyDisplayedTimeline && (isWorking || !latestRunSettled)
                 }
                 isCompacting={!paintOnlyDisplayedTimeline && isCompacting}
+                atlasCompactionFollowUps={
+                  paintOnlyDisplayedTimeline || compactionFollowUps.byMessageId.size === 0
+                    ? null
+                    : {
+                        environmentId: activeThread.environmentId,
+                        threadId: activeThread.id,
+                        byMessageId: compactionFollowUps.byMessageId,
+                        onEdit: queuedRunEdit.beginEdit,
+                      }
+                }
                 awaitingUser={
                   !paintOnlyDisplayedTimeline &&
                   (activePendingApproval !== null ||
@@ -8546,7 +8579,9 @@ export default function ChatView(props: ChatViewProps) {
                       working={isWorking}
                       startedAt={activeWorkStartedAt}
                       tokens={activeThreadLiveTokenUsage?.usedTokens ?? null}
-                      activity={atlasActivityLabel(timelineEntries)}
+                      activity={
+                        isCompacting ? "Compacting context" : atlasActivityLabel(timelineEntries)
+                      }
                       // The latest run's plan stays visible, all checked, after it finishes.
                       steps={activeComposerTaskSteps ?? activePlan?.steps ?? null}
                       lines={atlasLatestRunLines?.lines ?? null}
