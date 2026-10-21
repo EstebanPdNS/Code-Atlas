@@ -4,7 +4,7 @@
 // so the upstream build pipeline stays untouched.
 //
 //   node scripts/export-code-atlas-icons.ts
-import * as NodeFs from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import sharp from "sharp";
 
@@ -12,20 +12,36 @@ const repoRoot = NodePath.resolve(import.meta.dirname, "..");
 const sourceSvg = NodePath.join(repoRoot, "assets/code-atlas/code-atlas-icon.svg");
 
 async function renderSquare(size: number): Promise<Buffer> {
-  const svg = await NodeFs.readFile(sourceSvg);
+  const svg = await NodeFSP.readFile(sourceSvg);
   return sharp(svg, { density: Math.max(72, (72 * size) / 1024) * 1.5 })
     .resize(size, size)
     .png()
     .toBuffer();
 }
 
-// macOS (pre-Tahoe layout): an 824px body centred on a transparent 1024 canvas.
+// macOS app icon grid: the rounded-square body is exactly 824px, centred on a
+// transparent 1024 canvas. The SVG draws its squircle with its own inset, so
+// trim that transparent margin first; otherwise the body lands near 783px and
+// the icon looks smaller than its Dock neighbours.
+const MAC_ICON_CANVAS = 1024;
+const MAC_ICON_BODY = 824;
+
 async function renderMacIcon(): Promise<Buffer> {
-  const body = await renderSquare(824);
+  const body = await sharp(await renderSquare(MAC_ICON_CANVAS))
+    .trim({ threshold: 0 })
+    .resize(MAC_ICON_BODY, MAC_ICON_BODY, { fit: "fill" })
+    .png()
+    .toBuffer();
+  const inset = (MAC_ICON_CANVAS - MAC_ICON_BODY) / 2;
   return sharp({
-    create: { width: 1024, height: 1024, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    create: {
+      width: MAC_ICON_CANVAS,
+      height: MAC_ICON_CANVAS,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
   })
-    .composite([{ input: body, left: 100, top: 100 }])
+    .composite([{ input: body, left: inset, top: inset }])
     .png()
     .toBuffer();
 }
@@ -57,7 +73,7 @@ function encodeIco(images: ReadonlyArray<{ size: number; png: Buffer }>): Buffer
 async function main() {
   const write = async (relativePath: string, data: Buffer) => {
     const target = NodePath.join(repoRoot, relativePath);
-    await NodeFs.writeFile(target, data);
+    await NodeFSP.writeFile(target, data);
     console.log(`wrote ${relativePath}`);
   };
   const mac = await renderMacIcon();
