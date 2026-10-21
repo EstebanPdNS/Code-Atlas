@@ -2,6 +2,9 @@ import type { UsageProviderKind } from "@t3tools/contracts";
 
 import { ProviderDriverKind } from "@t3tools/contracts";
 
+// Code Atlas: Codex and Claude Code take their colors from the one Code Atlas palette.
+import { CLAUDE_COLOR, CODEX_COLOR } from "../../atlas/brand/providerColors";
+
 type UsageProviderPresentation = {
   readonly label: string;
   readonly color: string;
@@ -11,12 +14,12 @@ type UsageProviderPresentation = {
 export const PROVIDER_PRESENTATION = {
   codex: {
     label: "Codex",
-    color: "var(--contrast-foreground)",
+    color: CODEX_COLOR,
     driverKind: ProviderDriverKind.make("codex"),
   },
   claude: {
     label: "Claude Code",
-    color: "#d97757",
+    color: CLAUDE_COLOR,
     driverKind: ProviderDriverKind.make("claudeAgent"),
   },
   grok: {

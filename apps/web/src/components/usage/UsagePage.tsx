@@ -109,9 +109,13 @@ import {
   saveUsagePagePreferences,
   type UsagePagePreferences,
 } from "./usagePagePreferences";
+// Code Atlas: Cost and Tokens tabs only, provider colors, and tokens per subscription dollar.
+import { USAGE_TABS, withoutLimitsTab } from "../../atlas/usage/usageTabs";
+import { UsageTokenEfficiency } from "../../atlas/usage/UsageTokenEfficiency";
+import { usageProviderFill } from "../../atlas/usage/usageProviderPaint";
 
 function isUsageMetric(value: string | null | undefined): value is UsageMetric {
-  return METRIC_OPTIONS.some((option) => option.value === value);
+  return USAGE_TABS.some((option) => option.value === value);
 }
 
 function isUsageWindowDays(value: number): value is UsagePagePreferences["windowDays"] {
@@ -180,7 +184,9 @@ function UsageModelDialogHost({
 }
 
 export function UsagePage() {
-  const [preferences, setPreferences] = useState(readUsagePagePreferences);
+  const [preferences, setPreferences] = useState(() =>
+    withoutLimitsTab(readUsagePagePreferences()),
+  );
   useEscapeToGoBack();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const hour12 = usePrimarySettings((settings) => resolveHour12(settings.timestampFormat));
@@ -285,7 +291,7 @@ export function UsagePage() {
       return;
 
     const command = resolveUsageShortcut(event, keybindings);
-    const metricOption = METRIC_OPTIONS.find((option) => option.command === command);
+    const metricOption = USAGE_TABS.find((option) => option.command === command);
     const periodOption = WINDOW_OPTIONS.find((option) => option.command === command);
     if (!metricOption && !periodOption) return;
 
@@ -312,6 +318,8 @@ export function UsagePage() {
       });
       return;
     }
+    // Code Atlas: the Tokens view shows the limits too.
+    if (metric === "tokens") void refreshLimits();
     const nextWindow = makeWindow(windowDays, undefined, isPast24Hours ? "hour" : "day");
     if (
       nextWindow.sinceDay !== window.sinceDay ||
@@ -341,9 +349,11 @@ export function UsagePage() {
   const autoRefreshLimits = useEffectEvent(() => {
     void refreshLimits(true);
   });
+  // Code Atlas: the Tokens view shows the limits too, so opening it refreshes them.
+  const showsLimits = showingLimits || metric === "tokens";
   useEffect(() => {
-    if (showingLimits && connectedLimitsEnvironments) autoRefreshLimits();
-  }, [showingLimits, connectedLimitsEnvironments]);
+    if (showsLimits && connectedLimitsEnvironments) autoRefreshLimits();
+  }, [showsLimits, connectedLimitsEnvironments]);
 
   const days = enumerateDays(shownWindow.sinceDay, shownWindow.untilDay);
   const hours =
@@ -406,7 +416,7 @@ export function UsagePage() {
             if (isUsageMetric(value)) selectMetric(value);
           }}
         >
-          {METRIC_OPTIONS.map((option) => (
+          {USAGE_TABS.map((option) => (
             <Toggle key={option.value} value={option.value} title={shortcutTitle(option)}>
               {option.label}
             </Toggle>
@@ -452,12 +462,10 @@ export function UsagePage() {
             variant="ghost"
             className="w-auto min-w-0"
           >
-            <SelectValue>
-              {METRIC_OPTIONS.find((option) => option.value === metric)?.label}
-            </SelectValue>
+            <SelectValue>{USAGE_TABS.find((option) => option.value === metric)?.label}</SelectValue>
           </SelectTrigger>
           <SelectPopup align="end" alignItemWithTrigger={false}>
-            {METRIC_OPTIONS.map((option) => (
+            {USAGE_TABS.map((option) => (
               <SelectItem key={option.value} value={option.value} title={shortcutTitle(option)}>
                 {option.label}
               </SelectItem>
@@ -511,7 +519,8 @@ export function UsagePage() {
         <WorkspacePageHeader electron={isElectron}>{topbarContent}</WorkspacePageHeader>
 
         <ScrollArea className="min-h-0 flex-1">
-          <WorkspacePageContainer width="wide">
+          {/* Code Atlas: the usage page fills wide windows. */}
+          <WorkspacePageContainer width="wide" className="max-w-[1400px] sm:px-8 xl:px-12">
             {selectedEnvironments.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {environments.length === 0
@@ -771,9 +780,8 @@ function UsageOverview({
                     <span
                       aria-hidden
                       className="size-2 shrink-0 rounded-full"
-                      style={{
-                        backgroundColor: PROVIDER_PRESENTATION[provider].color,
-                      }}
+                      // Code Atlas: provider colors, with the Codex gradient.
+                      style={{ background: usageProviderFill(provider) }}
                     />
                     <ProviderMark provider={provider} className="size-4" />
                     <span className="flex min-w-0 items-baseline gap-1.5">
@@ -818,7 +826,8 @@ function UsageOverview({
           })}
         </div>
 
-        <div className="flex min-w-0 flex-col gap-3">
+        {/* Code Atlas: a taller chart on wide windows. */}
+        <div className="flex min-w-0 flex-col gap-3 lg:[--usage-chart-height:16rem] xl:[--usage-chart-height:18rem]">
           <h2 className="text-sm font-medium text-foreground">
             {shownHourly ? "Hourly" : "Daily"} {metric === "tokens" ? "processed tokens" : "cost"}
           </h2>
@@ -874,11 +883,15 @@ function UsageOverview({
           className={cn("grid gap-x-12 gap-y-8 lg:grid-cols-2", figureClass(loadingPartial))}
         >
           {metric === "tokens" ? (
-            <UsageShareBar
-              label="Tokens by type"
-              segments={tokenTypeSegments(merged)}
-              format={formatTokens}
-            />
+            <>
+              <UsageShareBar
+                label="Tokens by type"
+                segments={tokenTypeSegments(merged)}
+                format={formatTokens}
+              />
+              {/* Code Atlas: tokens per subscription dollar beside the token types. */}
+              <UsageTokenEfficiency />
+            </>
           ) : (
             <>
               <UsageShareBar
@@ -975,7 +988,8 @@ function UsageOverview({
                               className="h-full rounded-full"
                               style={{
                                 width: `max(0.5rem, ${(value / breakdownPeak) * 100}%)`,
-                                backgroundColor: PROVIDER_PRESENTATION[model.provider].color,
+                                // Code Atlas: provider colors, with the Codex gradient.
+                                background: usageProviderFill(model.provider),
                               }}
                             />
                           </div>
