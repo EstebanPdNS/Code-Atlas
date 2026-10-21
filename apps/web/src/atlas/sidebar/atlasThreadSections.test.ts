@@ -94,12 +94,13 @@ describe("isAtlasThreadRunning", () => {
     // An imported Codex thread has a provider thread but no run, so its runtime
     // reads idle (and its status "waiting") weeks after its last turn.
     expect(isAtlasThreadRunning(thread("idle"))).toBe(false);
-    // A leftover command does not hold the turn open either.
-    expect(
-      isAtlasThreadRunning(
-        thread("idle", { pendingBackgroundTasks: [{ taskId: "dev", kind: "command" }] }),
-      ),
-    ).toBe(false);
+  });
+
+  it("counts a command still running after the turn ended", () => {
+    // The thread shows "Running: …" with Stop; the agent wakes when it finishes.
+    const command = { pendingBackgroundTasks: [{ taskId: "test", kind: "command" as const }] };
+    expect(isAtlasThreadRunning(thread("idle", command))).toBe(true);
+    expect(isAtlasThreadRunning(thread("completed", command))).toBe(true);
   });
 
   it("ignores finished and never-run threads", () => {

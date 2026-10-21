@@ -11,7 +11,6 @@
  *   sit behind a "show more" toggle.
  */
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/shell";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 
 import { resolveSidebarThreadStatus, type SidebarThreadStatus } from "~/components/Sidebar.logic";
 
@@ -45,7 +44,9 @@ export function resolveAtlasAttentionReason(input: {
  * parked at idle reads "waiting" too, and so does every imported history
  * thread (a provider thread but no run), weeks after its last turn. Only a run
  * blocked on another thread, or background work that holds the turn open,
- * is live.
+ * is live. Any background task still running also counts once the turn has
+ * ended: an agent that leaves a command running (a test in an emulator) wakes
+ * when it finishes, and the thread already shows it as running with Stop.
  */
 export function isAtlasThreadRunning(
   thread: Parameters<typeof resolveSidebarThreadStatus>[0] &
@@ -53,11 +54,10 @@ export function isAtlasThreadRunning(
 ): boolean {
   const status = resolveSidebarThreadStatus(thread);
   if (status === "working") return true;
+  const backgroundWork = thread.pendingBackgroundTasks.length > 0;
+  if (status === "ready") return backgroundWork;
   if (status !== "waiting") return false;
-  return (
-    thread.runtime?.status === "running" ||
-    backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks)
-  );
+  return thread.runtime?.status === "running" || backgroundWork;
 }
 
 export function resolveAtlasThreadPlacement(input: {
