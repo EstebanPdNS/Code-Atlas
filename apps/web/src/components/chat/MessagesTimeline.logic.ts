@@ -72,6 +72,8 @@ import {
   formatSearchToolLabel,
 } from "@t3tools/shared/toolActivity";
 import { isWindowsAbsolutePath } from "@t3tools/shared/path";
+// Code Atlas: hides the retry turns and superseded errors of a transient-failure chain.
+import { withoutTransientRetryChains } from "~/atlas/progress/transientRetry";
 
 function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   if (entry.kind === "message") {
@@ -1321,7 +1323,10 @@ function settleSupersededReasoning(entries: ReadonlyArray<TimelineEntry>) {
 }
 
 function timelineRowEntries(entries: ReadonlyArray<TimelineEntry>) {
-  return withoutSubagentDelegationRows(settleSupersededReasoning(entries));
+  // Code Atlas: a chain of server retries after a transient failure reads as one card.
+  return withoutSubagentDelegationRows(
+    settleSupersededReasoning(withoutTransientRetryChains(entries)),
+  );
 }
 
 function deriveTimelineTurnFolds(

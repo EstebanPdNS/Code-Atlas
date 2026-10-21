@@ -19,6 +19,10 @@
       "types": "./src/orchestrationV2ThreadError.ts",
       "import": "./src/orchestrationV2ThreadError.ts"
     },
+    "./transientFailureRetry": {
+      "types": "./src/transientFailureRetry.ts",
+      "import": "./src/transientFailureRetry.ts"
+    },
     "./delimitedPreview": {
       "types": "./src/delimitedPreview.ts",
       "import": "./src/delimitedPreview.ts"
