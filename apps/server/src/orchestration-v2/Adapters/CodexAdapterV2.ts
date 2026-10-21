@@ -945,7 +945,11 @@ export type CodexGoalCommand =
 export function parseCodexGoalCommand(text: string): CodexGoalCommand | null {
   const match = /^\/goal(?:\s+([\s\S]*))?$/u.exec(text.trim());
   if (match === null) return null;
-  const argument = (match[1] ?? "").trim();
+  // Code Atlas: a repeated `/goal` ("/goal /goal Fix it") never lands in the objective.
+  const argument = (match[1] ?? "")
+    .trim()
+    .replace(/^(?:\/goal(?:\s+|$))+/u, "")
+    .trim();
   switch (argument.toLowerCase()) {
     case "":
     case "edit":

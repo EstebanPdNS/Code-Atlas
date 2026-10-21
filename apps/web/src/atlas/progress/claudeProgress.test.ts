@@ -5,7 +5,9 @@ import type { TimelineEntry, WorkLogEntry } from "~/session-logic";
 import {
   atlasActivityLabel,
   atlasPlanFocus,
+  formatAtlasChangedFiles,
   formatAtlasElapsed,
+  formatAtlasLines,
   formatAtlasTokens,
 } from "./claudeProgress";
 
@@ -83,5 +85,21 @@ describe("atlasPlanFocus", () => {
   it("shows the last step of a finished plan", () => {
     expect(atlasPlanFocus(plan("xxx"))).toEqual([2]);
     expect(atlasPlanFocus([])).toEqual([]);
+  });
+});
+
+describe("status line lines", () => {
+  it("shows added and removed lines only once a line changed", () => {
+    expect(formatAtlasLines({ additions: 0, deletions: 0 })).toBeNull();
+    expect(formatAtlasLines({ additions: 40, deletions: 12 })).toEqual({
+      added: "+40",
+      removed: "−12",
+    });
+    expect(formatAtlasLines({ additions: 1_234, deletions: 0 })).toEqual({
+      added: "+1.2k",
+      removed: "−0",
+    });
+    expect(formatAtlasChangedFiles(1)).toBe("1 file changed");
+    expect(formatAtlasChangedFiles(3)).toBe("3 files changed");
   });
 });

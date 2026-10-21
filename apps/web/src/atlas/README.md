@@ -7,14 +7,17 @@ Everything Code Atlas adds to the T3 Code web client lives here, grouped by feat
 | `brand/`     | The Code Atlas mark and wordmark, the working dots (`ActivityDots`), each agent's bar color (`providerColors`) and the Claude Code / Codex providers. |
 | `intro/`     | The launch intro and the Code Atlas terminal on new threads, with its startup sound and the summary it shows (`terminalSummary`).                     |
 | `sidebar/`   | Pinned, Needs attention and Working sections, project groups (`projectFolders`) and group settings.                                                   |
-| `progress/`  | The Claude Code progress style: the plan card, the status line and the paused task's Stop and Resume (`pausedTask`).                                  |
-| `goal/`      | The thread goal card above the composer, Codex-style: status line, Open (full editor), Pause/Resume, Clear.                                           |
+| `progress/`  | The Claude Code progress style: plan card, status line with the run's live lines (`runLines`), changed files, paused Resume and Stop.                 |
+| `goal/`      | The thread goal bar above the composer, Codex-style: status, total time, Clear, Pause/Resume, Open; `/goal` while a turn runs.                        |
 | `agents/`    | Subagent personas: names, faces (vector art generated with Codex) and headlines.                                                                      |
 | `rail/`      | The Context, Usage and Background tasks cards beside the conversation; the context breakdown logic is `contextBreakdown`.                             |
+| `usage/`     | The Usage page's Cost and Tokens tabs, provider colors on its charts and bars, and token efficiency per dollar (`tokenEfficiency`, price schedule).   |
 | `settings/`  | The Code Atlas section in Settings → General.                                                                                                         |
 | `desktop/`   | Bridges to the Electron shell: the orange glow around a window an agent drives, and the running-agent count the quit check reads.                     |
+| `theme/`     | The default theme's colors as palette roles (`defaultThemeColors`), for agent pages and MCP apps that cannot read atlas.css.                          |
 | `dictation/` | Microphone selection for voice dictation.                                                                                                             |
-| `atlas.css`  | The visual language: tokens, default-theme overrides, then layout, intro, sidebar, progress, agents and rail rules, and motion last.                  |
+| `browser/`   | The in-app browser's new tab (Recents and Favorites tiles) and the address bar's favorites star; list rules in `browserSites`.                        |
+| `atlas.css`  | The visual language: tokens, default-theme overrides, then layout, intro, sidebar, progress, agents, rail and browser rules, and motion last.         |
 
 The dictation engine itself lives in `src/dictation/`, not here. It is an upstream T3 Code feature that Code Atlas cherry-picked before upstream released it, so it stays at upstream's path and the upstream version lands in place. The Code Atlas parts inside it (the scrolling waveform, the chosen microphone) are marked with `Code Atlas:` comments.
 

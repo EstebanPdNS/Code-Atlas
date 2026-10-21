@@ -1541,6 +1541,8 @@ export interface ChatComposerProps {
   isCompacting: boolean;
   bannerItems: readonly ComposerBannerStackItem[];
   resumeCompactionTokens: number | null;
+  /** Code Atlas: a goal is being pursued, so sending steers whatever the setting. */
+  atlasGoalSteers?: boolean;
   keepFullHistory: boolean;
   onToggleKeepFullHistory: () => void;
   onUsageLimitsCommand?: (() => void) | undefined;
@@ -3040,6 +3042,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     projectSelectionRequired ||
     environmentUnavailable !== null ||
     (!composerSendState.hasSendableContent && !showResumeAction);
+  // Code Atlas: a message sent while a goal is pursued always steers it; queued,
+  // it would wait behind a goal turn that can run for hours.
+  const followUpBehavior = props.atlasGoalSteers === true ? "steer" : settings.followUpBehavior;
   const collapsedComposerPrimaryActionLabel = showResumeAction
     ? "Resume thread"
     : props.resumeCompactionTokens !== null && !props.keepFullHistory
@@ -4141,7 +4146,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             resolveComposerDispatchMode({
               running: phase === "running",
               alternateModifier: false,
-              activeTurnDefault: settings.followUpBehavior,
+              activeTurnDefault: followUpBehavior,
               canSteer: !isCompacting,
             }),
           submissionIntent,
@@ -4164,7 +4169,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       resolveComposerDispatchMode({
         running: phase === "running",
         alternateModifier: event.metaKey || event.ctrlKey,
-        activeTurnDefault: settings.followUpBehavior,
+        activeTurnDefault: followUpBehavior,
         canSteer: !isCompacting,
       }),
     );
@@ -4176,7 +4181,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       resolveComposerDispatchMode({
         running: phase === "running",
         alternateModifier: false,
-        activeTurnDefault: settings.followUpBehavior,
+        activeTurnDefault: followUpBehavior,
         canSteer: !isCompacting,
       }),
     );
@@ -4340,7 +4345,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         resolveComposerDispatchMode({
           running: phase === "running",
           alternateModifier: submissionIntent === "alternate",
-          activeTurnDefault: settings.followUpBehavior,
+          activeTurnDefault: followUpBehavior,
           canSteer: !isCompacting,
         }),
         submissionIntent,
@@ -7470,9 +7475,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     />
                   ) : null}
                   {/* Code Atlas: Claude Code's order, ⏎ then the mic; while dictating
-                      they are the only two controls. A paused task with nothing typed
-                      shows stop and resume in the send slot; typing brings ⏎ back to
-                      send a new message, which starts a new action. */}
+                      they are the only two controls. A running task shows ⏸ in the send
+                      slot; paused, it shows ▶ and Stop; typing brings ⏎ back to send a
+                      new message, which starts a new action. */}
                   {dictation.active ||
                   (showResumeAction &&
                     onDismissResume !== undefined &&
@@ -7488,7 +7493,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       pendingAction={pendingPrimaryAction}
                       isRunning={phase === "running"}
                       canInterrupt={canInterrupt}
-                      followUpBehavior={settings.followUpBehavior}
+                      followUpBehavior={followUpBehavior}
                       canSteer={!isCompacting}
                       alternateShortcutLabel={shortcutLabelForCommand(
                         keybindings,

@@ -413,9 +413,15 @@ import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/intro/AtlasTerminal";
 import { AtlasClaudeProgress } from "~/atlas/progress/AtlasClaudeProgress";
 import { AtlasGoalCard } from "~/atlas/goal/AtlasGoalCard";
-import { atlasGoalProvider } from "~/atlas/goal/goalPresentation";
+import {
+  atlasGoalCommandRoute,
+  atlasGoalProvider,
+  parseAtlasGoalCommand,
+} from "~/atlas/goal/goalPresentation";
 import { atlasActivityLabel } from "~/atlas/progress/claudeProgress";
 import { useAtlasPausedTask } from "~/atlas/progress/pausedTask";
+import { useAtlasRunLines } from "~/atlas/progress/useAtlasRunLines";
+import { useAtlasGoalUpdate } from "~/atlas/goal/useAtlasGoalUpdate";
 import { computerUseApp, useAgentControlOverlay } from "~/atlas/desktop/agentControlOverlay";
 import { useAtlasTerminalSummary } from "~/atlas/intro/terminalSummary";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
@@ -3022,6 +3028,13 @@ export default function ChatView(props: ChatViewProps) {
     panelAnimationDurationMs,
   );
   const turnDiffSummaries = useThreadCheckpointSummaries(routeThreadDetailRef);
+  // Code Atlas: the latest run's lines for the status line, live while it works.
+  const atlasLatestRunLines = useAtlasRunLines({
+    environmentId,
+    projection: claudeProgressStyle ? serverProjection : null,
+    working: isWorking,
+    checkpoints: turnDiffSummaries,
+  });
   const availableRevertTurnCounts = (() => {
     const available = new Set<number>();
     const providerThread = serverProjection?.providerThreads.find(
@@ -5363,15 +5376,20 @@ export default function ChatView(props: ChatViewProps) {
     };
   })() as ComposerBannerStackItem | null;
 
-  // Code Atlas: `queue` holds a goal change for after the running turn.
+  // Code Atlas: `queue` holds a goal change for after the running turn;
+  // `restart` pauses the running turn first, so the command starts now.
   const sendStandaloneCommand = async (
     text: string,
     failureMessage: string,
-    options?: { readonly queue?: boolean },
+    options?: { readonly queue?: boolean; readonly restart?: boolean },
   ) => {
     if (!activeThread || !clientSettingsHydrated || sendInFlightRef.current) return;
     const context = composerRef.current?.getSendContext();
     if (!context?.providerAvailable) return;
+    // A send after Stop queues behind the stopping turn and releases the held
+    // queue, so it starts as soon as the turn ends.
+    const restart = options?.restart === true && phase === "running";
+    if (restart) await onInterrupt();
 
     const threadId = activeThread.id;
     const messageId = newMessageId();
@@ -5412,7 +5430,7 @@ export default function ChatView(props: ChatViewProps) {
               runtimeMode,
               interactionMode: context.interactionMode,
               createdAt,
-              ...(options?.queue ? { dispatchMode: "queue" as const } : {}),
+              ...(options?.queue || restart ? { dispatchMode: "queue" as const } : {}),
             },
           });
     if (result._tag === "Failure") {
@@ -5433,6 +5451,7 @@ export default function ChatView(props: ChatViewProps) {
   const activeGoal = activeThreadShell?.goal ?? null;
   // Code Atlas: the goal shows as AtlasGoalCard above the composer, like Codex's.
   const atlasGoalProviderKind = atlasGoalProvider(activeProviderThread?.driver);
+  const updateAtlasGoal = useAtlasGoalUpdate();
 
   const backgroundWorkBannerItem = (() => {
     const presentation = presentPendingBackgroundWork(activeBackgroundTasks);
@@ -6460,6 +6479,51 @@ export default function ChatView(props: ChatViewProps) {
         feedbackUploadsInFlightRef.current.delete(routeThreadKey);
       });
 
+      return;
+    }
+    // Code Atlas: a `/goal` typed while a turn runs reaches the goal now instead
+    // of waiting behind a goal turn that can run for hours (see atlasGoalCommandRoute).
+    const atlasGoalCommand =
+      isServerThread &&
+      multipleModelSelections === null &&
+      composerImages.length === 0 &&
+      composerFiles.length === 0 &&
+      sendableComposerTerminalContexts.length === 0 &&
+      composerPreviewAnnotations.length === 0 &&
+      composerReviewComments.length === 0 &&
+      composerThreadContexts.length === 0
+        ? parseAtlasGoalCommand(trimmed)
+        : null;
+    const atlasGoalRoute =
+      atlasGoalCommand === null
+        ? null
+        : atlasGoalCommandRoute(atlasGoalCommand, {
+            text: trimmed,
+            working: phase === "running",
+            goal: activeGoal,
+            provider: atlasGoalProviderKind,
+          });
+    if (atlasGoalRoute?.type === "queue") {
+      dispatchMode = "queue";
+    } else if (atlasGoalRoute !== null) {
+      const goalPromptSnapshot = promptRef.current;
+      promptRef.current = "";
+      clearComposerDraftContent(composerDraftTarget);
+      composerRef.current?.resetCursorState();
+      if (atlasGoalRoute.type !== "update") {
+        await sendStandaloneCommand(atlasGoalRoute.text, "Could not update the goal", {
+          restart: atlasGoalRoute.type === "restart",
+        });
+      } else if (
+        !(await updateAtlasGoal({
+          environmentId,
+          threadId: activeThread.id,
+          action: atlasGoalRoute.action,
+        }))
+      ) {
+        promptRef.current = goalPromptSnapshot;
+        setComposerDraftPrompt(composerDraftTarget, goalPromptSnapshot);
+      }
       return;
     }
     if (
@@ -7878,6 +7942,23 @@ export default function ChatView(props: ChatViewProps) {
   const sendPreviewAnnotationStable = useStableCallback(sendPreviewAnnotation);
   const onComposerResumeStable = useStableCallback(onResume);
   const onComposerCompactContextStable = useStableCallback(onCompactContext);
+  // Code Atlas: the thread goal, Codex-style, in the composer lane.
+  const atlasGoalBar =
+    activeGoal !== null && activeThread && !isDraftHeroState ? (
+      <AtlasGoalCard
+        environmentId={environmentId}
+        threadId={activeThread.id}
+        goal={activeGoal}
+        working={isWorking}
+        provider={atlasGoalProviderKind}
+        sendCommand={sendStandaloneCommandStable}
+        messages={serverProjection?.messages ?? []}
+        runs={serverProjection?.runs ?? []}
+        taskResumable={canResumeTask}
+        onPauseTask={onInterruptStable}
+        onResumeTask={onComposerResumeStable}
+      />
+    ) : null;
   const queuedRunsControl =
     isServerThread && activeThread ? (
       <QueuedRunsControl
@@ -8459,6 +8540,7 @@ export default function ChatView(props: ChatViewProps) {
                       </div>
                     </div>
                   ) : null}
+                  {/* Code Atlas: plan card, goal, then the status line on the composer. */}
                   {claudeProgressStyle && !isDraftHeroState ? (
                     <AtlasClaudeProgress
                       working={isWorking}
@@ -8467,19 +8549,22 @@ export default function ChatView(props: ChatViewProps) {
                       activity={atlasActivityLabel(timelineEntries)}
                       // The latest run's plan stays visible, all checked, after it finishes.
                       steps={activeComposerTaskSteps ?? activePlan?.steps ?? null}
+                      lines={atlasLatestRunLines?.lines ?? null}
+                      changedFiles={
+                        atlasLatestRunLines?.files == null
+                          ? null
+                          : {
+                              runId: atlasLatestRunLines.runId,
+                              files: atlasLatestRunLines.files,
+                              resolvedTheme,
+                              onOpenTurnDiff: onOpenTurnDiffStable,
+                            }
+                      }
+                      goal={atlasGoalBar}
                     />
-                  ) : null}
-                  {/* Code Atlas: the thread goal, Codex-style, in the composer lane. */}
-                  {activeGoal !== null && activeThread && !isDraftHeroState ? (
+                  ) : atlasGoalBar !== null ? (
                     <div data-atlas-goal className="mb-3">
-                      <AtlasGoalCard
-                        environmentId={environmentId}
-                        threadId={activeThread.id}
-                        goal={activeGoal}
-                        working={isWorking}
-                        provider={atlasGoalProviderKind}
-                        sendCommand={sendStandaloneCommandStable}
-                      />
+                      {atlasGoalBar}
                     </div>
                   ) : null}
                   <div
@@ -8586,6 +8671,7 @@ export default function ChatView(props: ChatViewProps) {
                               queuedRunsControl={queuedRunsControl}
                               bannerItems={composerBannerItems}
                               resumeCompactionTokens={resumeCompactionTokens}
+                              atlasGoalSteers={activeGoal?.status === "active" && isWorking}
                               keepFullHistory={keepFullHistory}
                               onToggleKeepFullHistory={toggleKeepFullHistoryStable}
                               onUsageLimitsCommand={
