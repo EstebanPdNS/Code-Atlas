@@ -1,8 +1,18 @@
-import { RotateCwIcon, Volume2Icon, VolumeXIcon } from "lucide-react";
+import {
+  BotIcon,
+  CalendarIcon,
+  ChartNoAxesColumnIcon,
+  FolderIcon,
+  GithubIcon,
+  RotateCwIcon,
+  Volume2Icon,
+  VolumeXIcon,
+} from "lucide-react";
 import { Schema } from "effect";
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 
+import { APP_VERSION } from "~/branding";
 import { Button } from "~/components/ui/button";
 import { getLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
@@ -95,6 +105,32 @@ function randomBetween(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
+/** One section heading of the terminal's data grid: icon, label and a rule. */
+function AtlasInfoHeading(props: { readonly icon: React.ReactNode; readonly label: string }) {
+  return (
+    <p data-atlas-info-heading>
+      <span aria-hidden data-atlas-info-icon>
+        {props.icon}
+      </span>
+      <span>{props.label}</span>
+      <span aria-hidden data-atlas-rule-line />
+    </p>
+  );
+}
+
+function AtlasInfoCell(props: {
+  readonly icon: React.ReactNode;
+  readonly label: string;
+  readonly children: React.ReactNode;
+}) {
+  return (
+    <section data-atlas-info-cell aria-label={props.label}>
+      <AtlasInfoHeading icon={props.icon} label={props.label} />
+      {props.children}
+    </section>
+  );
+}
+
 interface AtlasTerminalFrameProps {
   readonly meta: AtlasTerminalMeta;
   readonly typed: number;
@@ -151,122 +187,153 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
           <span className="invisible">{command.slice(props.typed)}</span>
         </p>
         <div data-atlas-layout className="my-4">
-          <div ref={artRef} aria-hidden data-atlas-art>
-            <pre data-atlas-ascii>
-              {MAP_ROWS.map((segments, index) => (
-                <span
-                  key={MAP_ROW_KEYS[index]}
-                  data-atlas-art-row
-                  data-hidden={index >= props.rows || undefined}
-                >
-                  <span data-tone="0">{segments[0]}</span>
-                  <span data-tone="1">{segments[1]}</span>
-                  <span data-tone="2">{segments[2]}</span>
-                  {"\n"}
-                </span>
-              ))}
-            </pre>
-            <pre data-atlas-ascii>
-              {TITLE_ROWS.map((row, index) => (
-                <span
-                  key={row.key}
-                  data-atlas-art-row
-                  data-tone={row.tone}
-                  data-hidden={index >= props.rows || undefined}
-                >
-                  {row.text}
-                  {"\n"}
-                </span>
-              ))}
-            </pre>
+          {/* The art sits in a dashed frame with "+" corners, like a terminal UI panel. */}
+          <div data-atlas-art-frame>
+            <span aria-hidden data-atlas-corner="tl" />
+            <span aria-hidden data-atlas-corner="tr" />
+            <span aria-hidden data-atlas-corner="bl" />
+            <span aria-hidden data-atlas-corner="br" />
+            <div aria-hidden data-atlas-reveal data-atlas-rule className="mb-3 text-2xs uppercase">
+              <span>// Code Atlas</span>
+              <span data-atlas-rule-line />
+              <span data-atlas-dots>
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
+            <div ref={artRef} aria-hidden data-atlas-art>
+              <pre data-atlas-ascii>
+                {MAP_ROWS.map((segments, index) => (
+                  <span
+                    key={MAP_ROW_KEYS[index]}
+                    data-atlas-art-row
+                    data-hidden={index >= props.rows || undefined}
+                  >
+                    <span data-tone="0">{segments[0]}</span>
+                    <span data-tone="1">{segments[1]}</span>
+                    <span data-tone="2">{segments[2]}</span>
+                    {"\n"}
+                  </span>
+                ))}
+              </pre>
+              <pre data-atlas-ascii>
+                {TITLE_ROWS.map((row, index) => (
+                  <span
+                    key={row.key}
+                    data-atlas-art-row
+                    data-tone={row.tone}
+                    data-hidden={index >= props.rows || undefined}
+                  >
+                    {row.text}
+                    {"\n"}
+                  </span>
+                ))}
+              </pre>
+            </div>
           </div>
           <div data-atlas-reveal data-atlas-info>
-            <dl className="grid gap-y-1 text-sm leading-relaxed">
-              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
-                <dt className="font-semibold text-primary">Project</dt>
-                <dd className="truncate text-foreground">{meta.projectName ?? "No project"}</dd>
-              </div>
-              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
-                <dt className="font-semibold text-primary">Agents</dt>
-                <dd className="text-muted-foreground">
-                  {meta.agents.length > 0 ? meta.agents.join(" · ") : "Claude Code · Codex"}
-                </dd>
-              </div>
-              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
-                <dt className="font-semibold text-primary">Usage</dt>
-                <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
-                  {meta.usage.length === 0 ? <span>No usage data yet</span> : null}
-                  {meta.usage.map((entry) => (
-                    <span key={entry.label} className="inline-flex items-center gap-1.5">
-                      {entry.label}
-                      <span data-atlas-meter aria-hidden>
-                        <span
-                          style={{
-                            width: `${entry.percent ?? 0}%`,
-                            ...(atlasProviderFill(entry.label) === null
-                              ? {}
-                              : { background: atlasProviderFill(entry.label)! }),
-                          }}
-                        />
-                      </span>
-                      <strong className="font-medium text-foreground tabular-nums">
-                        {entry.percent === null ? "—" : `${Math.round(entry.percent)}%`}
-                      </strong>
-                    </span>
-                  ))}
-                </dd>
-              </div>
-              <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
-                <dt className="font-semibold text-primary">This week</dt>
-                <dd className="text-muted-foreground tabular-nums">
-                  {meta.week === null ? (
-                    "—"
-                  ) : (
-                    <>
-                      <span className="text-success">+{formatCount(meta.week.linesAdded)}</span>
-                      {" / "}
-                      <span className="text-destructive">
-                        −{formatCount(meta.week.linesRemoved)}
-                      </span>
-                      {` lines · ${formatCount(meta.week.commits)} ${meta.week.commits === 1 ? "commit" : "commits"}`}
-                    </>
-                  )}
-                </dd>
-              </div>
-              {meta.github.length > 0 ? (
-                <div className="grid grid-cols-[10ch_minmax(0,1fr)] gap-3">
-                  <dt className="font-semibold text-primary">GitHub</dt>
-                  <dd className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
-                    {meta.github.map((entry) => (
-                      <span key={entry.account} className="inline-flex items-center gap-1.5">
-                        <span
-                          aria-hidden
-                          className={cn(
-                            "size-1.5 rounded-full",
-                            entry.connected ? "bg-success" : "bg-muted-foreground/40",
-                          )}
-                        />
-                        <span className={entry.connected ? "text-foreground" : undefined}>
-                          {entry.account}
+            <AtlasInfoCell icon={<FolderIcon />} label="Project">
+              <p className="truncate font-semibold text-foreground">
+                {meta.projectName ?? "No project"}
+              </p>
+              <AtlasInfoHeading icon={<BotIcon />} label="Agents" />
+              <p className="truncate text-muted-foreground">
+                {meta.agents.length > 0 ? meta.agents.join(" · ") : "Claude Code · Codex"}
+              </p>
+            </AtlasInfoCell>
+            <AtlasInfoCell icon={<ChartNoAxesColumnIcon />} label="Usage">
+              {meta.usage.length === 0 ? (
+                <p className="text-muted-foreground">No usage data yet</p>
+              ) : (
+                <ul className="grid gap-1.5">
+                  {meta.usage.map((entry) => {
+                    const fill = atlasProviderFill(entry.label);
+                    return (
+                      <li key={entry.label} className="flex items-center gap-2.5">
+                        <span className="shrink-0 truncate text-foreground">{entry.label}</span>
+                        <span data-atlas-meter aria-hidden>
+                          <span
+                            style={{
+                              width: `${entry.percent ?? 0}%`,
+                              ...(fill === null ? {} : { background: fill }),
+                            }}
+                          />
                         </span>
-                        {entry.connected ? null : <span>· not signed in</span>}
-                      </span>
-                    ))}
-                  </dd>
+                        <strong className="w-9 text-right font-medium text-foreground tabular-nums">
+                          {entry.percent === null ? "—" : `${Math.round(entry.percent)}%`}
+                        </strong>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </AtlasInfoCell>
+            <AtlasInfoCell icon={<CalendarIcon />} label="This week">
+              {meta.week === null ? (
+                <p className="text-muted-foreground">—</p>
+              ) : (
+                <div className="grid gap-1 tabular-nums">
+                  <p>
+                    <span className="text-success">+{formatCount(meta.week.linesAdded)}</span>
+                    <span className="text-muted-foreground"> / </span>
+                    <span className="text-destructive">−{formatCount(meta.week.linesRemoved)}</span>
+                  </p>
+                  <p className="text-muted-foreground">
+                    {`${formatCount(meta.week.commits)} ${meta.week.commits === 1 ? "commit" : "commits"}`}
+                  </p>
                 </div>
-              ) : null}
-            </dl>
-            <div aria-hidden data-atlas-palette className="mt-3">
+              )}
+            </AtlasInfoCell>
+            <AtlasInfoCell icon={<GithubIcon />} label="GitHub">
+              {meta.github.length === 0 ? (
+                <p className="text-muted-foreground">Not signed in</p>
+              ) : (
+                <ul className="grid gap-1">
+                  {meta.github.map((entry) => (
+                    <li key={entry.account} className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          entry.connected ? "bg-success" : "bg-muted-foreground/40",
+                        )}
+                      />
+                      <span
+                        className={cn(
+                          "truncate",
+                          entry.connected ? "text-foreground" : "text-muted-foreground",
+                        )}
+                      >
+                        {entry.account}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </AtlasInfoCell>
+          </div>
+          <div aria-hidden data-atlas-reveal data-atlas-rule className="mt-3 text-2xs uppercase">
+            <span data-atlas-palette>
               {PALETTE_KEYS.map((key) => (
                 <span key={key} />
               ))}
-            </div>
+            </span>
+            <span data-atlas-rule-line />
+            <span className="truncate">
+              {meta.projectName ?? "Code Atlas"} <span className="mx-1">//</span> Code Atlas
+            </span>
           </div>
         </div>
         <div data-atlas-reveal className="text-xs">
-          <p className="text-muted-foreground">
-            <span className="text-primary">[ready]</span> workspace loaded · describe your next task
-            below
+          <p data-atlas-rule data-atlas-status className="text-muted-foreground">
+            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-success" />
+            <span>
+              <span className="text-primary">[ready]</span> workspace loaded · describe your next
+              task below
+            </span>
+            <span aria-hidden data-atlas-rule-line data-dashed />
+            <span className="tabular-nums">v{APP_VERSION}</span>
           </p>
           <p aria-hidden className="mt-2">
             <span className="text-primary">C:/code_atlas/</span>
