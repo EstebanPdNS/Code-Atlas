@@ -31,15 +31,17 @@ export function shouldUseRestingComposerLayout(input: {
   hasMultilinePrompt: boolean;
   timelineOverflows: boolean;
   /**
-   * Code Atlas, Claude Code style: an existing thread keeps the one-line
-   * composer with its controls in the strip below, whatever the scroll.
+   * Code Atlas: threads keep the full composer of a new thread (prompt above,
+   * controls inside), and never fold it into the one-line resting strip.
    */
-  alwaysRest?: boolean;
+  keepExpanded?: boolean;
 }): boolean {
   return (
+    input.keepExpanded !== true &&
     input.isExistingThread &&
     !input.isMobileViewport &&
-    (input.alwaysRest === true || (input.timelineOverflows && input.isScrollCollapsed)) &&
+    input.timelineOverflows &&
+    input.isScrollCollapsed &&
     !input.hasMultilinePrompt &&
     !input.hasExpandedChrome
   );

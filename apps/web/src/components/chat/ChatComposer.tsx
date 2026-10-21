@@ -4953,7 +4953,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     hasExpandedChrome: composerHasExpandedChrome,
     hasMultilinePrompt,
     timelineOverflows,
-    alwaysRest: settings.workDisplayStyle === "claude",
+    keepExpanded: true,
   });
   const expandedComposerImages = isComposerResting
     ? standaloneComposerImages.filter((image) => pendingSnapShotIdSet.has(image.id))

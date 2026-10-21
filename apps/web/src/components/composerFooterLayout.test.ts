@@ -193,18 +193,8 @@ describe("shouldUseRestingComposerLayout", () => {
     expect(shouldUseRestingComposerLayout({ ...resting, timelineOverflows: false })).toBe(false);
   });
 
-  it("keeps Claude Code style threads resting whatever the scroll", () => {
-    expect(
-      shouldUseRestingComposerLayout({
-        ...resting,
-        alwaysRest: true,
-        isScrollCollapsed: false,
-        timelineOverflows: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldUseRestingComposerLayout({ ...resting, alwaysRest: true, hasMultilinePrompt: true }),
-    ).toBe(false);
+  it("keeps Code Atlas threads expanded even after a timeline scroll", () => {
+    expect(shouldUseRestingComposerLayout({ ...resting, keepExpanded: true })).toBe(false);
   });
 
   it("keeps new-thread composers expanded", () => {
