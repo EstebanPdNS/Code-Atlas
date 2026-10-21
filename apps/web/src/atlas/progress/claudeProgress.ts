@@ -62,3 +62,26 @@ export function formatAtlasTokens(tokens: number): string {
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k tokens`;
   return `${Math.round(tokens)} tokens`;
 }
+
+function formatAtlasLineCount(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return `${Math.max(0, Math.round(value))}`;
+}
+
+/** "+40" and "−12" for the status line; nothing while no line changed. */
+export function formatAtlasLines(lines: {
+  readonly additions: number;
+  readonly deletions: number;
+}): { readonly added: string; readonly removed: string } | null {
+  if (lines.additions <= 0 && lines.deletions <= 0) return null;
+  return {
+    added: `+${formatAtlasLineCount(lines.additions)}`,
+    removed: `−${formatAtlasLineCount(lines.deletions)}`,
+  };
+}
+
+/** "3 files changed", "1 file changed". */
+export function formatAtlasChangedFiles(count: number): string {
+  return `${count} ${count === 1 ? "file" : "files"} changed`;
+}

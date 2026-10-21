@@ -9403,6 +9403,10 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         type: "set",
         objective: "fix the\nflaky tests",
       });
+      assert.deepEqual(CodexAdapterV2.parseCodexGoalCommand("/goal /goal Ship it"), {
+        type: "set",
+        objective: "Ship it",
+      });
       assert.isNull(CodexAdapterV2.parseCodexGoalCommand("/goals"));
       assert.isNull(CodexAdapterV2.parseCodexGoalCommand("set a /goal"));
     });

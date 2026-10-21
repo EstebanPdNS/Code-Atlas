@@ -11,6 +11,8 @@ import {
   toolOutputIndicatesFailure,
 } from "@t3tools/shared/toolOutput";
 
+import { fileChangeLineStats } from "./AtlasFileChangeStats.ts";
+
 const MAX_DETAIL_STRING_BYTES = 32_768;
 const MAX_DYNAMIC_VALUE_BYTES = 16_384;
 const MAX_ON_DEMAND_BYTES = 256 * 1024;
@@ -112,9 +114,13 @@ export function projectTurnItemForWire(item: OrchestrationV2TurnItem): Orchestra
     }
     case "file_change": {
       const { diffStr, oldStr: _old, newStr: _new, ...projected } = item;
+      // Code Atlas: the edit's line counts travel without its diff.
+      const lines = fileChangeLineStats(item);
       return item.status === "failed" && diffStr?.trim()
         ? { ...projected, diffStr: truncateDetail(diffStr) }
-        : projected;
+        : lines === null
+          ? projected
+          : { ...projected, ...lines };
     }
     case "subagent":
       return {

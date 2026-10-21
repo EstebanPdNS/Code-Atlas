@@ -7,7 +7,7 @@
  * Keeping every override in this file keeps upstream rebases conflict-free.
  *
  * Sections: tokens, theme overrides, layout, intro and terminal, sidebar,
- * progress, agents, rail, then motion (keyframes and reduced motion).
+ * progress, agents, rail, browser, then motion (keyframes and reduced motion).
  */
 
 /* ========== Tokens ========== */
@@ -356,7 +356,13 @@ span[data-atlas-hero-heading] {
 /* ========== Intro and terminal ========== */
 /* The handbook terminal on new threads and the launch intro that flies into it. */
 [data-atlas-terminal] {
-  container-type: inline-size;
+  container: atlas-terminal / inline-size;
+  /* Scales the chrome's entrance: short on a landed terminal, full in the intro. */
+  --atlas-enter: 0.5;
+}
+
+[data-atlas-intro-camera] [data-atlas-terminal] {
+  --atlas-enter: 1;
 }
 
 [data-atlas-light] {
@@ -396,65 +402,121 @@ span[data-atlas-hero-heading] {
 }
 
 /* Like the handbook: the map and the wordmark fill the terminal's width.
-   The art is ~40em wide (60 monospace columns plus the gap), so the font
-   size follows the container; on short windows the height wins. */
+   The art is ~38.5em wide (59 monospace columns plus the gap) and 16.5em
+   tall. Its box asks for that height but is the one part of the terminal
+   that gives way when the height runs short, and the glyphs scale to the box
+   they get, so the art can never spill onto the rows around it. 34px is the
+   frame's side padding. */
 [data-atlas-art] {
-  --atlas-art-size: clamp(6px, min(calc((100cqi - 48px) / 40), calc((100vh - 680px) / 16.5)), 22px);
+  container: atlas-art / size;
   display: flex;
+  flex: 0 1 calc(min((100cqw - 34px) / 38.5, 28px) * 16.6);
   align-items: center;
   justify-content: center;
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-atlas-art-glyphs] {
+  --atlas-art-size: clamp(4px, min(100cqw / 38.5, 100cqh / 16.6), 28px);
+  display: flex;
   gap: calc(var(--atlas-art-size) * 2.2);
 }
 
-/* The art's panel: a dashed frame with "+" marks at its corners. */
+/* The art's panel: a dashed frame with "+" marks at its corners. The 1px of
+   extra padding is the ring its edges draw in. */
 [data-atlas-art-frame] {
+  --atlas-edge: 1px dashed color-mix(in srgb, var(--primary) 28%, transparent);
   position: relative;
-  padding: 0.75rem 1rem 1rem;
-  border: 1px dashed color-mix(in srgb, var(--primary) 28%, transparent);
+  display: flex;
+  flex-direction: column;
+  padding: calc(0.75rem + 1px) calc(1rem + 1px) calc(1rem + 1px);
+}
+
+/* Panel outlines. Each "+" is a 9px cross whose centre pixel sits exactly on
+   the panel's corner pixel, and the four edges stop 3px short of its arms,
+   so no line shows through it. */
+[data-atlas-edge],
+[data-atlas-corner] {
+  position: absolute;
+  pointer-events: none;
+}
+
+[data-atlas-edge="top"],
+[data-atlas-edge="bottom"] {
+  left: 8px;
+  right: 8px;
+  border-top: var(--atlas-edge);
+}
+
+[data-atlas-edge="left"],
+[data-atlas-edge="right"] {
+  top: 8px;
+  bottom: 8px;
+  border-left: var(--atlas-edge);
+}
+
+[data-atlas-edge="top"] {
+  top: 0;
+}
+
+[data-atlas-edge="right"] {
+  right: 0;
+}
+
+[data-atlas-edge="bottom"] {
+  bottom: 0;
+}
+
+[data-atlas-edge="left"] {
+  left: 0;
 }
 
 [data-atlas-corner] {
-  position: absolute;
   width: 9px;
   height: 9px;
-  translate: -50% -50%;
 }
 
 [data-atlas-corner]::before,
 [data-atlas-corner]::after {
   content: "";
   position: absolute;
-  background: color-mix(in srgb, var(--primary) 70%, transparent);
+  /* Opaque over the card, so the two arms do not stack into a brighter centre. */
+  background: color-mix(in srgb, var(--primary) 70%, var(--card));
 }
 
 [data-atlas-corner]::before {
-  inset: 4px 0;
+  top: 4px;
+  left: 0;
+  width: 9px;
   height: 1px;
 }
 
 [data-atlas-corner]::after {
-  inset: 0 4px;
+  top: 0;
+  left: 4px;
   width: 1px;
+  height: 9px;
 }
 
 [data-atlas-corner="tl"] {
-  top: 0;
-  left: 0;
+  top: -4px;
+  left: -4px;
 }
 
 [data-atlas-corner="tr"] {
-  top: 0;
-  left: 100%;
-}
-
-[data-atlas-corner="bl"] {
-  top: 100%;
-  left: 0;
+  top: -4px;
+  right: -4px;
 }
 
 [data-atlas-corner="br"] {
-  top: 100%;
-  left: 100%;
+  right: -4px;
+  bottom: -4px;
+}
+
+[data-atlas-corner="bl"] {
+  bottom: -4px;
+  left: -4px;
 }
 
 /* A label, a hairline that fills the rest of the row, and a closing label. */
@@ -495,15 +557,21 @@ span[data-atlas-hero-heading] {
   display: grid;
   /* Usage carries a label, a bar and a percentage, so it gets the widest column. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  --atlas-edge: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
+  --atlas-divider: 1px dashed color-mix(in srgb, var(--primary) 45%, transparent);
+  /* Its outline enters after the art frame's. */
+  --atlas-marks-delay: 260ms;
   position: relative;
   margin-top: 1rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
-  border-radius: 0.375rem;
+  /* The ring the outline's edges draw in. */
+  padding: 1px;
   font-size: 0.8125rem;
   line-height: 1.5;
 }
 
 [data-atlas-info-cell] {
+  --atlas-cell-delay: 420ms;
+  position: relative;
   display: grid;
   align-content: start;
   gap: 0.375rem;
@@ -511,9 +579,27 @@ span[data-atlas-hero-heading] {
   padding: 0.75rem 1rem;
 }
 
-/* Each section is its own cell: a clearly visible dashed divider between them. */
-[data-atlas-info-cell] + [data-atlas-info-cell] {
-  border-left: 1px dashed color-mix(in srgb, var(--primary) 45%, transparent);
+[data-atlas-info-cell]:nth-of-type(2) {
+  --atlas-cell-delay: 480ms;
+}
+
+[data-atlas-info-cell]:nth-of-type(3) {
+  --atlas-cell-delay: 540ms;
+}
+
+[data-atlas-info-cell]:nth-of-type(4) {
+  --atlas-cell-delay: 600ms;
+}
+
+/* Each section is its own cell: a clearly visible dashed divider between
+   them, drawn as its own line so it can draw in. */
+[data-atlas-info-cell] + [data-atlas-info-cell]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-left: var(--atlas-divider);
 }
 
 /* Values sit under their label text, past the icon. */
@@ -551,27 +637,86 @@ span[data-atlas-hero-heading] {
   letter-spacing: normal;
 }
 
-/* When the terminal's chrome appears, its sections rise in one after another
-   and the rules draw from the left: one short, one-shot entrance. */
+/* The chrome's entrance, once, when it appears (the intro's zoom, or a
+   terminal mounting on a new thread): the corners pop in, each edge draws
+   away from its corner clockwise, the rules wipe in, the dividers draw down,
+   the cells rise one after another and the ready line types itself.
+   Transforms, opacity and clip-path only; --atlas-enter scales the timing. */
+[data-atlas-chrome="on"] [data-atlas-corner] {
+  animation: atlas-corner-in calc(var(--atlas-enter) * 460ms) var(--atlas-ease-spring) both;
+  animation-delay: calc(var(--atlas-enter) * var(--atlas-marks-delay, 0ms));
+}
+
+[data-atlas-chrome="on"] [data-atlas-edge] {
+  animation: atlas-wipe-right calc(var(--atlas-enter) * 480ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * (var(--atlas-marks-delay, 0ms) + 140ms));
+}
+
+[data-atlas-chrome="on"] [data-atlas-edge="right"] {
+  animation-name: atlas-wipe-down;
+}
+
+[data-atlas-chrome="on"] [data-atlas-edge="bottom"] {
+  animation-name: atlas-wipe-left;
+}
+
+[data-atlas-chrome="on"] [data-atlas-edge="left"] {
+  animation-name: atlas-wipe-up;
+}
+
+[data-atlas-chrome="on"] [data-atlas-art-frame] > [data-atlas-rule] {
+  animation: atlas-wipe-right calc(var(--atlas-enter) * 420ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * 220ms);
+}
+
 [data-atlas-chrome="on"] [data-atlas-info-cell] {
-  animation: atlas-rise-in 420ms var(--atlas-ease-out) both;
+  animation: atlas-rise-in calc(var(--atlas-enter) * 420ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * var(--atlas-cell-delay));
 }
 
-[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-of-type(2) {
-  animation-delay: 60ms;
-}
-
-[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-of-type(3) {
-  animation-delay: 120ms;
-}
-
-[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-of-type(4) {
-  animation-delay: 180ms;
-}
-
-[data-atlas-chrome="on"] [data-atlas-rule-line] {
+[data-atlas-chrome="on"] [data-atlas-info-cell] [data-atlas-rule-line] {
   transform-origin: left center;
-  animation: atlas-draw-in 520ms var(--atlas-ease-out) both;
+  animation: atlas-draw-in calc(var(--atlas-enter) * 520ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * (var(--atlas-cell-delay) + 120ms));
+}
+
+[data-atlas-chrome="on"] [data-atlas-info-cell]::before {
+  animation: atlas-wipe-down calc(var(--atlas-enter) * 380ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * 420ms);
+}
+
+[data-atlas-chrome="on"] [data-atlas-info-cell]::after {
+  animation: atlas-wipe-right calc(var(--atlas-enter) * 380ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * 420ms);
+}
+
+[data-atlas-chrome="on"] [data-atlas-info] + [data-atlas-rule] {
+  animation: atlas-wipe-right calc(var(--atlas-enter) * 480ms) var(--atlas-ease-out) both;
+  animation-delay: calc(var(--atlas-enter) * 640ms);
+}
+
+/* Typed: the line uncovers in character-sized steps. */
+[data-atlas-chrome="on"] [data-atlas-status] {
+  animation: atlas-wipe-right calc(var(--atlas-enter) * 560ms) steps(28, end) both;
+  animation-delay: calc(var(--atlas-enter) * 780ms);
+}
+
+[data-atlas-chrome="on"] [data-atlas-prompt] {
+  animation: atlas-fade-in calc(var(--atlas-enter) * 240ms) ease-out both;
+  animation-delay: calc(var(--atlas-enter) * 1300ms);
+}
+
+@keyframes atlas-corner-in {
+  from {
+    opacity: 0;
+    scale: 0;
+    rotate: -90deg;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    rotate: 0deg;
+  }
 }
 
 @keyframes atlas-rise-in {
@@ -587,17 +732,97 @@ span[data-atlas-hero-heading] {
   }
 }
 
-@container (max-width: 760px) {
+@keyframes atlas-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* clip-path needs both ends: inset() does not interpolate with none. */
+@keyframes atlas-wipe-right {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes atlas-wipe-down {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes atlas-wipe-left {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes atlas-wipe-up {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+[data-atlas-terminal][data-atlas-entered]
+  :is(
+    [data-atlas-corner],
+    [data-atlas-edge],
+    [data-atlas-rule],
+    [data-atlas-status],
+    [data-atlas-info-cell],
+    [data-atlas-rule-line],
+    [data-atlas-prompt]
+  ),
+[data-atlas-terminal][data-atlas-entered] [data-atlas-info-cell]::before,
+[data-atlas-terminal][data-atlas-entered] [data-atlas-info-cell]::after {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-atlas-chrome="on"]
+    :is(
+      [data-atlas-corner],
+      [data-atlas-edge],
+      [data-atlas-rule],
+      [data-atlas-info-cell],
+      [data-atlas-rule-line],
+      [data-atlas-prompt]
+    ),
+  [data-atlas-chrome="on"] [data-atlas-info-cell]::before,
+  [data-atlas-chrome="on"] [data-atlas-info-cell]::after {
+    animation: none;
+  }
+}
+
+/* Two columns on narrower terminals: the second row gets a divider on top. */
+@container atlas-terminal (max-width: 760px) {
   [data-atlas-info] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  [data-atlas-info-cell]:nth-of-type(3) {
-    border-left: none;
+  [data-atlas-info-cell]:nth-of-type(3)::before {
+    content: none;
   }
 
-  [data-atlas-info-cell]:nth-of-type(n + 3) {
-    border-top: 1px dashed color-mix(in srgb, var(--primary) 45%, transparent);
+  [data-atlas-info-cell]:nth-of-type(n + 3)::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    border-top: var(--atlas-divider);
   }
 }
 
@@ -645,6 +870,12 @@ span[data-atlas-hero-heading] {
 
 [data-atlas-chrome="off"] [data-atlas-reveal] {
   opacity: 0;
+}
+
+/* While the intro types, only the command line shows: no outlines, rules,
+   grid or ready line until their entrance plays. */
+[data-atlas-chrome="off"] :is([data-atlas-enter], [data-atlas-edge], [data-atlas-corner]) {
+  visibility: hidden;
 }
 
 [data-atlas-intro-camera] {
@@ -707,22 +938,16 @@ span[data-atlas-hero-heading] {
   background: #ffe0c5;
 }
 
-/* Short windows drop the project data, then the whole terminal. */
-@media (max-height: 680px) {
-  [data-atlas-terminal] [data-atlas-info] {
-    display: none;
-  }
+/* A terminal that fills its slot (new and empty threads, and the intro's
+   camera). Everything stacks in normal flow, so nothing can overlap: the
+   command at the top, the ready line at the bottom, the panels centred
+   between them. When the height runs short only the art gives way; then the
+   data grid goes (sooner in two columns, which stand taller), then the whole
+   terminal. */
+[data-atlas-fill] {
+  container: atlas-slot / size;
 }
 
-@media (max-height: 600px) {
-  [data-atlas-terminal] {
-    display: none;
-  }
-}
-
-/* A terminal that fills its slot (new and empty threads): the window grows
-   down to the space it is given and the logo scales with both its width and
-   its height, so tall windows get a bigger logo. */
 [data-atlas-fill] > [data-atlas-terminal] {
   display: flex;
   flex-direction: column;
@@ -730,30 +955,52 @@ span[data-atlas-hero-heading] {
 }
 
 [data-atlas-fill] > [data-atlas-terminal] > :nth-child(2) {
+  container: atlas-body / size;
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  container-type: size;
 }
 
-[data-atlas-fill] [data-atlas-layout] {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  min-height: 0;
+:where([data-atlas-fill] > [data-atlas-terminal] > :nth-child(2) > *) {
+  flex-shrink: 0;
 }
 
-/* Sized against the terminal body: its 40px of side padding, and ~19rem of
-   command line, five rows of project data, and ready lines stacked around the logo. */
-[data-atlas-fill] [data-atlas-layout] [data-atlas-art] {
-  --atlas-art-size: clamp(
-    6px,
-    min(calc((100cqw - 40px) / 38.5), calc((100cqh - 19rem) / 16.6)),
-    28px
-  );
+/* The frame keeps at least its padding and the "// CODE ATLAS" rule. */
+[data-atlas-fill] [data-atlas-art-frame] {
+  flex-shrink: 1;
+  min-height: calc(3.5rem + 2px);
+  margin-top: auto;
+}
+
+[data-atlas-art-frame] > [data-atlas-rule] {
+  flex-shrink: 0;
+}
+
+[data-atlas-fill] [data-atlas-info] + [data-atlas-rule] {
+  margin-bottom: auto;
+}
+
+/* Measured: the rows around the art take ~372px of body height with the grid
+   in four columns, ~448px in two and ~205px without it. The grid stays only
+   while the glyphs keep at least 8px (8px × 16.6 rows of art); the terminal
+   goes when even without the grid they would drop under ~5px. */
+@container atlas-body (max-height: 505px) {
+  [data-atlas-info] {
+    display: none;
+  }
+}
+
+@container atlas-body (max-width: 718px) and (max-height: 580px) {
+  [data-atlas-info] {
+    display: none;
+  }
+}
+
+@container atlas-slot (max-height: 329px) {
+  [data-atlas-fill] > [data-atlas-terminal] {
+    display: none;
+  }
 }
 
 /* ========== Sidebar ========== */
@@ -863,16 +1110,12 @@ span[data-atlas-hero-heading] {
   padding-inline-start: 2%;
 }
 
-/* The goal card sits in the same lane, under the plan card when there is
-   one; on its own it fades the conversation out the same way. */
+/* The goal bar sits in the same lane: in the Claude Code style between the
+   plan card and the status line, otherwise on its own, fading the
+   conversation out the same way. */
 [data-atlas-goal] {
   padding-top: 1rem;
   background: linear-gradient(to bottom, transparent, var(--background) 1rem);
-}
-
-[data-atlas-claude-progress] + [data-atlas-goal] {
-  padding-top: 0;
-  background: none;
 }
 
 /* Plan card: folded, only the steps being worked on stay open; the others
@@ -927,6 +1170,24 @@ span[data-atlas-hero-heading] {
   --atlas-pop-from: 0.6;
 }
 
+/* Pausing a task: Stop slides in to the right of Resume once, opening its
+   column so the controls beside it glide over instead of jumping. */
+[data-atlas-stop-reveal] {
+  display: grid;
+  grid-template-columns: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-columns 220ms var(--atlas-ease-out),
+    opacity 180ms ease-out;
+}
+
+@starting-style {
+  [data-atlas-stop-reveal] {
+    grid-template-columns: 0fr;
+    opacity: 0;
+  }
+}
+
 /* ========== Agents ========== */
 /* A new agent's face pops in once; every face tilts a little on hover. */
 [data-atlas-agent-face] {
@@ -978,6 +1239,159 @@ span[data-atlas-hero-heading] {
 
 [data-atlas-disclosure][data-open] {
   rotate: 90deg;
+}
+
+/* ========== Browser ========== */
+/* The in-app browser's new tab, like Codex's: Recents and Favorites as tiles
+   (the site's icon above its title) in a grid that fits a narrow side panel,
+   and the star beside the address bar. */
+[data-atlas-newtab-body] {
+  display: flex;
+  max-width: 44rem;
+  flex-direction: column;
+  gap: 1.75rem;
+  margin: 0 auto;
+  padding: 1.75rem 1.25rem 2rem;
+}
+
+[data-atlas-newtab-section] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+[data-atlas-newtab-heading] {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+[data-atlas-newtab-hint] {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+[data-atlas-site-grid] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-atlas-site-tile] {
+  position: relative;
+  min-width: 0;
+}
+
+[data-atlas-site-open] {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 0.5rem 0.75rem;
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: background-color 150ms var(--atlas-ease-out);
+}
+
+[data-atlas-site-open]:hover {
+  background: var(--accent);
+}
+
+[data-atlas-site-open]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+[data-atlas-site-icon] {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+}
+
+[data-atlas-site-icon] img {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+}
+
+[data-atlas-site-letter] {
+  color: var(--muted-foreground);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+[data-atlas-site-title] {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The tile's remove control shows on hover or keyboard focus. */
+[data-atlas-site-remove] {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  display: flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--popover);
+  color: var(--muted-foreground);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms var(--atlas-ease-out);
+}
+
+[data-atlas-site-remove] svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+[data-atlas-site-tile]:hover [data-atlas-site-remove],
+[data-atlas-site-remove]:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-atlas-site-remove]:hover {
+  color: var(--foreground);
+}
+
+@media (hover: none) {
+  [data-atlas-site-remove] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* The address bar's star fills in the Code Atlas orange while the page is a favorite. */
+[data-atlas-favorite-star] {
+  transition:
+    fill 150ms var(--atlas-ease-out),
+    color 150ms var(--atlas-ease-out);
+}
+
+[data-atlas-favorite-star][data-on] {
+  color: var(--primary);
+  fill: var(--primary);
 }
 
 /* ========== Motion ========== */
@@ -1037,9 +1451,13 @@ span[data-atlas-hero-heading] {
   [data-atlas-row-count],
   [data-atlas-row-actions],
   [data-atlas-plan-step],
+  [data-atlas-stop-reveal],
   [data-atlas-plan-chevron],
   [data-atlas-disclosure],
-  [data-atlas-agent-face] {
+  [data-atlas-agent-face],
+  [data-atlas-site-open],
+  [data-atlas-site-remove],
+  [data-atlas-favorite-star] {
     transition: none;
   }
 }

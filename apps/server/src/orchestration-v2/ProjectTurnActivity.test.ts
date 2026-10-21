@@ -4,11 +4,13 @@ import {
   CheckpointRef,
   CheckpointScopeId,
   EventId,
+  MessageId,
   NodeId,
   ProjectId,
   ProviderInstanceId,
   RunId,
   ThreadId,
+  TurnItemId,
   type OrchestrationV2Checkpoint,
   type OrchestrationV2DomainEvent,
 } from "@t3tools/contracts";
@@ -61,7 +63,12 @@ const createProject = (projectId: ProjectId, workspaceRoot: string) =>
 const thread = (
   threadId: ThreadId,
   projectId: ProjectId,
-  overrides: { readonly archivedAt?: DateTime.Utc; readonly deletedAt?: DateTime.Utc } = {},
+  overrides: {
+    readonly archivedAt?: DateTime.Utc;
+    readonly deletedAt?: DateTime.Utc;
+    readonly subagentOf?: ThreadId;
+    readonly worktreePath?: string;
+  } = {},
 ): OrchestrationV2DomainEvent => ({
   id: EventId.make(`created:${threadId}`),
   type: "thread.created",
@@ -79,9 +86,16 @@ const thread = (
     runtimeMode: "full-access",
     interactionMode: "default",
     branch: null,
-    worktreePath: null,
+    worktreePath: overrides.worktreePath ?? null,
     activeProviderThreadId: null,
-    lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+    lineage:
+      overrides.subagentOf === undefined
+        ? { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId }
+        : {
+            parentThreadId: overrides.subagentOf,
+            relationshipToParent: "subagent",
+            rootThreadId: overrides.subagentOf,
+          },
     forkedFrom: null,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(30),
@@ -136,6 +150,73 @@ const checkpoint = (
   };
 };
 
+/** A run still working, with one edit per entry of `edits` so far. */
+const workingRun = (
+  threadId: ThreadId,
+  edits: ReadonlyArray<string>,
+): ReadonlyArray<OrchestrationV2DomainEvent> => {
+  ordinal += 1;
+  const runId = RunId.make(`run:${threadId}:${ordinal}`);
+  const nodeId = NodeId.make(`node:${threadId}:${ordinal}`);
+  const at = daysAgo(0);
+  return [
+    {
+      id: EventId.make(`run:${ordinal}`),
+      type: "run.created",
+      threadId,
+      runId,
+      nodeId,
+      providerInstanceId,
+      occurredAt: at,
+      payload: {
+        id: runId,
+        threadId,
+        ordinal,
+        providerInstanceId,
+        modelSelection: { instanceId: providerInstanceId, model: "gpt-5" },
+        providerThreadId: null,
+        userMessageId: MessageId.make(`message:${ordinal}`),
+        rootNodeId: nodeId,
+        activeAttemptId: null,
+        status: "running",
+        requestedAt: at,
+        startedAt: at,
+        completedAt: null,
+        checkpointId: null,
+        contextHandoffId: null,
+      },
+    },
+    ...edits.map((diffStr, index): OrchestrationV2DomainEvent => ({
+      id: EventId.make(`edit:${ordinal}:${index}`),
+      type: "turn-item.updated",
+      threadId,
+      runId,
+      nodeId,
+      providerInstanceId,
+      occurredAt: at,
+      payload: {
+        id: TurnItemId.make(`edit:${ordinal}:${index}`),
+        threadId,
+        runId,
+        nodeId,
+        providerThreadId: null,
+        providerTurnId: null,
+        nativeItemRef: null,
+        parentItemId: null,
+        ordinal: index + 1,
+        status: "completed",
+        title: null,
+        startedAt: at,
+        completedAt: at,
+        updatedAt: at,
+        type: "file_change",
+        fileName: `src/edit-${index}.ts`,
+        diffStr,
+      },
+    })),
+  ];
+};
+
 it.layer(layerTest)("ProjectTurnActivity", (it) => {
   it.effect("sums this week's turn diffs for the project's live threads", () =>
     Effect.gen(function* () {
@@ -187,6 +268,49 @@ it.layer(layerTest)("ProjectTurnActivity", (it) => {
         Option.some({ turns: 1, linesAdded: 999, linesRemoved: 999 }),
       );
       assert.isTrue(Option.isNone(yield* activity.weekly("/work/unknown")));
+    }),
+  );
+
+  it.effect("counts a subagent's work once and a working run's edits so far", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW);
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const activity = yield* ProjectTurnActivity.ProjectTurnActivity;
+      const project = ProjectId.make("project:subagents");
+      yield* createProject(project, "/work/subagents");
+
+      const parent = ThreadId.make("thread:parent");
+      const shared = ThreadId.make("thread:shared-subagent");
+      const isolated = ThreadId.make("thread:worktree-subagent");
+      const events: ReadonlyArray<OrchestrationV2DomainEvent> = [
+        thread(parent, project),
+        // The parent's checkpoint was taken on the checkout both edited.
+        checkpoint(parent, { daysAgo: 1, lines: [[10, 2]] }),
+        thread(shared, project, { subagentOf: parent }),
+        checkpoint(shared, { daysAgo: 1, lines: [[4, 1]] }),
+        // A subagent in its own worktree is not in the parent's checkpoint.
+        thread(isolated, project, { subagentOf: parent, worktreePath: "/work/trees/one" }),
+        checkpoint(isolated, { daysAgo: 1, lines: [[6, 3]] }),
+      ];
+      yield* Effect.forEach(events, projections.apply, { discard: true });
+      assert.deepStrictEqual(
+        yield* activity.weekly("/work/subagents"),
+        Option.some({ turns: 2, linesAdded: 16, linesRemoved: 5 }),
+      );
+
+      // Working now: the parent and a subagent are editing, before any checkpoint.
+      yield* Effect.forEach(
+        [
+          ...workingRun(parent, ["@@ -1 +1,2 @@\n-a\n+b\n+c"]),
+          ...workingRun(shared, ["@@ -1 +1 @@\n-x\n+y"]),
+        ],
+        projections.apply,
+        { discard: true },
+      );
+      assert.deepStrictEqual(
+        yield* activity.weekly("/work/subagents"),
+        Option.some({ turns: 2, linesAdded: 19, linesRemoved: 7 }),
+      );
     }),
   );
 });

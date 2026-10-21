@@ -367,6 +367,17 @@ describe("orchestration V2 wire projection", () => {
     expect(failed).not.toHaveProperty("newStr");
   });
 
+  it("sends the line counts an edit's diff shows when the provider reported none", () => {
+    const projected = projectTurnItemForWire({
+      ...base,
+      type: "file_change" as const,
+      fileName: "src/main.ts",
+      diffStr: "@@ -1,2 +1,3 @@\n context\n-old\n+new\n+added",
+    });
+    expect(projected).not.toHaveProperty("diffStr");
+    expect(projected).toMatchObject({ additions: 2, deletions: 1 });
+  });
+
   it("retains only result identities and failure metadata in live tool events", () => {
     const output = {
       isError: true,

@@ -1,22 +1,29 @@
+import type { RunId } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
   CircleCheckIcon,
   CircleDashedIcon,
   CircleEllipsisIcon,
+  FileDiffIcon,
   ListChecksIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
+import { ChangedFilesTree } from "~/components/chat/ChangedFilesTree";
 import type { ComposerTaskStep } from "~/components/chat/ComposerTasksBadge";
 import { cn } from "~/lib/utils";
+import type { TurnDiffFileChange } from "~/types";
 
 import {
   ATLAS_PLAN_FOCUS_LIMIT,
   ATLAS_PLAN_FOLD_THRESHOLD,
   atlasPlanFocus,
+  formatAtlasChangedFiles,
   formatAtlasElapsed,
+  formatAtlasLines,
   formatAtlasTokens,
 } from "./claudeProgress";
+import type { AtlasLineStats } from "./runLines";
 
 function AtlasPlanStepIcon(props: { readonly status: ComposerTaskStep["status"] }) {
   // Keyed by status, so a step that completes remounts its icon and the check pops in.
@@ -112,10 +119,30 @@ function AtlasPlanCard(props: { readonly steps: readonly ComposerTaskStep[] }) {
   );
 }
 
-/** "• • 1m 8s · 37.0k tokens · Thinking" under the running turn. */
+/** "+40 −12" in the diff colors. */
+function AtlasLines(props: { readonly lines: AtlasLineStats | null }) {
+  const formatted = props.lines === null ? null : formatAtlasLines(props.lines);
+  if (formatted === null) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      aria-label={`${props.lines!.additions} lines added, ${props.lines!.deletions} removed`}
+    >
+      <span aria-hidden className="text-diff-addition">
+        {formatted.added}
+      </span>
+      <span aria-hidden className="text-diff-deletion">
+        {formatted.removed}
+      </span>
+    </span>
+  );
+}
+
+/** "• • 1m 8s · 37.0k tokens · +40 −12 · Thinking" right above the composer. */
 function AtlasStatusLine(props: {
   readonly startedAt: string | null;
   readonly tokens: number | null;
+  readonly lines: AtlasLineStats | null;
   readonly activity: string;
 }) {
   const [now, setNow] = useState(() => Date.now());
@@ -140,6 +167,12 @@ function AtlasStatusLine(props: {
       </span>
       <span className="tabular-nums">
         {metrics.length > 0 ? `${metrics.join(" · ")} · ` : null}
+        {props.lines !== null && formatAtlasLines(props.lines) !== null ? (
+          <>
+            <AtlasLines lines={props.lines} />
+            {" · "}
+          </>
+        ) : null}
         {/* Only the activity is live: a per-second clock would be read out every second. */}
         <span role="status">{props.activity}</span>
       </span>
@@ -147,16 +180,84 @@ function AtlasStatusLine(props: {
   );
 }
 
-/** Code Atlas "Claude Code" progress style, shown above the composer. */
+export interface AtlasRunChangedFiles {
+  readonly runId: RunId;
+  readonly files: ReadonlyArray<TurnDiffFileChange>;
+  readonly resolvedTheme: "light" | "dark";
+  readonly onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+}
+
+/**
+ * After a run, like Codex: "3 files changed +40 −12", which unfolds to the
+ * files with their own counts (the timeline's changed-files tree).
+ */
+function AtlasChangedFilesRow(
+  props: AtlasRunChangedFiles & { readonly lines: AtlasLineStats | null },
+) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <section aria-label="Changed files" data-atlas-changed-files className="flex flex-col gap-2">
+      {expanded ? (
+        <div className="max-h-[min(40vh,22rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card py-1 text-sm">
+          <ChangedFilesTree
+            runId={props.runId}
+            files={props.files}
+            allDirectoriesExpanded
+            resolvedTheme={props.resolvedTheme}
+            onOpenTurnDiff={props.onOpenTurnDiff}
+          />
+        </div>
+      ) : null}
+      <div
+        data-atlas-status-line
+        className="flex items-center gap-2 px-1 text-sm text-muted-foreground"
+      >
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="flex min-w-0 cursor-pointer items-center gap-2 rounded-md tabular-nums outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <ChevronDownIcon
+            aria-hidden
+            data-atlas-plan-chevron
+            className={cn("size-3.5 shrink-0", expanded ? "" : "-rotate-90")}
+          />
+          <span>{formatAtlasChangedFiles(props.files.length)}</span>
+          <AtlasLines lines={props.lines} />
+        </button>
+        <button
+          type="button"
+          onClick={() => props.onOpenTurnDiff(props.runId, props.files[0]?.path)}
+          className="ms-auto flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1 text-xs outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        >
+          <FileDiffIcon aria-hidden className="size-3.5" />
+          Review
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Code Atlas "Claude Code" progress style, shown above the composer: the plan
+ * card, then the goal, then the status line attached to the composer (after
+ * the run, the files it changed).
+ */
 export function AtlasClaudeProgress(props: {
   readonly working: boolean;
   readonly startedAt: string | null;
   readonly tokens: number | null;
   readonly activity: string;
   readonly steps: readonly ComposerTaskStep[] | null;
+  readonly lines: AtlasLineStats | null;
+  readonly changedFiles: AtlasRunChangedFiles | null;
+  readonly goal: ReactNode;
 }) {
   const showPlan = props.steps !== null && props.steps.length > 0;
-  if (!showPlan && !props.working) return null;
+  const showChangedFiles =
+    !props.working && props.changedFiles !== null && props.changedFiles.files.length > 0;
+  if (!showPlan && !props.working && !showChangedFiles && props.goal === null) return null;
   return (
     <div data-atlas-claude-progress className="mb-3 flex flex-col gap-3">
       {showPlan ? (
@@ -166,11 +267,19 @@ export function AtlasClaudeProgress(props: {
           steps={props.steps!}
         />
       ) : null}
+      {props.goal}
       {props.working ? (
         <AtlasStatusLine
           startedAt={props.startedAt}
           tokens={props.tokens}
+          lines={props.lines}
           activity={props.activity}
+        />
+      ) : showChangedFiles ? (
+        <AtlasChangedFilesRow
+          key={props.changedFiles!.runId}
+          {...props.changedFiles!}
+          lines={props.lines}
         />
       ) : null}
     </div>

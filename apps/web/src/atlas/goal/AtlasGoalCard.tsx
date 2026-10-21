@@ -1,12 +1,20 @@
-import type { EnvironmentId, OrchestrationV2ProviderGoal, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  OrchestrationV2ConversationMessage,
+  OrchestrationV2ProviderGoal,
+  OrchestrationV2Run,
+  ThreadId,
+} from "@t3tools/contracts";
 import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { useAtomValue } from "@effect/atom-react";
-import { Maximize2Icon, PauseIcon, PlayIcon, TargetIcon, XIcon } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Maximize2Icon, PauseIcon, PlayIcon, TargetIcon, Trash2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
 
+import { AtlasTaskButton } from "~/atlas/progress/AtlasPausedControls";
+import { ComposerSurface } from "~/components/chat/ComposerSurface";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -19,7 +27,6 @@ import {
 } from "~/components/ui/dialog";
 import { Kbd } from "~/components/ui/kbd";
 import { toastManager } from "~/components/ui/toast";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { isMacPlatform } from "~/lib/utils";
 import { orchestrationEnvironment } from "~/state/orchestration";
 import { useAtomCommand } from "~/state/use-atom-command";
@@ -28,48 +35,50 @@ import {
   type AtlasGoalProvider,
   type AtlasGoalStep,
   atlasGoalClearSteps,
+  atlasGoalElapsedSeconds,
   atlasGoalSavePlan,
   atlasGoalToggleSteps,
+  formatGoalElapsed,
   presentAtlasGoal,
 } from "./goalPresentation";
 
 export type AtlasGoalSendCommand = (
   text: string,
   failureMessage: string,
-  options?: { readonly queue?: boolean },
+  options?: { readonly queue?: boolean; readonly restart?: boolean },
 ) => Promise<void>;
 
-function GoalAction(props: {
-  readonly label: string;
-  readonly disabled: boolean;
-  readonly onClick: () => void;
-  readonly children: ReactNode;
+/** The goal's total time; it ticks only while the goal is being worked on. */
+function GoalElapsed(props: {
+  readonly goal: OrchestrationV2ProviderGoal;
+  readonly working: boolean;
+  readonly messages: ReadonlyArray<
+    Pick<OrchestrationV2ConversationMessage, "id" | "role" | "text">
+  >;
+  readonly runs: ReadonlyArray<
+    Pick<OrchestrationV2Run, "userMessageId" | "startedAt" | "completedAt">
+  >;
 }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label={props.label}
-            disabled={props.disabled}
-            onClick={props.onClick}
-          />
-        }
-      >
-        {props.children}
-      </TooltipTrigger>
-      <TooltipPopup>{props.label}</TooltipPopup>
-    </Tooltip>
-  );
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!props.working) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [props.working]);
+  const seconds = atlasGoalElapsedSeconds({
+    goal: props.goal,
+    messages: props.messages,
+    runs: props.runs,
+    nowMs: now,
+  });
+  if (seconds <= 0) return null;
+  return <span className="tabular-nums">{formatGoalElapsed(seconds)}</span>;
 }
 
 /**
- * Code Atlas: the thread goal as a card above the composer, like Codex's
- * goal: its status line, the objective (in full in the editor), and Open,
- * Pause or Resume, and Clear.
+ * Code Atlas: the thread goal as one row above the composer, like Codex's:
+ * the status and objective, the total time, then Clear, Pause or Resume, and
+ * Open (the full editor). It wears the composer's own surface.
  */
 export function AtlasGoalCard(props: {
   readonly environmentId: EnvironmentId;
@@ -78,6 +87,16 @@ export function AtlasGoalCard(props: {
   readonly working: boolean;
   readonly provider: AtlasGoalProvider;
   readonly sendCommand: AtlasGoalSendCommand;
+  readonly messages: ReadonlyArray<
+    Pick<OrchestrationV2ConversationMessage, "id" | "role" | "text">
+  >;
+  readonly runs: ReadonlyArray<
+    Pick<OrchestrationV2Run, "userMessageId" | "startedAt" | "completedAt">
+  >;
+  /** Agents without native goal pause pause and resume the running task. */
+  readonly taskResumable: boolean;
+  readonly onPauseTask: () => void;
+  readonly onResumeTask: () => void;
 }) {
   const updateGoal = useAtomCommand(orchestrationEnvironment.updateGoal);
   const canOperate = useAtomValue(
@@ -88,6 +107,7 @@ export function AtlasGoalCard(props: {
   const presentation = presentAtlasGoal(props.goal, {
     working: props.working,
     provider: props.provider,
+    taskResumable: props.taskResumable,
   });
   const nativeControls = props.provider === "codex";
   const disabled = busy || (nativeControls && !canOperate);
@@ -101,7 +121,7 @@ export function AtlasGoalCard(props: {
           await props.sendCommand(
             step.text,
             failureTitle,
-            step.queue ? { queue: true } : undefined,
+            step.restart ? { restart: true } : undefined,
           );
           continue;
         }
@@ -127,73 +147,102 @@ export function AtlasGoalCard(props: {
     }
   };
 
+  const toggle = () => {
+    if (presentation.toggle === null) return;
+    if (!nativeControls) {
+      if (presentation.toggle === "pause") props.onPauseTask();
+      else props.onResumeTask();
+      return;
+    }
+    void run(
+      atlasGoalToggleSteps(presentation.toggle, { working: props.working }),
+      presentation.toggle === "pause" ? "Could not pause the goal" : "Could not resume the goal",
+    );
+  };
+
   return (
-    <section
-      aria-label="Goal"
-      data-atlas-goal-card
-      className="flex min-h-10 items-center gap-2 rounded-xl border border-border bg-card py-1 ps-3 pe-1.5 text-sm"
-    >
-      <TargetIcon
-        aria-hidden
-        className={
-          props.goal.status === "active" && props.working
-            ? "size-4 shrink-0 text-primary"
-            : "size-4 shrink-0 text-muted-foreground"
-        }
-      />
-      <span className="shrink-0 font-medium">{presentation.title}</span>
-      {presentation.usage === null ? null : (
-        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-          {presentation.usage}
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={() => setEditorOpen(true)}
-        className="min-w-0 flex-1 cursor-pointer truncate rounded-md px-1 text-start text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-      >
-        {presentation.objective}
-      </button>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <GoalAction label="Open goal" disabled={false} onClick={() => setEditorOpen(true)}>
-          <Maximize2Icon className="size-3.5" />
-        </GoalAction>
-        {presentation.toggle === null ? null : (
-          <GoalAction
-            label={presentation.toggle === "pause" ? "Pause goal" : "Resume goal"}
-            disabled={disabled}
-            onClick={() =>
-              void run(
-                atlasGoalToggleSteps(presentation.toggle!, { working: props.working }),
-                presentation.toggle === "pause"
-                  ? "Could not pause the goal"
-                  : "Could not resume the goal",
-              )
+    <ComposerSurface.Shell>
+      <ComposerSurface.Host>
+        <section
+          aria-label="Goal"
+          data-atlas-goal-card
+          className="relative z-10 flex min-h-10 items-center gap-2 py-1 ps-3.5 pe-2 text-sm"
+        >
+          <TargetIcon
+            aria-hidden
+            className={
+              props.goal.status === "active" && props.working
+                ? "size-4 shrink-0 text-primary"
+                : "size-4 shrink-0 text-muted-foreground"
             }
+          />
+          <button
+            type="button"
+            onClick={() => setEditorOpen(true)}
+            className="flex min-w-0 flex-1 cursor-pointer items-baseline gap-2 rounded-md px-0.5 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           >
-            {presentation.toggle === "pause" ? (
-              <PauseIcon className="size-3.5" />
-            ) : (
-              <PlayIcon className="size-3.5" />
+            <span className="shrink-0 font-medium">{presentation.title}</span>
+            <span className="min-w-0 truncate text-muted-foreground hover:text-foreground">
+              {presentation.objective}
+            </span>
+          </button>
+          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+            {presentation.metrics === null ? null : (
+              <span className="tabular-nums">{presentation.metrics}</span>
             )}
-          </GoalAction>
-        )}
-        {presentation.canClear ? (
-          <GoalAction
-            label="Clear goal"
-            disabled={disabled}
-            onClick={() =>
-              void run(atlasGoalClearSteps(props.provider), "Could not clear the goal")
-            }
-          >
-            <XIcon className="size-3.5" />
-          </GoalAction>
-        ) : null}
-      </div>
+            <GoalElapsed
+              goal={props.goal}
+              working={props.working}
+              messages={props.messages}
+              runs={props.runs}
+            />
+          </span>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {presentation.canClear ? (
+              <AtlasTaskButton
+                label="Clear goal"
+                tooltip="Clear goal"
+                disabled={disabled}
+                onClick={() =>
+                  void run(
+                    atlasGoalClearSteps(props.provider, { working: props.working }),
+                    "Could not clear the goal",
+                  )
+                }
+              >
+                <Trash2Icon />
+              </AtlasTaskButton>
+            ) : null}
+            {presentation.toggle === null ? null : (
+              <AtlasTaskButton
+                label={presentation.toggle === "pause" ? "Pause goal" : "Resume goal"}
+                tooltip={presentation.toggle === "pause" ? "Pause goal" : "Resume goal"}
+                disabled={disabled}
+                onClick={toggle}
+              >
+                {presentation.toggle === "pause" ? (
+                  <PauseIcon className="fill-current" />
+                ) : (
+                  <PlayIcon className="fill-current" />
+                )}
+              </AtlasTaskButton>
+            )}
+            <AtlasTaskButton
+              label="Open goal"
+              tooltip="Open goal"
+              disabled={false}
+              onClick={() => setEditorOpen(true)}
+            >
+              <Maximize2Icon />
+            </AtlasTaskButton>
+          </div>
+        </section>
+      </ComposerSurface.Host>
       <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
         {editorOpen ? (
           <AtlasGoalEditor
             goal={props.goal}
+            objective={presentation.objective}
             status={presentation.status}
             working={props.working}
             provider={props.provider}
@@ -204,25 +253,26 @@ export function AtlasGoalCard(props: {
           />
         ) : null}
       </Dialog>
-    </section>
+    </ComposerSurface.Shell>
   );
 }
 
 /** The goal in a large editor, like Codex's: edit the objective, then Save. */
 function AtlasGoalEditor(props: {
   readonly goal: OrchestrationV2ProviderGoal;
+  readonly objective: string;
   readonly status: string;
   readonly working: boolean;
   readonly provider: AtlasGoalProvider;
   readonly disabled: boolean;
   readonly onSave: (steps: ReadonlyArray<AtlasGoalStep>) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(props.goal.objective);
+  const [draft, setDraft] = useState(props.objective);
   const plan = atlasGoalSavePlan(props.goal, draft, {
     working: props.working,
     provider: props.provider,
   });
-  const unchanged = draft.trim() === props.goal.objective.trim();
+  const unchanged = draft.trim() === props.objective;
   const canSave = !props.disabled && !unchanged && draft.trim().length > 0;
   const save = () => {
     if (canSave) void props.onSave(plan.steps);

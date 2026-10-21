@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
-import { StopCircleGlyph } from "~/atlas/progress/AtlasPausedControls";
+import { AtlasPauseButton } from "~/atlas/progress/AtlasPausedControls";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
@@ -269,28 +269,16 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     );
   }
 
-  // Code Atlas: a running task pauses (interrupts, resumable); Stop lives beside Resume.
+  // Code Atlas: a running task pauses (⏸ interrupts, resumable); Stop slides in beside Resume.
   if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
     return (
-      <Tooltip key="pause">
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              className={atlasIconActionClassName}
-              {...pointerFocusProps}
-              disabled={!canOperateThread}
-              onClick={() => {
-                if (canOperateThread) onInterrupt();
-              }}
-              aria-label="Pause task"
-            />
-          }
-        >
-          <StopCircleGlyph className="size-4" />
-        </TooltipTrigger>
-        <TooltipPopup>Pause</TooltipPopup>
-      </Tooltip>
+      <AtlasPauseButton
+        key="pause"
+        disabled={!canOperateThread}
+        onPause={() => {
+          if (canOperateThread) onInterrupt();
+        }}
+      />
     );
   }
 
