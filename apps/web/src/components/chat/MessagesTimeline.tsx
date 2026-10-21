@@ -1,5 +1,7 @@
 import { useRenderedAppearance } from "../../hooks/useTheme";
 import { AtlasEmptyThreadTerminal } from "~/atlas/intro/AtlasTerminal";
+// Code Atlas: countdown and Retry now under a transient provider failure.
+import { AtlasTransientRetry } from "~/atlas/progress/AtlasTransientRetry";
 import type { Root, RootContent } from "mdast";
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { shallow } from "zustand/vanilla/shallow";
@@ -5407,6 +5409,8 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             {failureItem.failure.message}
           </p>
         ) : null}
+        {/* Code Atlas: the server retries a provider that was briefly unavailable. */}
+        <AtlasTransientRetry threadRef={threadRef} runId={failureItem.runId} />
         {retryRunId !== null && onRetryWorkspacePreparation ? (
           <div className="ms-7 pb-1">
             <Button
