@@ -4,7 +4,7 @@ import { EnvironmentId, ProviderInstanceId, USAGE_CONTRACT_VERSION } from "@t3to
 import { mergeUsage } from "@t3tools/shared/usageMerge";
 import type { Atom } from "effect/reactivity";
 import { StrictMode } from "react";
-import { expect, it, vi } from "vite-plus/test";
+import { expect, it as upstreamIt, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
 
 import "~/index.css";
@@ -74,6 +74,9 @@ vi.mock(import("../../state/usage"), async (original) => {
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { UsagePage } from "./UsagePage";
+
+// Code Atlas: these cover upstream's Limits tab, which Code Atlas folds into the Tokens view.
+const it = upstreamIt.skip;
 
 const PREFERENCES_KEY = "t3code:usage-page-preferences:v1";
 // Limits refreshes are throttled per environment for the whole session, so each test

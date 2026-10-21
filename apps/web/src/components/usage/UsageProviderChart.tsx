@@ -13,6 +13,13 @@ import {
 import { cn } from "~/lib/utils";
 import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
 import { observeResize } from "~/lib/observeResize";
+// Code Atlas: Codex's blue-to-violet and Claude's coral on the chart. The page can make
+// the plot taller through `--usage-chart-height` (default 14rem).
+import {
+  UsageChartGradients,
+  usageChartPaint,
+  useUsageChartPaintId,
+} from "../../atlas/usage/usageProviderPaint";
 
 const VIEW_WIDTH = 960;
 const VIEW_HEIGHT = 260;
@@ -364,7 +371,7 @@ function UsageChartPlot({
   return (
     <div
       ref={plotRef}
-      className="relative h-56 flex-1"
+      className="relative h-[var(--usage-chart-height,14rem)] flex-1"
       onMouseMove={handleMove}
       onMouseLeave={() => {
         hoverPositionRef.current = null;
@@ -434,6 +441,7 @@ export function UsageProviderChart({
   );
 
   const toY = (value: number) => valueToY(value, scale.max);
+  const paintId = useUsageChartPaintId();
   const seriesClassName = (loading: boolean) =>
     cn("transition-opacity", loading && "opacity-40 delay-150");
   const format = metric === "tokens" ? formatTokens : formatUsd;
@@ -447,7 +455,7 @@ export function UsageProviderChart({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-2">
-        <div className="relative h-56 w-14 shrink-0">
+        <div className="relative h-[var(--usage-chart-height,14rem)] w-14 shrink-0">
           {scale.labeled
             ? scale.ticks.map((tick) => (
                 <span
@@ -471,6 +479,7 @@ export function UsageProviderChart({
           formatTooltipPeriod={formatTooltipPeriod}
           ariaLabel={`${resolution === "hour" ? "Hourly" : "Daily"} ${metric === "tokens" ? "processed tokens" : "cost"} by provider`}
         >
+          <UsageChartGradients paintId={paintId} providers={providers} width={VIEW_WIDTH} />
           {scale.ticks.map((tick) => {
             const y = toY(tick);
             return (
@@ -493,7 +502,7 @@ export function UsageProviderChart({
               key={provider}
               d={area}
               className={seriesClassName(loading)}
-              fill={PROVIDER_PRESENTATION[provider].color}
+              fill={usageChartPaint(paintId, provider)}
               fillOpacity={0.12}
             />
           ))}
@@ -503,7 +512,7 @@ export function UsageProviderChart({
               d={line}
               className={seriesClassName(loading)}
               fill="none"
-              stroke={PROVIDER_PRESENTATION[provider].color}
+              stroke={usageChartPaint(paintId, provider)}
               strokeWidth={2}
               vectorEffect="non-scaling-stroke"
             />

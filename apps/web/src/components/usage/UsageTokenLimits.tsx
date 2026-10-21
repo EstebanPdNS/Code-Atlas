@@ -4,6 +4,7 @@ import { formatResetsIn } from "@t3tools/shared/usageLimits";
 
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { environmentPresentations } from "../../state/presentation";
+import { atlasProviderFill } from "../../atlas/brand/providerColors";
 import { barColor } from "./UsageLimits";
 
 const PROVIDER_ORDER: ReadonlyArray<{ readonly driver: string; readonly label: string }> = [
@@ -69,7 +70,7 @@ export function UsageTokenLimits() {
                   className="block h-full rounded-full"
                   style={{
                     width: `${Math.min(100, Math.max(0, used))}%`,
-                    backgroundColor: barColor(cell.driver),
+                    background: atlasProviderFill(cell.driver) ?? barColor(cell.driver),
                   }}
                 />
               </span>
