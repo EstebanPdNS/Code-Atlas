@@ -94,10 +94,34 @@ export function connectionStatusTitle(connection: EnvironmentConnectionPresentat
   return connectionStatusText({ ...connection, error: null });
 }
 
+const LOCAL_HOST_RECONNECTING: EnvironmentConnectionPresentation = Object.freeze({
+  phase: "reconnecting",
+  error: null,
+  traceId: null,
+});
+
+/**
+ * A host on this machine always comes back on its own (see the supervisor's
+ * `localHost`), so any lost connection to it reads as a calm reconnect, never
+ * as offline or failed.
+ */
 export function presentEnvironmentConnection(
   state: SupervisorConnectionState,
+  options?: { readonly localHost?: boolean },
 ): EnvironmentConnectionPresentation {
-  return presentConnectionState(state);
+  const connection = presentConnectionState(state);
+  if (options?.localHost !== true) return connection;
+  switch (connection.phase) {
+    case "offline":
+    case "reconnecting":
+    case "error":
+      return LOCAL_HOST_RECONNECTING;
+    case "available":
+    case "connecting":
+    case "connected":
+    case "unsupported":
+      return connection;
+  }
 }
 
 /**

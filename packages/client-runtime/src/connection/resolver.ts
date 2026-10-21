@@ -108,13 +108,23 @@ const makePrimaryBroker = Effect.fn("clientRuntime.connection.broker.makePrimary
       } satisfies PreparedConnection;
     }
 
-    const authorized = yield* remote.authorizeBearer({
-      expectedEnvironmentId: target.environmentId,
-      httpBaseUrl: target.httpBaseUrl,
-      wsBaseUrl: target.wsBaseUrl,
-      bearerToken: bearerToken.value,
-      connectionMethod: "direct",
-    });
+    const authorized = yield* remote
+      .authorizeBearer({
+        expectedEnvironmentId: target.environmentId,
+        httpBaseUrl: target.httpBaseUrl,
+        wsBaseUrl: target.wsBaseUrl,
+        bearerToken: bearerToken.value,
+        connectionMethod: "direct",
+      })
+      .pipe(
+        Effect.tapError((error) =>
+          error._tag === "ConnectionBlockedError" &&
+          error.reason === "authentication" &&
+          auth.invalidateBearerToken !== undefined
+            ? auth.invalidateBearerToken
+            : Effect.void,
+        ),
+      );
     return {
       ...authorized,
       target,

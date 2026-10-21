@@ -79,6 +79,17 @@ const PREPARED_CONNECTION: PreparedConnection = {
 
 const TEST_RPC_CLIENT = {} as WsRpcProtocolClient;
 
+const LOCAL_ENTRY: ConnectionCatalogEntry = {
+  target: new PrimaryConnectionTarget({
+    environmentId: TARGET.environmentId,
+    label: TARGET.label,
+    httpBaseUrl: "http://127.0.0.1:3773",
+    wsBaseUrl: "ws://127.0.0.1:3773",
+  }),
+  profile: Option.none(),
+  enabled: true,
+};
+
 const LAN_TARGET = new BearerConnectionTarget({
   environmentId: TARGET.environmentId,
   label: TARGET.label,
@@ -293,6 +304,14 @@ describe("retryDelayMs", () => {
       expect(EnvironmentSupervisor.retryDelayMs(failureCount, 1 - Number.EPSILON)).toBe(ceiling);
     }
   });
+
+  it("stays within a lower cap", () => {
+    for (const failureCount of [0, 1, 5, 20]) {
+      expect(EnvironmentSupervisor.retryDelayMs(failureCount, 1 - Number.EPSILON, 2_000)).toBe(
+        2_000,
+      );
+    }
+  });
 });
 
 describe("EnvironmentSupervisor", () => {
@@ -470,6 +489,86 @@ describe("EnvironmentSupervisor", () => {
       }
 
       expect(yield* Ref.get(harness.prepareCount)).toBe(delays.length + 1);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("connects to a local host while the network reports offline", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ networkStatus: "offline" });
+      const supervisor = yield* EnvironmentSupervisor.make(LOCAL_ENTRY, {
+        initiallyDesired: true,
+        localHost: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "connected");
+      yield* harness.closeLatestSession();
+      yield* awaitState(supervisor.state, (state) => state.phase === "backoff");
+      yield* TestClock.adjust(2_000);
+      yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "connected" && state.generation === 2,
+      );
+      expect(yield* Ref.get(harness.prepareCount)).toBe(2);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("retries a local host every two seconds without ever slowing down", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        prepare: () => Effect.fail(transient()),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(LOCAL_ENTRY, {
+        initiallyDesired: true,
+        localHost: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(
+        supervisor.state,
+        (state) => state.phase === "backoff" && state.attempt === 1,
+      );
+      for (let attempt = 2; attempt <= 12; attempt += 1) {
+        yield* TestClock.adjust(2_000);
+        yield* eventuallyState(
+          supervisor.state,
+          (state) => state.phase === "backoff" && state.attempt === attempt,
+        );
+      }
+      expect(yield* Ref.get(harness.prepareCount)).toBe(12);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("retries a local host that rejected its credential instead of blocking", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        prepare: (attempt) =>
+          attempt === 1 ? Effect.fail(blocked()) : Effect.succeed(PREPARED_CONNECTION),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(LOCAL_ENTRY, {
+        initiallyDesired: true,
+        localHost: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "backoff");
+      yield* TestClock.adjust(2_000);
+      yield* awaitState(supervisor.state, (state) => state.phase === "connected");
+      expect(yield* Ref.get(harness.prepareCount)).toBe(2);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("keeps an incompatible local host blocked", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        prepare: () =>
+          Effect.fail(new ConnectionBlockedError({ reason: "unsupported", detail: "Too old." })),
+      });
+      const supervisor = yield* EnvironmentSupervisor.make(LOCAL_ENTRY, {
+        initiallyDesired: true,
+        localHost: true,
+      }).pipe(Effect.provide(harness.dependencies));
+
+      yield* awaitState(supervisor.state, (state) => state.phase === "blocked");
+      yield* TestClock.adjust("1 minute");
+      expect(yield* Ref.get(harness.prepareCount)).toBe(1);
     }).pipe(Effect.provide(TestClock.layer())),
   );
 

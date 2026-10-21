@@ -102,6 +102,15 @@ export function connectionRouteKind(route: ConnectionRoute): ConnectionRouteKind
   }
 }
 
+/**
+ * The environment runs on this machine (the desktop's own backends, or a server
+ * opened at localhost): its main route is loopback, which keeps working when the
+ * OS reports the network offline.
+ */
+export function isLocalHostEntry(entry: ConnectionCatalogEntry): boolean {
+  return connectionRouteKind({ target: entry.target, profile: entry.profile }) === "loopback";
+}
+
 const ROUTE_KIND_RANK: Record<ConnectionRouteKind, number> = {
   loopback: 0,
   lan: 1,

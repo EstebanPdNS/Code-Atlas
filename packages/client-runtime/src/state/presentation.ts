@@ -18,7 +18,7 @@ import {
   type EnvironmentServerConfig,
 } from "../connection/presentation.ts";
 import { type EnvironmentCatalogState, enabledEnvironmentIds } from "./connections.ts";
-import { hasRelayRoute } from "../connection/routes.ts";
+import { hasRelayRoute, isLocalHostEntry } from "../connection/routes.ts";
 
 function mapsEqual<K, V>(left: ReadonlyMap<K, V>, right: ReadonlyMap<K, V>): boolean {
   if (left.size !== right.size) {
@@ -84,7 +84,7 @@ export function createEnvironmentPresentationAtoms<E>(input: {
       const previous = Option.getOrNull(get.self<EnvironmentPresentation | null>());
       const connection: EnvironmentConnectionPresentation =
         entry.unsupportedReason === undefined
-          ? presentEnvironmentConnection(state)
+          ? presentEnvironmentConnection(state, { localHost: isLocalHostEntry(entry) })
           : { phase: "unsupported", error: entry.unsupportedReason, traceId: null };
       const next = {
         entry,

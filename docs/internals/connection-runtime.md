@@ -15,13 +15,18 @@ five minutes, that resets only after a connection stays up. Without jitter, ever
 client of a restarted server reconnects in the same second; with a short cap, a
 client that can never connect retries all day. Offline states and authentication
 failures wait for a wakeup instead of spending attempts on unchanged conditions.
+A host on this machine (a loopback main route) is the exception: loopback works
+while the OS reports offline, a restarted backend or a refreshed desktop token
+fixes itself within seconds, and retries cost nothing, so it never parks, retries
+at most two seconds apart, and always presents as reconnecting. Only an
+incompatible version stays blocked.
 
 Foregrounding, an explicit retry, and an offline report probe the established
 session, and only a failed probe reconnects. Offline reports are often wrong, for
 example for a loopback server. A long mobile background suspension is the one
 exception: it replaces the session at once, because the OS can kill a socket
 without reporting closure, and a probe would hold a dead socket in "Resuming"
-until it times out. That fresh attempt runs even while the network reports
+until it times out. The desktop treats waking from system sleep the same way. That fresh attempt runs even while the network reports
 offline. Foregrounding also wakes a pending retry immediately and
 leaves an ordinary in-flight attempt alone.
 

@@ -25,6 +25,7 @@ import {
 import * as ConnectionCredentialStore from "./credentialStore.ts";
 import {
   BearerConnectionTarget,
+  ConnectionBlockedError,
   ConnectionTransientError,
   PrimaryConnectionTarget,
   RelayConnectionTarget,
@@ -79,6 +80,7 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
   readonly authorizeBearer?: RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]["authorizeBearer"];
   readonly authorizeDpop?: RemoteEnvironmentAuthorization.RemoteEnvironmentAuthorization["Service"]["authorizeDpop"];
   readonly primaryBearerToken?: string;
+  readonly invalidatePrimaryBearerToken?: Effect.Effect<void>;
   readonly prepareSsh?: ClientCapabilities.SshEnvironmentGateway["Service"]["prepare"];
   readonly descriptorProtocolVersion?: number | null | undefined;
 }) => {
@@ -170,6 +172,9 @@ const makeDependencies = Effect.fn("TestConnectionResolver.makeDependencies")((o
       ClientCapabilities.PrimaryEnvironmentAuth,
       ClientCapabilities.PrimaryEnvironmentAuth.of({
         bearerToken: Effect.succeed(Option.fromNullishOr(options?.primaryBearerToken)),
+        ...(options?.invalidatePrimaryBearerToken === undefined
+          ? {}
+          : { invalidateBearerToken: options.invalidatePrimaryBearerToken }),
       }),
     ),
     Layer.succeed(
@@ -283,6 +288,36 @@ describe("ConnectionResolver", () => {
         target,
       });
       expect(yield* Ref.get(bearerInputs)).toEqual([{ token: "desktop-bearer", method: "direct" }]);
+    }),
+  );
+
+  it.effect("drops the desktop primary token only when the host rejects it", () =>
+    Effect.gen(function* () {
+      const invalidations = yield* Ref.make(0);
+      const failures = [
+        new ConnectionTransientError({ reason: "network", detail: "Server is restarting." }),
+        new ConnectionBlockedError({ reason: "authentication", detail: "Token rejected." }),
+      ];
+      const layerBroker = yield* makeDependencies({
+        primaryBearerToken: "stale-bearer",
+        invalidatePrimaryBearerToken: Ref.update(invalidations, (count) => count + 1),
+        authorizeBearer: () => Effect.fail(failures.shift()!),
+      });
+      const broker = yield* ConnectionResolver.ConnectionResolver.pipe(Effect.provide(layerBroker));
+      const entry = catalogEntry(
+        new PrimaryConnectionTarget({
+          environmentId: ENVIRONMENT_ID,
+          label: "Primary",
+          httpBaseUrl: "http://127.0.0.1:3777",
+          wsBaseUrl: "ws://127.0.0.1:3777",
+        }),
+      );
+
+      yield* Effect.flip(broker.prepare(entry));
+      expect(yield* Ref.get(invalidations)).toBe(0);
+
+      yield* Effect.flip(broker.prepare(entry));
+      expect(yield* Ref.get(invalidations)).toBe(1);
     }),
   );
 

@@ -86,6 +86,64 @@ describe("DesktopLocalEnvironmentAuth", () => {
     }),
   );
 
+  it.effect("replaces a rejected token on refresh and keeps the new one", () =>
+    Effect.gen(function* () {
+      const requestCount = yield* Ref.make(0);
+      const layerHttpClient = Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Ref.updateAndGet(requestCount, (count) => count + 1).pipe(
+            Effect.map((count) =>
+              HttpClientResponse.fromWeb(
+                request,
+                new Response(
+                  JSON.stringify({
+                    access_token: `desktop-bearer-token-${count}`,
+                    issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+                    token_type: "Bearer",
+                    expires_in: 3600,
+                    scope: "orchestration:read",
+                  }),
+                  { status: 200, headers: { "content-type": "application/json" } },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      const layerPool = Layer.succeed(DesktopBackendPool.DesktopBackendPool, {
+        list: Effect.succeed([
+          {
+            id: PRIMARY_LOCAL_ENVIRONMENT_ID,
+            label: Effect.succeed("Windows"),
+            currentConfig: Effect.succeedSome(config),
+          },
+        ]),
+      } as unknown as DesktopBackendPool.DesktopBackendPool["Service"]);
+
+      const tokens = yield* Effect.gen(function* () {
+        const auth = yield* DesktopLocalEnvironmentAuth.DesktopLocalEnvironmentAuth;
+        return [
+          yield* auth.getBearerToken,
+          yield* auth.refreshBearerToken,
+          yield* auth.getBearerToken,
+        ];
+      }).pipe(
+        Effect.provide(
+          DesktopLocalEnvironmentAuth.layer.pipe(
+            Layer.provide(Layer.mergeAll(layerPool, layerHttpClient)),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(tokens, [
+        "desktop-bearer-token-1",
+        "desktop-bearer-token-2",
+        "desktop-bearer-token-2",
+      ]);
+    }),
+  );
+
   it.effect(
     "exchanges the current window's token when the backend was launched with a secret",
     () =>

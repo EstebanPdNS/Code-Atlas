@@ -40,6 +40,9 @@ import {
 
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 300_000;
+// A host on this machine comes back within seconds of a restart or wake, and
+// retrying it costs nothing off the network.
+const LOCAL_HOST_RETRY_MAX_DELAY_MS = 2_000;
 // A cold server with a large database can take longer than 15 seconds to
 // answer, and that is not a reason to drop a working connection.
 const CONNECTION_ESTABLISHMENT_TIMEOUT = "15 seconds";
@@ -118,14 +121,24 @@ function exitUnlessInterrupted<A, E, R>(
 
 export interface EnvironmentSupervisorOptions {
   readonly initiallyDesired?: boolean;
+  /**
+   * The host runs on this machine. Loopback keeps working while the OS reports
+   * offline, and a rejected credential or a restarting server recovers on its
+   * own, so the connection never parks: it retries every few seconds.
+   */
+  readonly localHost?: boolean;
   readonly learnRoutes?: (input: {
     readonly activeRoute: ConnectionRoute;
     readonly reported: ReadonlyArray<ReportedEndpoint>;
   }) => Effect.Effect<Option.Option<ConnectionCatalogEntry>>;
 }
 
-export function retryDelayMs(failureCount: number, random: number): number {
-  const ceiling = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** (failureCount + 1));
+export function retryDelayMs(
+  failureCount: number,
+  random: number,
+  maxDelayMs = RETRY_MAX_DELAY_MS,
+): number {
+  const ceiling = Math.min(maxDelayMs, RETRY_BASE_DELAY_MS * 2 ** (failureCount + 1));
   return Math.round(ceiling / 2 + (ceiling / 2) * random);
 }
 
@@ -244,6 +257,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   | ConnectionWakeups.ConnectionWakeups
 > {
   const target = entry.target;
+  const localHost = options?.localHost === true;
   const usesRelay = connectionRoutes(entry).some(
     (route) => route.target._tag === "RelayConnectionTarget",
   );
@@ -266,7 +280,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
   const state = yield* SubscriptionRef.make<SupervisorConnectionState>(
     !initialIntent.desired
       ? availableState(initialIntent, 0)
-      : initialIntent.network === "offline"
+      : initialIntent.network === "offline" && !localHost
         ? offlineState(initialIntent, 0, 0, null)
         : connectingState(initialIntent, 0, 1, null),
   );
@@ -513,7 +527,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         case "RetryRequested":
           return false;
         case "NetworkChanged":
-          if (next.network === "offline") {
+          if (next.network === "offline" && !localHost) {
             return false;
           }
           break;
@@ -897,7 +911,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
         yield* waitForSignal;
         continue;
       }
-      if (currentIntent.network === "offline" && !replacing) {
+      if (currentIntent.network === "offline" && !replacing && !localHost) {
         yield* clearLease;
         yield* setState(offlineState(currentIntent, generation, failureCount + 1, latestFailure));
         const applicationActivated = yield* waitForSignal;
@@ -910,7 +924,7 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       const attempt = failureCount + 1;
       const nextGeneration = generation + 1;
       const outcome: AttemptOutcome = yield* Effect.scoped(
-        runAttempt(attempt, nextGeneration, latestFailure, pendingRetry, replacing),
+        runAttempt(attempt, nextGeneration, latestFailure, pendingRetry, replacing || localHost),
       );
       replacing = false;
       const failedProbe = yield* Ref.getAndSet(probeUnanswered, false);
@@ -938,7 +952,11 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       if (!outcome.established) {
         latestFailure = error;
       }
-      if (error._tag === "ConnectionBlockedError") {
+      // An incompatible local host stays blocked: retrying cannot change its version.
+      if (
+        error._tag === "ConnectionBlockedError" &&
+        (!localHost || error.reason === "unsupported")
+      ) {
         const blockedIntent = yield* Ref.get(intent);
         yield* setState({
           desired: blockedIntent.desired,
@@ -964,7 +982,11 @@ export const make = Effect.fn("EnvironmentSupervisor.make")(function* (
       }
 
       failureCount += 1;
-      const delayMs = retryDelayMs(failureCount - 1, yield* Random.next);
+      const delayMs = retryDelayMs(
+        failureCount - 1,
+        yield* Random.next,
+        localHost ? LOCAL_HOST_RETRY_MAX_DELAY_MS : RETRY_MAX_DELAY_MS,
+      );
       pendingRetry = Option.map(attemptSpan, (previousAttempt) => ({
         previousAttempt,
         failureCount,

@@ -12,6 +12,7 @@ import {
 } from "@t3tools/contracts";
 import {
   AVAILABLE_CONNECTION_STATE,
+  isLocalHostEntry,
   presentEnvironmentConnection,
   type EnvironmentPresentation,
 } from "@t3tools/client-runtime/connection";
@@ -152,7 +153,7 @@ const environmentConnectionsAtom = Atom.make((get) => {
     environments.set(environmentId, {
       connection:
         entry.unsupportedReason === undefined
-          ? presentEnvironmentConnection(state)
+          ? presentEnvironmentConnection(state, { localHost: isLocalHostEntry(entry) })
           : { phase: "unsupported", error: entry.unsupportedReason, traceId: null },
       serverConfig: get(serverEnvironment.configValueAtom(environmentId)),
     });
