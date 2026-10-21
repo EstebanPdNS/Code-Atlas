@@ -1,6 +1,7 @@
-import { CornerDownLeftIcon, MicIcon } from "lucide-react";
+import { MicIcon } from "lucide-react";
 import { useRef, useState, type PointerEvent } from "react";
 
+import { AtlasReturnIcon } from "~/atlas/brand/atlasIcons";
 import {
   readPreferredInputDeviceId,
   useInputDevices,
@@ -74,7 +75,8 @@ export function ComposerDictationControl(props: {
             onClick={props.onStopAndSend ?? dictation.stop}
             aria-label={props.onStopAndSend ? "Send dictation" : "Insert dictation"}
           >
-            <CornerDownLeftIcon />
+            {/* Code Atlas: the composer's ⏎, drawn like the Claude app's. */}
+            <AtlasReturnIcon />
           </Button>
           <button
             type="button"

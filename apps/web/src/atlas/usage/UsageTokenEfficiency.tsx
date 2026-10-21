@@ -93,6 +93,7 @@ export function UsageTokenEfficiency() {
               <span aria-hidden className="h-2 overflow-hidden rounded-full bg-foreground/10">
                 {value !== null && value > 0 && peak > 0 ? (
                   <span
+                    data-atlas-bar
                     className="block h-full rounded-full"
                     style={{
                       width: `max(0.5rem, ${(value / peak) * 100}%)`,

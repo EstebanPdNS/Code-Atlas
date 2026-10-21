@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 
+import { AtlasFold } from "~/atlas/brand/AtlasFold";
 import { ChangedFilesTree } from "~/components/chat/ChangedFilesTree";
 import type { ComposerTaskStep } from "~/components/chat/ComposerTasksBadge";
 import { cn } from "~/lib/utils";
@@ -57,6 +58,17 @@ function AtlasPlanStepIcon(props: { readonly status: ComposerTaskStep["status"] 
 function AtlasPlanCard(props: { readonly steps: readonly ComposerTaskStep[] }) {
   const foldable = props.steps.length > ATLAS_PLAN_FOCUS_LIMIT;
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  // A new plan (new step texts) starts folded or unfolded afresh. The card
+  // stays mounted, so a step the agent adds slides in and the rest stay put.
+  const planText = props.steps.map((step) => step.step).join("\n");
+  const [shownPlanText, setShownPlanText] = useState(planText);
+  if (planText !== shownPlanText) {
+    setShownPlanText(planText);
+    setUserExpanded(null);
+  }
+  // Set once the card's entrance ends: from then on new steps slide in and
+  // completed steps pop their check (see [data-settled] in atlas.css).
+  const [settled, setSettled] = useState(false);
   const expanded = !foldable || (userExpanded ?? props.steps.length <= ATLAS_PLAN_FOLD_THRESHOLD);
   const focus = new Set(atlasPlanFocus(props.steps));
   const completed = props.steps.filter((step) => step.status === "completed").length;
@@ -65,7 +77,12 @@ function AtlasPlanCard(props: { readonly steps: readonly ComposerTaskStep[] }) {
     <section
       aria-label="Plan"
       data-atlas-plan-card
+      data-atlas-rise
+      data-settled={settled ? "" : undefined}
       data-expanded={expanded ? "" : undefined}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget) setSettled(true);
+      }}
       className="rounded-xl border border-border bg-card text-sm"
     >
       {foldable ? (
@@ -102,8 +119,9 @@ function AtlasPlanCard(props: { readonly steps: readonly ComposerTaskStep[] }) {
                 <div className="flex items-start gap-2.5 py-0.75">
                   <AtlasPlanStepIcon status={step.status} />
                   <span
+                    data-atlas-plan-text
                     className={cn(
-                      "min-w-0 wrap-anywhere transition-colors duration-300",
+                      "min-w-0 wrap-anywhere",
                       step.status === "completed" ? "text-muted-foreground" : "text-foreground",
                     )}
                   >
@@ -138,7 +156,7 @@ function AtlasLines(props: { readonly lines: AtlasLineStats | null }) {
   );
 }
 
-/** "• • 1m 8s · 37.0k tokens · +40 −12 · Thinking" right above the composer. */
+/** "• • 1m 8s · 37.0k tokens · +40 −12 · Thinking" at the top of the progress stack. */
 function AtlasStatusLine(props: {
   readonly startedAt: string | null;
   readonly tokens: number | null;
@@ -158,6 +176,7 @@ function AtlasStatusLine(props: {
   return (
     <p
       data-atlas-status-line
+      data-atlas-rise
       className="flex items-center gap-2.5 px-1 text-sm text-muted-foreground"
     >
       <span aria-hidden data-atlas-status-dots className="flex items-center gap-1">
@@ -188,26 +207,16 @@ export interface AtlasRunChangedFiles {
 }
 
 /**
- * After a run, like Codex: "3 files changed +40 −12", which unfolds to the
- * files with their own counts (the timeline's changed-files tree).
+ * After a run, like Codex: "3 files changed +40 −12" in the status line's
+ * place, which unfolds below to the files with their own counts (the
+ * timeline's changed-files tree).
  */
 function AtlasChangedFilesRow(
   props: AtlasRunChangedFiles & { readonly lines: AtlasLineStats | null },
 ) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <section aria-label="Changed files" data-atlas-changed-files className="flex flex-col gap-2">
-      {expanded ? (
-        <div className="max-h-[min(40vh,22rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card py-1 text-sm">
-          <ChangedFilesTree
-            runId={props.runId}
-            files={props.files}
-            allDirectoriesExpanded
-            resolvedTheme={props.resolvedTheme}
-            onOpenTurnDiff={props.onOpenTurnDiff}
-          />
-        </div>
-      ) : null}
+    <section aria-label="Changed files" data-atlas-changed-files data-atlas-rise>
       <div
         data-atlas-status-line
         className="flex items-center gap-2 px-1 text-sm text-muted-foreground"
@@ -235,14 +244,25 @@ function AtlasChangedFilesRow(
           Review
         </button>
       </div>
+      <AtlasFold open={expanded}>
+        <div className="mt-2 max-h-[min(40vh,22rem)] overflow-y-auto overscroll-contain rounded-xl border border-border bg-card py-1 text-sm">
+          <ChangedFilesTree
+            runId={props.runId}
+            files={props.files}
+            allDirectoriesExpanded
+            resolvedTheme={props.resolvedTheme}
+            onOpenTurnDiff={props.onOpenTurnDiff}
+          />
+        </div>
+      </AtlasFold>
     </section>
   );
 }
 
 /**
- * Code Atlas "Claude Code" progress style, shown above the composer: the plan
- * card, then the goal, then the status line attached to the composer (after
- * the run, the files it changed).
+ * Code Atlas "Claude Code" progress style, shown above the composer: the
+ * status line (after the run, the files it changed) on top, then the plan
+ * card, then the goal right on the composer.
  */
 export function AtlasClaudeProgress(props: {
   readonly working: boolean;
@@ -260,14 +280,6 @@ export function AtlasClaudeProgress(props: {
   if (!showPlan && !props.working && !showChangedFiles && props.goal === null) return null;
   return (
     <div data-atlas-claude-progress className="mb-3 flex flex-col gap-3">
-      {showPlan ? (
-        // A new plan (new step texts) starts folded or unfolded afresh.
-        <AtlasPlanCard
-          key={props.steps!.map((step) => step.step).join("\n")}
-          steps={props.steps!}
-        />
-      ) : null}
-      {props.goal}
       {props.working ? (
         <AtlasStatusLine
           startedAt={props.startedAt}
@@ -282,6 +294,8 @@ export function AtlasClaudeProgress(props: {
           lines={props.lines}
         />
       ) : null}
+      {showPlan ? <AtlasPlanCard steps={props.steps!} /> : null}
+      {props.goal}
     </div>
   );
 }

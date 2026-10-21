@@ -23,6 +23,7 @@ import { cn } from "~/lib/utils";
 import { useKnownTerminalSessions } from "~/state/terminalSessions";
 
 import { AtlasActivityDots } from "../brand/ActivityDots";
+import { AtlasFold } from "../brand/AtlasFold";
 import { atlasProviderLabel, useAtlasAgentProviders } from "../brand/agentProviders";
 import { atlasProviderFill } from "../brand/providerColors";
 import {
@@ -83,7 +84,7 @@ function ContextMemoryFiles(props: {
         <span className="flex-1 text-left">Memory files</span>
         <span className="tabular-nums">{props.files.length}</span>
       </button>
-      {open ? (
+      <AtlasFold open={open}>
         <ul className="mt-1.5 grid gap-1 ps-5">
           {props.files.map((file) => (
             <li key={file.path} className="flex items-center gap-2 text-muted-foreground">
@@ -99,7 +100,7 @@ function ContextMemoryFiles(props: {
             </li>
           ))}
         </ul>
-      ) : null}
+      </AtlasFold>
     </div>
   );
 }
@@ -226,6 +227,7 @@ export function AtlasContextSection({
           aria-label={open ? "Hide context breakdown" : "Show context breakdown"}
           aria-expanded={open}
           onClick={toggleOpen}
+          data-atlas-press
         >
           <ChevronRightIcon aria-hidden data-atlas-disclosure data-open={open ? "" : undefined} />
         </Button>
@@ -254,46 +256,44 @@ export function AtlasContextSection({
             />
           ))}
         </div>
-        {open ? (
-          <>
-            <dl className="mt-3 grid grid-cols-1 gap-1.5 text-xs">
-              {rows.map((row) => {
-                const list = row.kind === "used" ? rowLists[row.name] : undefined;
-                return (
-                  <div
-                    key={row.name}
-                    className={cn(
-                      "flex items-center gap-2",
-                      row.kind === "deferred" && "mt-1 text-muted-foreground",
+        <AtlasFold open={open}>
+          <dl className="mt-3 grid grid-cols-1 gap-1.5 text-xs">
+            {rows.map((row) => {
+              const list = row.kind === "used" ? rowLists[row.name] : undefined;
+              return (
+                <div
+                  key={row.name}
+                  className={cn(
+                    "flex items-center gap-2",
+                    row.kind === "deferred" && "mt-1 text-muted-foreground",
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn("size-2.5 shrink-0 rounded-xs", row.tone)}
+                    style={row.color === null ? undefined : { background: row.color }}
+                  />
+                  <dt className="min-w-0 flex-1 truncate text-muted-foreground">
+                    {list !== undefined && list.length > 0 ? (
+                      <ContextRowList name={row.name} items={list} />
+                    ) : (
+                      row.name
                     )}
-                  >
-                    <span
-                      aria-hidden
-                      className={cn("size-2.5 shrink-0 rounded-xs", row.tone)}
-                      style={row.color === null ? undefined : { background: row.color }}
-                    />
-                    <dt className="min-w-0 flex-1 truncate text-muted-foreground">
-                      {list !== undefined && list.length > 0 ? (
-                        <ContextRowList name={row.name} items={list} />
-                      ) : (
-                        row.name
-                      )}
-                    </dt>
-                    <dd className="w-14 text-right text-muted-foreground tabular-nums">
-                      {formatContextRowTokens(row)}
-                    </dd>
-                    <dd className="w-12 text-right tabular-nums">
-                      {row.kind === "deferred" ? "—" : formatContextShare(row.tokens, maxTokens)}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-            {contextWindow.contextMemoryFiles && contextWindow.contextMemoryFiles.length > 0 ? (
-              <ContextMemoryFiles files={contextWindow.contextMemoryFiles} estimated={estimated} />
-            ) : null}
-          </>
-        ) : null}
+                  </dt>
+                  <dd className="w-14 text-right text-muted-foreground tabular-nums">
+                    {formatContextRowTokens(row)}
+                  </dd>
+                  <dd className="w-12 text-right tabular-nums">
+                    {row.kind === "deferred" ? "—" : formatContextShare(row.tokens, maxTokens)}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+          {contextWindow.contextMemoryFiles && contextWindow.contextMemoryFiles.length > 0 ? (
+            <ContextMemoryFiles files={contextWindow.contextMemoryFiles} estimated={estimated} />
+          ) : null}
+        </AtlasFold>
         {untilCompact !== null || onCompactContext !== undefined ? (
           <div className="mt-3 flex items-center justify-between gap-2 text-xs text-muted-foreground tabular-nums">
             <span>

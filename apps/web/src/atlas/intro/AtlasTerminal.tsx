@@ -413,6 +413,7 @@ export function AtlasTerminal({ meta }: { readonly meta: AtlasTerminalMeta }) {
             variant="ghost-muted"
             aria-label={soundEnabled ? "Mute startup sound" : "Enable startup sound"}
             aria-pressed={soundEnabled}
+            data-atlas-press
             onClick={() => setSoundEnabled(!soundEnabled)}
           >
             {soundEnabled ? <Volume2Icon /> : <VolumeXIcon />}
@@ -422,6 +423,7 @@ export function AtlasTerminal({ meta }: { readonly meta: AtlasTerminalMeta }) {
             variant="ghost-muted"
             aria-label="Replay the Code Atlas intro"
             disabled={status !== "done"}
+            data-atlas-press
             onClick={replayAtlasIntro}
           >
             <RotateCwIcon />

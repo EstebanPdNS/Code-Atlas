@@ -21,6 +21,7 @@ export function FavoriteSiteButton(props: { readonly site: BrowserSiteInput }) {
             aria-label={label}
             aria-pressed={favorite ? "true" : "false"}
             type="button"
+            data-atlas-press
           />
         }
       >

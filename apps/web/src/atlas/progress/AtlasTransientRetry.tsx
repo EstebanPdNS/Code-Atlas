@@ -53,7 +53,7 @@ function AtlasTransientRetryCountdown(props: {
     void stop({ environmentId: threadRef.environmentId, input: { threadId: threadRef.threadId } });
   };
   return (
-    <div className="ms-7 flex flex-wrap items-center gap-2 pb-1">
+    <div data-atlas-rise className="ms-7 flex flex-wrap items-center gap-2 pb-1">
       <span className="text-muted-foreground text-xs tabular-nums" aria-live="polite">
         {transientRetryLabel(plan, nowMs)}
       </span>
