@@ -187,6 +187,8 @@ import * as IdleCompactionService from "./orchestration-v2/IdleCompactionService
 import * as ContextOverflowRecoveryService from "./orchestration-v2/ContextOverflowRecoveryService.ts";
 // Code Atlas: retries runs that failed because the provider was briefly unavailable.
 import * as TransientFailureRetryService from "./orchestration-v2/TransientFailureRetryService.ts";
+// Code Atlas: messages sent while a thread compacts reach the agent when compaction ends.
+import * as CompactionFollowUpService from "./orchestration-v2/CompactionFollowUpService.ts";
 import * as ThreadPullRequestService from "./orchestration-v2/ThreadPullRequestService.ts";
 import * as RunFinalizationService from "./orchestration-v2/RunFinalizationService.ts";
 import * as EventStoreV2 from "./orchestration-v2/EventStore.ts";
@@ -548,6 +550,11 @@ const layerTransientFailureRetryWorker = Layer.effectDiscard(
   TransientFailureRetryService.make.pipe(Effect.flatMap((service) => service.start())),
 ).pipe(Layer.provide(ProjectionStoreV2.layer));
 
+// Code Atlas: messages sent while a thread compacts reach the agent when compaction ends.
+const layerCompactionFollowUpWorker = Layer.effectDiscard(
+  CompactionFollowUpService.make.pipe(Effect.flatMap((service) => service.start())),
+).pipe(Layer.provide(ProjectionStoreV2.layer));
+
 const layerThreadPullRequestWorker = Layer.effectDiscard(
   ThreadPullRequestService.make.pipe(Effect.flatMap((service) => service.start())),
 ).pipe(Layer.provide(layerPullRequestService));
@@ -591,6 +598,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   layerIdleCompactionWorker,
   layerContextOverflowRecoveryWorker,
   layerTransientFailureRetryWorker,
+  layerCompactionFollowUpWorker,
   StorageCleanup.layer.pipe(Layer.provide(ProjectionStoreV2.layer)),
   DatabaseStorage.layer.pipe(
     Layer.provide(ProjectionMaintenance.layer),

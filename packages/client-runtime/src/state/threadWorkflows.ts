@@ -106,6 +106,13 @@ export function threadSupportsProviderHandoff(projection: Projection | null | un
   );
 }
 
+function isMaintenanceCommandMessage(message: Pick<Message, "text" | "attachments">): boolean {
+  return (
+    (message.attachments?.length ?? 0) === 0 &&
+    ["/compact", "/logout"].includes(message.text.trim().toLowerCase())
+  );
+}
+
 export function getUserQueuedThreadRuns(
   projection: Pick<Projection, "runs" | "messages">,
 ): ReadonlyArray<Run> {
@@ -126,9 +133,14 @@ export function deriveThreadQueueWorkflowState(projection: Projection): ThreadQu
   const activeRun = resolveActiveThreadRun(projection);
   const session = resolveThreadProviderSession(projection);
   const capabilities = session?.capabilities.turns;
+  // Code Atlas: the server refuses to steer a /compact or /logout turn, so it offers no Steer.
+  const activeMessage = projection.messages.find(
+    (message) => message.id === activeRun?.userMessageId,
+  );
   const hasSteerableProviderTurn =
     activeRun?.status === "running" &&
     activeRun.activeAttemptId !== null &&
+    !(activeMessage !== undefined && isMaintenanceCommandMessage(activeMessage)) &&
     projection.providerTurns.some(
       (turn) => turn.runAttemptId === activeRun.activeAttemptId && turn.status === "running",
     );

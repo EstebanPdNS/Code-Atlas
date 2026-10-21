@@ -138,6 +138,45 @@ describe("thread workflows", () => {
     expect(state.canPromoteToSteer).toBe(true);
   });
 
+  it("offers no Steer while a /compact or /logout turn runs", () => {
+    for (const [text, canPromote] of [
+      ["/compact", false],
+      [" /LOGOUT ", false],
+      ["/compact the parser", true],
+    ] as const) {
+      const state = deriveThreadQueueWorkflowState({
+        thread: { id: "thread", activeProviderThreadId: "provider-thread" },
+        runs: [
+          {
+            id: "active",
+            status: "running",
+            userMessageId: "message-active",
+            providerThreadId: "provider-thread",
+            activeAttemptId: "attempt-active",
+            ordinal: 1,
+          },
+          { id: "queued", status: "queued", userMessageId: "message-queued", ordinal: 2 },
+        ],
+        messages: [
+          { id: "message-active", text, attachments: [] },
+          { id: "message-queued", text: "Sent while compacting", attachments: [] },
+        ],
+        providerTurns: [{ runAttemptId: "attempt-active", status: "running" }],
+        providerThreads: [
+          { id: "provider-thread", appThreadId: "thread", providerSessionId: "provider-session" },
+        ],
+        providerSessions: [
+          {
+            id: "provider-session",
+            status: "running",
+            capabilities: capabilities({ queued: true, steer: true }),
+          },
+        ],
+      } as never);
+      expect(state.canPromoteToSteer).toBe(canPromote);
+    }
+  });
+
   it("keeps held messages visible and clears the hold when they leave the queue", () => {
     for (const status of ["queued", "cancelled", "starting"] as const) {
       const state = deriveThreadQueueWorkflowState({

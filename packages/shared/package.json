@@ -23,6 +23,10 @@
       "types": "./src/transientFailureRetry.ts",
       "import": "./src/transientFailureRetry.ts"
     },
+    "./compactionFollowUps": {
+      "types": "./src/compactionFollowUps.ts",
+      "import": "./src/compactionFollowUps.ts"
+    },
     "./delimitedPreview": {
       "types": "./src/delimitedPreview.ts",
       "import": "./src/delimitedPreview.ts"
