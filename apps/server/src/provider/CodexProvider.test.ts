@@ -213,15 +213,24 @@ const startProbe = Effect.fn("startProbe")(function* (hang: ReadonlyArray<string
   const output = yield* Queue.unbounded<Uint8Array>();
   const requests = new Map(
     yield* Effect.forEach(
-      ["account/read", "skills/list", "model/list/1", "model/list/2", "account/rateLimits/read"],
+      [
+        "account/read",
+        "account/read/2",
+        "skills/list",
+        "model/list/1",
+        "model/list/2",
+        "account/rateLimits/read",
+      ],
       (method) =>
         Deferred.make<string | number>().pipe(Effect.map((signal) => [method, signal] as const)),
     ),
   );
   const stopped = yield* Deferred.make<void>();
-  const reply = (id: string | number, result: unknown) =>
-    Queue.offer(output, new TextEncoder().encode(`${JSON.stringify({ id, result })}\n`));
+  const send = (message: unknown) =>
+    Queue.offer(output, new TextEncoder().encode(`${JSON.stringify(message)}\n`));
+  const reply = (id: string | number, result: unknown) => send({ id, result });
   let modelRequests = 0;
+  let accountRequests = 0;
   const spawner = ChildProcessSpawner.make(() =>
     Effect.gen(function* () {
       yield* Effect.addFinalizer(() => Deferred.succeed(stopped, undefined));
@@ -238,7 +247,12 @@ const startProbe = Effect.fn("startProbe")(function* (hang: ReadonlyArray<string
               Effect.gen(function* () {
                 const { id, method } = decodeRequest(line);
                 if (id === undefined) return;
-                const request = method === "model/list" ? `${method}/${++modelRequests}` : method;
+                const request =
+                  method === "model/list"
+                    ? `${method}/${++modelRequests}`
+                    : method === "account/read" && ++accountRequests > 1
+                      ? `${method}/${accountRequests}`
+                      : method;
                 const signal = requests.get(request);
                 if (signal) yield* Deferred.succeed(signal, id);
                 if (hang.includes(request) || method === "account/read") return;
@@ -292,6 +306,14 @@ const startProbe = Effect.fn("startProbe")(function* (hang: ReadonlyArray<string
     fiber,
     requested,
     authenticate: requested("account/read").pipe(Effect.flatMap((id) => reply(id, account))),
+    failRouting: (request: string) =>
+      requested(request).pipe(
+        Effect.flatMap((id) =>
+          send({ id, error: { code: -32603, message: "workspace routing discovery timed out" } }),
+        ),
+      ),
+    answer: (request: string, result: unknown) =>
+      requested(request).pipe(Effect.flatMap((id) => reply(id, result))),
   };
 });
 
@@ -396,3 +418,35 @@ it.layer(NodeServices.layer)("Codex probe budget", (it) => {
     }).pipe(Effect.scoped),
   );
 });
+
+// Live clock: the retry delay starts only after the error crosses the fake
+// process pipe, so the test awaits the second request instead of moving time.
+it.live("warns without failing when workspace routing discovery keeps timing out", () =>
+  Effect.gen(function* () {
+    const probe = yield* startProbe([]);
+    yield* probe.failRouting("account/read");
+    yield* probe.failRouting("account/read/2");
+    const provider = yield* Fiber.join(probe.fiber);
+    assert.strictEqual(provider.status, "warning");
+    assert.strictEqual(provider.auth.status, "unknown");
+    assert.strictEqual(
+      provider.message,
+      "Codex couldn't reach ChatGPT workspace routing; it will retry.",
+    );
+    assert.deepStrictEqual(
+      provider.models.map((model) => model.slug),
+      ["gpt-test", "custom-model"],
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.live("recovers the account when the workspace routing retry succeeds", () =>
+  Effect.gen(function* () {
+    const probe = yield* startProbe([]);
+    yield* probe.failRouting("account/read");
+    yield* probe.answer("account/read/2", account);
+    const provider = yield* Fiber.join(probe.fiber);
+    assert.strictEqual(provider.status, "ready");
+    assert.strictEqual(provider.auth.status, "authenticated");
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
