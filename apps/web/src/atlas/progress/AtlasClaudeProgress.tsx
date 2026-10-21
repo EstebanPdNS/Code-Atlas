@@ -11,6 +11,7 @@ import type { ComposerTaskStep } from "~/components/chat/ComposerTasksBadge";
 import { cn } from "~/lib/utils";
 
 import {
+  ATLAS_PLAN_FOCUS_LIMIT,
   ATLAS_PLAN_FOLD_THRESHOLD,
   atlasPlanFocus,
   formatAtlasElapsed,
@@ -47,7 +48,7 @@ function AtlasPlanStepIcon(props: { readonly status: ComposerTaskStep["status"] 
  * unfolded it scrolls inside the card instead of covering the conversation.
  */
 function AtlasPlanCard(props: { readonly steps: readonly ComposerTaskStep[] }) {
-  const foldable = props.steps.length > 3;
+  const foldable = props.steps.length > ATLAS_PLAN_FOCUS_LIMIT;
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
   const expanded = !foldable || (userExpanded ?? props.steps.length <= ATLAS_PLAN_FOLD_THRESHOLD);
   const focus = new Set(atlasPlanFocus(props.steps));
@@ -123,14 +124,12 @@ function AtlasStatusLine(props: {
     return () => window.clearInterval(timer);
   }, []);
   const started = props.startedAt === null ? Number.NaN : Date.parse(props.startedAt);
-  const parts = [
+  const metrics = [
     Number.isFinite(started) ? formatAtlasElapsed(now - started) : null,
     props.tokens !== null && props.tokens > 0 ? formatAtlasTokens(props.tokens) : null,
-    props.activity,
   ].filter((part): part is string => part !== null);
   return (
     <p
-      role="status"
       data-atlas-status-line
       className="flex items-center gap-2.5 px-1 text-sm text-muted-foreground"
     >
@@ -139,7 +138,11 @@ function AtlasStatusLine(props: {
         <span />
         <span />
       </span>
-      <span className="tabular-nums">{parts.join(" · ")}</span>
+      <span className="tabular-nums">
+        {metrics.length > 0 ? `${metrics.join(" · ")} · ` : null}
+        {/* Only the activity is live: a per-second clock would be read out every second. */}
+        <span role="status">{props.activity}</span>
+      </span>
     </p>
   );
 }
@@ -156,7 +159,13 @@ export function AtlasClaudeProgress(props: {
   if (!showPlan && !props.working) return null;
   return (
     <div data-atlas-claude-progress className="mb-3 flex flex-col gap-3">
-      {showPlan ? <AtlasPlanCard steps={props.steps!} /> : null}
+      {showPlan ? (
+        // A new plan (new step texts) starts folded or unfolded afresh.
+        <AtlasPlanCard
+          key={props.steps!.map((step) => step.step).join("\n")}
+          steps={props.steps!}
+        />
+      ) : null}
       {props.working ? (
         <AtlasStatusLine
           startedAt={props.startedAt}

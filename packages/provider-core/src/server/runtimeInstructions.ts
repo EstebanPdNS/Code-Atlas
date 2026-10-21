@@ -28,10 +28,12 @@ function toSingleLine(value: string): string {
 
 /**
  * Code Atlas "plan first": the agent keeps a visible task list for every
- * request, so the client can show each step as it happens. `tools` names the
- * harness's task-list tools and how to use them (Claude Code: TaskCreate and
+ * request that takes action, so the client can show each step as it happens.
+ * Each list update is a model round trip, so the list is written in one go and
+ * finishing a step starts the next in the same update. `tools` names the
+ * harness's task-list tools and how to batch them (Claude Code: TaskCreate and
  * TaskUpdate; Codex: update_plan).
  */
 export function buildPlanFirstInstructions(tools: string): string {
-  return `<plan_first>The user follows your work through a visible task list, so keep one for every request, however small. Before doing anything else, write the list ${tools}: one item per concrete step, in the order you will do them, so the user can check you understood the request. Then work through it step by step: keep exactly one item in progress, mark each item completed as soon as it is done, and update the list when the plan changes. Keep it current until every item is completed. A request with a single action still gets a one-item list.</plan_first>`;
+  return `<plan_first>The user follows your work through a visible task list, so keep one for every request that involves taking action, however small. Before doing anything else, write the whole list ${tools}: one item per concrete step, in the order you will do them, so the user can check you understood the request. Then work through it step by step: keep exactly one item in progress, and when you finish an item, mark it completed and mark the next one in progress in the same update. Update the list when the plan changes and keep it current until every item is completed. A request with a single action still gets a one-item list. A question you can answer without taking any action needs no list.</plan_first>`;
 }

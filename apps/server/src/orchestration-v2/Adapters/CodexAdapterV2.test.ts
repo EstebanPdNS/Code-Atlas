@@ -611,6 +611,30 @@ describe("CodexAdapterV2 runtime policy", () => {
     }),
   );
 
+  // Code Atlas: Codex's collaboration mode drops config's effort when the turn omits one.
+  it.effect("falls back to the configured Codex reasoning effort, below an explicit pick", () =>
+    Effect.gen(function* () {
+      const build = (options?: ReadonlyArray<{ id: string; value: string }>) =>
+        CodexAdapterV2.buildCodexTurnStartParams({
+          nativeThreadId: "native-configured-effort",
+          hasT3Mcp: true,
+          codexInput: [{ type: "text", text: "test" }],
+          runtimePolicy: { runtimeMode: "full-access", interactionMode: "default", cwd: null },
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.4",
+            ...(options ? { options } : {}),
+          },
+          configuredReasoningEffort: "xhigh",
+        });
+      const configured = yield* build();
+      assert.equal(configured.effort, "xhigh");
+      assert.equal(configured.collaborationMode?.settings.reasoning_effort, "xhigh");
+      const explicit = yield* build([{ id: "reasoningEffort", value: "low" }]);
+      assert.equal(explicit.effort, "low");
+    }),
+  );
+
   it.effect.each(["default", "plan"] as const)(
     "compiles per-turn Codex model options and cwd from their owning inputs in %s mode",
     (interactionMode) =>
@@ -1688,6 +1712,8 @@ function codexReplayPreamble(input: {
   readonly sentPrompt?: string;
   /** The approval and sandbox settings turn/start carries; Full access by default. */
   readonly turnPolicy?: Record<string, unknown>;
+  /** Code Atlas: the `model_reasoning_effort` thread/start reports from Codex config. */
+  readonly configuredReasoningEffort?: string;
 }): Array<CodexReplay.CodexAppServerReplayEntry> {
   return [
     {
@@ -1766,7 +1792,8 @@ function codexReplayPreamble(input: {
           approvalPolicy: "on-request",
           approvalsReviewer: "user",
           sandbox: { type: "workspaceWrite", writableRoots: [], networkAccess: false },
-          reasoningEffort: "medium",
+          // No configured effort unless the test sets one; it becomes the turn's fallback.
+          reasoningEffort: input.configuredReasoningEffort ?? null,
         },
       },
     },
@@ -1786,6 +1813,9 @@ function codexReplayPreamble(input: {
             approvalsReviewer: "user",
             sandboxPolicy: { type: "dangerFullAccess" },
           }),
+          ...(input.configuredReasoningEffort === undefined
+            ? {}
+            : { effort: input.configuredReasoningEffort }),
           summary: "detailed",
         },
       },
@@ -3174,6 +3204,59 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         yield* answer(4, "file-change", "accept");
         yield* awaitUntil(() => harness.terminalEvents().length === 3, "turn 3");
         assert.lengthOf(requests(), 4);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    ),
+  );
+
+  // Code Atlas: Codex's collaboration mode would otherwise drop the configured effort.
+  it.effect("sends the effort Codex config sets when the turn has no explicit pick", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const nativeThreadId = "configured-effort-thread";
+        const nativeTurnId = "configured-effort-turn";
+        const prompt = "Use my configured effort.";
+        const harness = yield* makeCodexReplayHarness(
+          makeCodexReplayTranscript({
+            scenario: "codex-configured-effort",
+            entries: [
+              ...codexReplayPreamble({
+                nativeThreadId,
+                nativeTurnId,
+                prompt,
+                configuredReasoningEffort: "xhigh",
+              }),
+              {
+                type: "emit_inbound",
+                label: "turn/completed",
+                frame: {
+                  method: "turn/completed",
+                  params: {
+                    threadId: nativeThreadId,
+                    turn: makeCodexReplayTurn({ id: nativeTurnId, status: "completed" }),
+                  },
+                },
+              },
+            ],
+          }),
+        );
+        yield* harness.runtime.startTurn(
+          makeCodexTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now: yield* DateTime.now,
+            attemptId: RunAttemptId.make("configured-effort-attempt"),
+            text: prompt,
+          }),
+        );
+        yield* harness.firstTerminal;
+        assert.deepEqual(
+          harness.terminalEvents().map((event) => event.status),
+          ["completed"],
+        );
       }).pipe(
         Effect.provide(
           Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
@@ -8816,7 +8899,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     approvalPolicy: "on-request",
     approvalsReviewer: "user",
     sandbox: { type: "workspaceWrite", writableRoots: [], networkAccess: false },
-    reasoningEffort: "medium",
+    reasoningEffort: null,
   });
 
   const errorCauseChainText = (error: unknown): string =>
@@ -10208,6 +10291,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     const startApprovalTurn = (
       scenario: string,
       entries: ReadonlyArray<CodexReplay.CodexAppServerReplayEntry>,
+      fullAccessWithApprovalPolicy = false,
     ) =>
       Effect.gen(function* () {
         const pending = yield* Queue.unbounded<OrchestrationV2RuntimeRequest>();
@@ -10224,7 +10308,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
                 turnPolicy: {
                   approvalPolicy: "on-request",
                   approvalsReviewer: "user",
-                  sandboxPolicy: { type: "workspaceWrite" },
+                  sandboxPolicy: {
+                    type: fullAccessWithApprovalPolicy ? "dangerFullAccess" : "workspaceWrite",
+                  },
                 },
               }),
               ...entries,
@@ -10242,7 +10328,9 @@ describe("CodexAdapterV2 post-settle continuation", () => {
             now: yield* DateTime.now,
             attemptId: RunAttemptId.make(`${scenario}-attempt`),
             text: prompt,
-            runtimePolicy: { ...CODEX_TEST_RUNTIME_POLICY, runtimeMode: "auto-accept-edits" },
+            runtimePolicy: fullAccessWithApprovalPolicy
+              ? { ...CODEX_TEST_RUNTIME_POLICY, approvalPolicy: "on-request" }
+              : { ...CODEX_TEST_RUNTIME_POLICY, runtimeMode: "auto-accept-edits" },
           }),
         );
         return {
@@ -10297,6 +10385,32 @@ describe("CodexAdapterV2 post-settle continuation", () => {
           assert.equal(item.requestKind, "file-change");
           assert.isUndefined(item.prompt);
         }
+        assert.deepEqual(
+          harness.terminalEvents().map((event) => event.status),
+          ["completed"],
+        );
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+
+    // Code Atlas: an explicit approval policy keeps Full access asking, as with Claude.
+    it.effect("asks under Full access when an explicit approval policy is set", () =>
+      Effect.gen(function* () {
+        const { harness, answerNext } = yield* startApprovalTurn(
+          "full-access-approval-policy",
+          [
+            ...approval({ id: 0, turnId: nativeTurnId, itemId: "patch-a" }),
+            turnCompleted(nativeTurnId),
+          ],
+          true,
+        );
+        const request = yield* answerNext;
+        yield* harness.firstTerminal;
+        assert.equal(request.nativeRequestRef?.nativeId, "patch-a");
         assert.deepEqual(
           harness.terminalEvents().map((event) => event.status),
           ["completed"],

@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/process";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { VcsProcessSpawnError } from "@t3tools/contracts";
@@ -580,22 +581,90 @@ it.effect(
     ),
 );
 
-it("sums weekly insertions and deletions across commits", () => {
-  const stdout = [
-    "@@atlas-commit",
-    "",
-    " 3 files changed, 10 insertions(+), 2 deletions(-)",
-    "@@atlas-commit",
-    "",
-    " 1 file changed, 1 insertion(+)",
-    "@@atlas-commit",
-    "",
-    " 2 files changed, 7 deletions(-)",
-    "",
-  ].join("\n");
-  assert.deepStrictEqual(SourceControlDiscovery.parseWeeklyShortstat(stdout), {
-    commits: 3,
-    linesAdded: 11,
-    linesRemoved: 9,
-  });
+const WEEKLY_LOG = [
+  "@@atlas-commit me@example.com",
+  "",
+  " 3 files changed, 10 insertions(+), 2 deletions(-)",
+  "@@atlas-commit upstream@example.com",
+  "",
+  " 9 files changed, 90 insertions(+), 90 deletions(-)",
+  "@@atlas-commit Me@Example.com",
+  "",
+  " 1 file changed, 1 insertion(+)",
+  "@@atlas-commit me@example.com",
+  "",
+  " 2 files changed, 7 deletions(-)",
+  "",
+].join("\n");
+
+it("sums weekly insertions and deletions across the author's commits", () => {
+  assert.deepStrictEqual(
+    SourceControlDiscovery.parseWeeklyShortstat(WEEKLY_LOG, "me@example.com"),
+    {
+      commits: 3,
+      linesAdded: 11,
+      linesRemoved: 9,
+    },
+  );
+});
+
+// Code Atlas: weekly activity is attributed, concurrent and cached per repository.
+it.effect("reads weekly activity once a minute and only with a configured author", () => {
+  const gitCalls: Array<string> = [];
+  const emails = new Map([
+    ["/repo/mine", "me@example.com\n"],
+    ["/repo/anonymous", "\n"],
+  ]);
+  const processMock = {
+    run: (input: VcsProcess.VcsProcessInput) => {
+      if (input.command === "git" && input.args[0] === "config") {
+        gitCalls.push(`config ${input.cwd}`);
+        return Effect.succeed(processOutput(emails.get(input.cwd ?? "") ?? ""));
+      }
+      if (input.command === "git" && input.args[0] === "log") {
+        gitCalls.push(`log ${input.cwd}`);
+        return Effect.succeed(processOutput(WEEKLY_LOG));
+      }
+      if (input.command === "git") return Effect.succeed(processOutput("git version 2.51.0\n"));
+      return Effect.fail(
+        new VcsProcessSpawnError({
+          operation: input.operation,
+          command: input.command,
+          cwd: input.cwd,
+          cause: new Error(`${input.command} not found`),
+        }),
+      );
+    },
+  } satisfies Partial<VcsProcess.VcsProcess["Service"]>;
+  const layerTest = SourceControlDiscovery.layer.pipe(
+    Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-source-control-weekly-" })),
+    Layer.provide(Layer.mock(VcsProcess.VcsProcess)(processMock)),
+    Layer.provide(
+      layerSourceControlProviderRegistryTest({
+        process: processMock,
+        bitbucket: {
+          probeAuth: Effect.succeed({
+            status: "unauthenticated",
+            account: Option.none(),
+            host: Option.some("bitbucket.org"),
+            detail: Option.none(),
+          }),
+        },
+      }),
+    ),
+    Layer.provideMerge(NodeServices.layer),
+  );
+
+  return Effect.gen(function* () {
+    const discovery = yield* SourceControlDiscovery.SourceControlDiscovery;
+    const mine = yield* discovery.discoverFor({ activityCwd: "/repo/mine" });
+    assert.deepStrictEqual(mine.weeklyActivity, { commits: 3, linesAdded: 11, linesRemoved: 9 });
+    yield* discovery.discoverFor({ activityCwd: "/repo/mine" });
+    assert.deepStrictEqual(gitCalls.toSorted(), ["config /repo/mine", "log /repo/mine"]);
+    yield* TestClock.adjust("61 seconds");
+    yield* discovery.discoverFor({ activityCwd: "/repo/mine" });
+    assert.lengthOf(gitCalls, 4);
+    const anonymous = yield* discovery.discoverFor({ activityCwd: "/repo/anonymous" });
+    assert.isUndefined(anonymous.weeklyActivity);
+  }).pipe(Effect.provide(layerTest));
 });

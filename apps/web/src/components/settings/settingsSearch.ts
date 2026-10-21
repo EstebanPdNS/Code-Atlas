@@ -328,6 +328,25 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     searchTerms: ["usage quota rate limit reset recover continue"],
   },
+  // Code Atlas: the rows of Settings → General → Code Atlas.
+  {
+    id: "atlas-background-tasks-card",
+    title: "Background tasks card",
+    to: "/settings/general",
+    searchTerms: ["code atlas terminals output background work details rail"],
+  },
+  {
+    id: "atlas-startup-sound",
+    title: "Startup sound",
+    to: "/settings/general",
+    searchTerms: ["code atlas aurora audio intro mute"],
+  },
+  {
+    id: "atlas-launch-intro",
+    title: "Launch intro",
+    to: "/settings/general",
+    searchTerms: ["code atlas replay intro animation terminal"],
+  },
   {
     id: "working-shelf",
     title: "Working section (beta)",

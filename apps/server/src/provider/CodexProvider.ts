@@ -94,6 +94,8 @@ export interface CodexAppServerProviderSnapshot {
   readonly version: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel> | undefined;
   readonly serviceTier?: string | undefined;
+  /** Code Atlas: the user's `model_reasoning_effort` from Codex config. */
+  readonly reasoningEffort?: string | undefined;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
 }
 
@@ -299,6 +301,42 @@ function applyConfiguredCodexServiceTier(
             currentValue: value,
             options: descriptor.options.map(({ isDefault: _isDefault, ...option }) =>
               option.id === value ? { ...option, isDefault: true } : option,
+            ),
+          };
+        }),
+      },
+    };
+  });
+}
+
+/**
+ * Code Atlas: Codex config's `model_reasoning_effort` replaces each model's
+ * catalog default, as Codex itself does, when the model supports it.
+ */
+function applyConfiguredCodexReasoningEffort(
+  models: ReadonlyArray<ServerProviderModel>,
+  reasoningEffort: string | undefined,
+): ReadonlyArray<ServerProviderModel> {
+  if (!reasoningEffort) return models;
+  return models.map((model) => {
+    const descriptors = model.capabilities?.optionDescriptors;
+    if (!model.capabilities || !descriptors) return model;
+    return {
+      ...model,
+      capabilities: {
+        ...model.capabilities,
+        optionDescriptors: descriptors.map((descriptor) => {
+          if (descriptor.id !== "reasoningEffort" || descriptor.type !== "select") {
+            return descriptor;
+          }
+          if (!descriptor.options.some((option) => option.id === reasoningEffort)) {
+            return descriptor;
+          }
+          return {
+            ...descriptor,
+            currentValue: reasoningEffort,
+            options: descriptor.options.map(({ isDefault: _isDefault, ...option }) =>
+              option.id === reasoningEffort ? { ...option, isDefault: true } : option,
             ),
           };
         }),
@@ -581,7 +619,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
-  const [skillsResponse, models, serviceTier, rateLimits] = yield* Effect.all(
+  const [skillsResponse, models, configured, rateLimits] = yield* Effect.all(
     [
       withCodexDiscoveryDeadline(client.request("skills/list", { cwds: [input.cwd] }), deadlineMs),
       accountResponse.account?.type === "chatgpt"
@@ -598,7 +636,11 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
         deadlineMs,
         CODEX_CONFIG_PROBE_TIMEOUT_MS,
       ).pipe(
-        Effect.map((response) => response?.config.service_tier ?? undefined),
+        // Code Atlas: also read the configured reasoning effort.
+        Effect.map((response) => ({
+          serviceTier: response?.config.service_tier ?? undefined,
+          reasoningEffort: response?.config.model_reasoning_effort ?? undefined,
+        })),
         Effect.catch(() => Effect.logDebug("Codex config read failed.").pipe(Effect.as(undefined))),
       ),
       // Usage is an enrichment: a failure or a slow answer degrades to "no
@@ -636,7 +678,8 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     ...(rateLimits ? { rateLimits } : {}),
     version,
     models,
-    serviceTier,
+    serviceTier: configured?.serviceTier,
+    reasoningEffort: configured?.reasoningEffort,
     skills: skillsResponse ? parseCodexSkillsListResponse(skillsResponse, input.cwd) : [],
   } satisfies CodexAppServerProviderSnapshot;
 });
@@ -859,11 +902,14 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     presentation: CODEX_PRESENTATION,
     enabled: codexSettings.enabled,
     checkedAt,
-    models: applyConfiguredCodexServiceTier(
-      applyPreferredCodexDefaultModel(
-        appendCustomCodexModels(snapshot.models ?? [], codexSettings.customModels),
+    models: applyConfiguredCodexReasoningEffort(
+      applyConfiguredCodexServiceTier(
+        applyPreferredCodexDefaultModel(
+          appendCustomCodexModels(snapshot.models ?? [], codexSettings.customModels),
+        ),
+        snapshot.serviceTier,
       ),
-      snapshot.serviceTier,
+      snapshot.reasoningEffort,
     ),
     skills: snapshot.skills,
     slashCommands: [

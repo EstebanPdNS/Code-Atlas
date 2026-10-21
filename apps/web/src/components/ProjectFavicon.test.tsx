@@ -62,7 +62,11 @@ vi.mock("../state/assets", () => ({
   },
 }));
 
-import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
+import {
+  ProjectFavicon,
+  ProjectIconOverrideGlyph,
+  type ProjectFaviconProject,
+} from "./ProjectFavicon";
 
 function makeProject(
   overrides: Partial<ProjectFaviconProject> &
@@ -142,15 +146,24 @@ describe("ProjectFavicon", () => {
     expect(element.props.projectName).toBe("agent-runtime");
   });
 
+  // Code Atlas: saved icons render through ProjectIconOverrideGlyph, which
+  // project groups reuse; unwrap it to inspect what it draws.
+  const renderOverride = (element: ReactElement) =>
+    ProjectIconOverrideGlyph(
+      element.props as Parameters<typeof ProjectIconOverrideGlyph>[0],
+    ) as ReactElement;
+
   it("renders a saved Lucide icon and color ahead of an uploaded favicon", () => {
-    const element = ProjectFavicon({
-      project: makeProject({
-        workspaceRoot: "/workspace/test",
-        title: "test",
-        faviconPath: "brand/icon.svg",
-        projectIcon: { kind: "lucide", name: "alarm-clock", color: "violet" },
-      }),
-    }) as ReactElement<{
+    const element = renderOverride(
+      ProjectFavicon({
+        project: makeProject({
+          workspaceRoot: "/workspace/test",
+          title: "test",
+          faviconPath: "brand/icon.svg",
+          projectIcon: { kind: "lucide", name: "alarm-clock", color: "violet" },
+        }),
+      }) as ReactElement,
+    ) as ReactElement<{
       readonly children: ReactElement<{
         readonly children: ReactElement<{ readonly name: string; readonly className: string }>;
       }>;
@@ -163,14 +176,16 @@ describe("ProjectFavicon", () => {
   });
 
   it("renders a saved emoji ahead of an uploaded favicon", () => {
-    const element = ProjectFavicon({
-      project: makeProject({
-        workspaceRoot: "/workspace/test",
-        title: "test",
-        faviconPath: "brand/icon.svg",
-        projectIcon: { kind: "emoji", emoji: "🦄" },
-      }),
-    }) as ReactElement<{ readonly emoji: string }>;
+    const element = renderOverride(
+      ProjectFavicon({
+        project: makeProject({
+          workspaceRoot: "/workspace/test",
+          title: "test",
+          faviconPath: "brand/icon.svg",
+          projectIcon: { kind: "emoji", emoji: "🦄" },
+        }),
+      }) as ReactElement,
+    ) as ReactElement<{ readonly emoji: string }>;
 
     expect(element.props.emoji).toBe("🦄");
   });

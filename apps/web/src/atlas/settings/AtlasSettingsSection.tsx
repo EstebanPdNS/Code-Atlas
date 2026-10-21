@@ -21,6 +21,7 @@ export function AtlasSettingsSection() {
   return (
     <SettingsSection id="code-atlas" title="Code Atlas">
       <SettingsRow
+        id="atlas-background-tasks-card"
         title="Background tasks card"
         description="Show agent background work and running terminals beside the thread."
         control={
@@ -32,11 +33,13 @@ export function AtlasSettingsSection() {
         }
       />
       <SettingsRow
+        id="atlas-startup-sound"
         title="Startup sound"
         description="Play the Aurora cue when the launch intro loads the logo."
         control={<Switch checked={sound} onCheckedChange={setSound} aria-label="Startup sound" />}
       />
       <SettingsRow
+        id="atlas-launch-intro"
         title="Launch intro"
         description="The handbook terminal plays once each time Code Atlas opens."
         control={

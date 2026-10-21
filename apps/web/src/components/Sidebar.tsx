@@ -142,7 +142,8 @@ import {
 } from "../threadSelectionStore";
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { AtlasActivityDots, AtlasSidebarSections } from "~/atlas/sidebar/AtlasSidebarSections";
+import { AtlasActivityDots } from "~/atlas/brand/ActivityDots";
+import { AtlasSidebarSections } from "~/atlas/sidebar/AtlasSidebarSections";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
@@ -366,7 +367,10 @@ const EMPTY_PROVIDER_ENTRIES: ReadonlyMap<string, SidebarProviderEntry> = new Ma
 const EMPTY_THREADS: readonly EnvironmentThreadShell[] = [];
 
 // Code Atlas replaces the flat inbox with Pinned / Needs attention / Working
-// sections and user-defined project groups (src/atlas/AtlasSidebarSections.tsx).
+// sections and user-defined project groups (src/atlas/sidebar/AtlasSidebarSections.tsx).
+// A constant rather than deleting the upstream inbox keeps upstream rebases
+// small. The upstream list items are still computed in Atlas mode: their
+// sortable ids drive the pinned rows' drag-to-reorder.
 const CODE_ATLAS_SIDEBAR = true;
 
 const SETTLED_TAIL_INITIAL_COUNT = 10;

@@ -9,7 +9,7 @@ import * as Electron from "electron";
  * the app is frontmost, so it never paints over other windows.
  */
 
-interface TargetWindow {
+export interface TargetWindow {
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -19,13 +19,20 @@ interface TargetWindow {
 
 // Matches the app by bundle identifier or name. Window bounds and owner PIDs
 // need no Screen Recording permission. One process streams changes only.
+// argv[1] is Electron's pid: the loop ends once that app is gone, so a crash
+// that skips cleanup cannot leave osascript polling forever.
 const TARGET_WINDOW_SCRIPT = `
 ObjC.import("CoreGraphics");
 ObjC.import("AppKit");
 function run(argv) {
   const target = String(argv[0] || "").toLowerCase();
+  const parentPid = Number(argv[1]) || 0;
   let previous = "";
   while (true) {
+    if (parentPid > 0) {
+      const parent = $.NSRunningApplication.runningApplicationWithProcessIdentifier(parentPid);
+      if (parent.isNil() || parent.isTerminated) return;
+    }
     const apps = $.NSWorkspace.sharedWorkspace.runningApplications;
     let pid = null;
     for (let i = 0; i < apps.count; i++) {
@@ -57,7 +64,11 @@ function run(argv) {
     const line = JSON.stringify(result);
     if (line !== previous) {
       const data = $(line + "\\n").dataUsingEncoding($.NSUTF8StringEncoding);
-      $.NSFileHandle.fileHandleWithStandardOutput.writeData(data);
+      try {
+        $.NSFileHandle.fileHandleWithStandardOutput.writeData(data);
+      } catch (error) {
+        return;
+      }
       previous = line;
     }
     $.NSThread.sleepForTimeInterval(0.4);
@@ -67,16 +78,19 @@ function run(argv) {
 // The glow extends past the window edge by this much on every side.
 const GLOW_MARGIN = 18;
 
+// Three pulses announce the glow, then it rests at full strength: a
+// continuous animation would keep the compositor busy for the whole task.
+
 const OVERLAY_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:transparent;overflow:hidden}
 .glow{position:absolute;inset:${GLOW_MARGIN - 2}px;border-radius:14px;border:2px solid rgba(255,173,102,.95);
 box-shadow:0 0 22px 6px rgba(247,148,67,.55),inset 0 0 18px 2px rgba(247,148,67,.3);
-animation:pulse 2.4s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:.6}50%{opacity:1}}
+animation:pulse 2.4s ease-in-out 3}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 @media (prefers-reduced-motion:reduce){.glow{animation:none}}
 </style></head><body><div class="glow"></div></body></html>`;
 
-function parseTargetWindow(line: string): TargetWindow | null {
+export function parseTargetWindow(line: string): TargetWindow | null {
   try {
     const value: unknown = JSON.parse(line);
     if (value === null || typeof value !== "object") return null;
@@ -96,13 +110,18 @@ function parseTargetWindow(line: string): TargetWindow | null {
 }
 
 export interface AgentControlOverlay {
-  /** Frames the named app's front window; null removes the glow. */
-  readonly set: (app: string | null) => void;
+  /**
+   * Frames the named app's front window; null removes the glow. `rendererId`
+   * is the webContents that asked: the glow clears when it reloads or crashes,
+   * since a fresh renderer never sends the null that would remove it.
+   */
+  readonly set: (app: string | null, rendererId?: number) => void;
 }
 
 export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
   let current: { app: string; stopWatching: () => void } | null = null;
   let overlay: Electron.BrowserWindow | null = null;
+  const watchedRenderers = new Set<number>();
 
   const ensureOverlay = () => {
     if (overlay && !overlay.isDestroyed()) return overlay;
@@ -145,10 +164,10 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
     if (!target.isVisible()) target.showInactive();
   };
 
-  const watch = (app: string) => {
+  const watch = (app: string, onGone: () => void) => {
     const child = NodeChildProcess.spawn(
       "/usr/bin/osascript",
-      ["-l", "JavaScript", "-e", TARGET_WINDOW_SCRIPT, app],
+      ["-l", "JavaScript", "-e", TARGET_WINDOW_SCRIPT, app, String(process.pid)],
       { stdio: ["ignore", "pipe", "ignore"] },
     );
     let pending = "";
@@ -164,7 +183,10 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
       }
     });
     const onExit = () => {
-      if (!closed) hide();
+      if (closed) return;
+      closed = true;
+      hide();
+      onGone();
     };
     child.on("error", onExit);
     child.on("exit", onExit);
@@ -175,18 +197,43 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
     };
   };
 
-  return {
-    set: (app) => {
-      if (!enabled) return;
-      if (current?.app === app) return;
-      current?.stopWatching();
-      current = null;
-      if (app === null) {
-        if (overlay && !overlay.isDestroyed()) overlay.destroy();
-        overlay = null;
-        return;
-      }
-      current = { app, stopWatching: watch(app) };
-    },
+  const set = (app: string | null, rendererId?: number) => {
+    if (!enabled) return;
+    if (rendererId !== undefined && app !== null) clearOnRendererReset(rendererId);
+    if (current?.app === app) return;
+    current?.stopWatching();
+    current = null;
+    if (app === null) {
+      if (overlay && !overlay.isDestroyed()) overlay.destroy();
+      overlay = null;
+      return;
+    }
+    const entry = { app, stopWatching: () => {} };
+    // A watcher that dies on its own must not block a later set(sameApp).
+    entry.stopWatching = watch(app, () => {
+      if (current === entry) current = null;
+    });
+    current = entry;
   };
+
+  const clearOnRendererReset = (rendererId: number) => {
+    if (watchedRenderers.has(rendererId)) return;
+    const contents = Electron.webContents.fromId(rendererId);
+    if (!contents || contents.isDestroyed()) return;
+    watchedRenderers.add(rendererId);
+    const clear = () => set(null);
+    contents.on(
+      "did-start-navigation",
+      (event: Electron.Event<Electron.WebContentsDidStartNavigationEventParams>) => {
+        if (event.isMainFrame && !event.isSameDocument) clear();
+      },
+    );
+    contents.on("render-process-gone", clear);
+    contents.once("destroyed", () => {
+      watchedRenderers.delete(rendererId);
+      clear();
+    });
+  };
+
+  return { set };
 }

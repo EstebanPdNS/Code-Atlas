@@ -248,6 +248,32 @@ describe("makeQuitShortcutHandler", () => {
     expect(confirmed.notifications).toEqual([]);
   });
 
+  it("ignores further presses while the direct-mode check is pending", async () => {
+    let answer: ((confirmed: boolean) => void) | undefined;
+    const confirmDirectQuit = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const harness = makeHarness({ mode: "direct", confirmDirectQuit });
+    await harness.send(makeInput({}));
+    await harness.send(makeInput({ type: "keyUp" }));
+    vi.advanceTimersByTime(QUIT_DOUBLE_PRESS_MS / 2);
+    await harness.send(makeInput({}));
+    expect(harness.quit).not.toHaveBeenCalled();
+    expect(confirmDirectQuit).toHaveBeenCalledTimes(1);
+
+    answer?.(false);
+    await Promise.resolve();
+    expect(harness.quit).not.toHaveBeenCalled();
+
+    // Once answered, Cmd+Q asks again instead of counting as a double press.
+    await harness.send(makeInput({}));
+    expect(confirmDirectQuit).toHaveBeenCalledTimes(2);
+    expect(harness.quit).not.toHaveBeenCalled();
+  });
+
   it("honors direct mode when the key is released before its mode read settles", async () => {
     let resolveMode: ((mode: QuitConfirmationMode) => void) | undefined;
     const harness = makeHarness({

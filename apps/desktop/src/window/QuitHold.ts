@@ -51,6 +51,9 @@ export function makeQuitShortcutHandler(
   let lastPressAt = 0;
   let lastRepeatAt = 0;
   let repeatCadenceMs = 0;
+  // Code Atlas: true while confirmDirectQuit is pending, so a second press
+  // cannot double-press past the running-agents check.
+  let confirming = false;
   // Incremented when a press is superseded or explicitly cancelled. A plain
   // key release does not invalidate its pending mode read: a direct-mode
   // press must still quit after that read settles.
@@ -140,6 +143,7 @@ export function makeQuitShortcutHandler(
     }
 
     event.preventDefault();
+    if (confirming) return;
 
     if (input.isAutoRepeat) {
       if (mode === "hold" && armed && Date.now() - heldSince >= QUIT_HOLD_DURATION_MS) {
@@ -174,9 +178,18 @@ export function makeQuitShortcutHandler(
             return;
           }
           release();
-          void options.confirmDirectQuit().then((confirmed) => {
-            if (confirmed) quitNow();
-          }, quitNow);
+          confirming = true;
+          void options.confirmDirectQuit().then(
+            (confirmed) => {
+              confirming = false;
+              lastPressAt = 0;
+              if (confirmed) quitNow();
+            },
+            () => {
+              confirming = false;
+              quitNow();
+            },
+          );
           return;
         }
         if (resolvedMode === "double-click") {

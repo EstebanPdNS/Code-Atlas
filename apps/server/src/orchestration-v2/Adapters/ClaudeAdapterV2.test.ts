@@ -10,6 +10,7 @@ import { beforeEach, vi } from "vite-plus/test";
 
 import type {
   Query as ClaudeQuery,
+  SDKControlGetContextUsageResponse,
   SDKMessage,
   SDKResultMessage,
   SDKUserMessage,
@@ -768,6 +769,35 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
 
     assert.notEqual(readOnlyKey, fullAccessKey);
     assert.notEqual(fullAccessKey, detachedKey);
+  });
+
+  // Code Atlas: plan first and browser tools change the launch prompt.
+  it("invalidates live-query reuse when plan first or browser tools toggle", () => {
+    const threadId = ThreadId.make("thread-claude-plan-first-query-key");
+    const queryPolicy = ClaudeAdapterV2.claudeRuntimeQueryPolicyForRuntimePolicy(
+      ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        cwd: "/workspace",
+      }),
+    );
+    const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession: mcpSessionFor(threadId),
+      readOnlySandbox: false,
+    });
+    const base = ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, overrides, false);
+    assert.equal(base, ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, overrides));
+    assert.notEqual(
+      base,
+      ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, overrides, true),
+    );
+    assert.notEqual(
+      base,
+      ClaudeAdapterV2.claudeEffectiveQueryPolicyKey(queryPolicy, {
+        ...overrides,
+        browserTools: !overrides.browserTools,
+      }),
+    );
   });
 
   it("invalidates live-query reuse when MCP credentials rotate", () => {
@@ -2733,6 +2763,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     readonly freshQueueOnReopen?: boolean;
     readonly forkSession?: ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerShape["forkSession"];
     readonly allocateSessionId?: Effect.Effect<string>;
+    readonly getContextUsage?: ClaudeAdapterV2.ClaudeAgentSdkQuerySession["getContextUsage"];
   }) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
@@ -2868,6 +2899,9 @@ describe("ClaudeAdapterV2 background wake turns", () => {
                 stopTask: options?.stopTask ?? (() => Effect.void),
                 interrupt: options?.interrupt ?? Effect.void,
                 close: options?.close?.(sdkMessages) ?? Effect.void,
+                ...(options?.getContextUsage === undefined
+                  ? {}
+                  : { getContextUsage: options.getContextUsage }),
               };
             }),
           forkSession: options?.forkSession ?? (() => Effect.die("unused forkSession")),
@@ -3484,7 +3518,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         if (result?.behavior === "deny") {
           assert.equal(
             result.message,
-            "This tool requires approval in Plan mode, but approvals are disabled for this thread.",
+            "Plan mode is read-only; this action isn't allowed until you leave Plan mode.",
           );
         }
       }).pipe(
@@ -5303,6 +5337,109 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         ? [event.providerTurn.tokenUsage.usedTokens]
         : [],
     );
+
+  // Code Atlas: the /context breakdown never holds up a turn, and its arrays
+  // ride only on a turn's first usage update and after each change.
+  it.effect("keeps Claude's context breakdown off the turn path and sends it once per change", () =>
+    Effect.gen(function* () {
+      const breakdown: SDKControlGetContextUsageResponse = {
+        categories: [{ name: "Messages", tokens: 900, color: "blue", kind: "used" }],
+        totalTokens: 900,
+        maxTokens: 200_000,
+        rawMaxTokens: 200_000,
+        percentage: 0.45,
+        gridRows: [],
+        model: "claude-sonnet-4-6",
+        memoryFiles: [{ path: "/workspace/CLAUDE.md", type: "Project", tokens: 40 }],
+        mcpTools: [],
+        agents: [],
+        autoCompactThreshold: 160_000,
+        isAutoCompactEnabled: true,
+        apiUsage: null,
+      };
+      let calls = 0;
+      const harness = yield* makeWakeHarnessWithOptions({
+        // The first request answers; the CLI then stops answering.
+        getContextUsage: Effect.suspend(() => {
+          calls += 1;
+          return calls === 1 ? Effect.succeed(breakdown) : Effect.never;
+        }),
+      });
+      const tokenUsages = () =>
+        harness.events.flatMap((event) =>
+          event.type === "provider_turn.updated" &&
+          event.providerTurn.status === "running" &&
+          event.providerTurn.tokenUsage
+            ? [{ turnId: event.providerTurn.id, usage: event.providerTurn.tokenUsage }]
+            : [],
+        );
+      const startTurn = (index: number) =>
+        Effect.gen(function* () {
+          yield* harness.runtime.startTurn({
+            ...makeClaudeTestTurnInput({
+              threadId: harness.threadId,
+              providerThread: harness.providerThread,
+              now: yield* DateTime.now,
+              attemptId: RunAttemptId.make(`attempt-context-breakdown-${index}`),
+              text: `Turn ${index}.`,
+              attachments: [],
+            }),
+            runOrdinal: index,
+            providerTurnOrdinal: index,
+          });
+        });
+      const usage = (uuid: string, inputTokens: number) =>
+        usageSnapshotFrame(`msg_${uuid}`, uuid, { ...zeroUsage, input_tokens: inputTokens });
+
+      yield* TestClock.adjust("30 seconds");
+      yield* startTurn(1);
+      yield* harness.offerAndWait(usage("00000000-0000-4000-8000-000000000a01", 800));
+      yield* awaitUntil(
+        () => tokenUsages().some(({ usage }) => (usage.contextCategories?.length ?? 0) > 0),
+        "the in-turn breakdown",
+      );
+      yield* harness.offerAndWait(usage("00000000-0000-4000-8000-000000000a02", 850));
+      yield* awaitUntil(() => tokenUsages().length === 3, "the second usage update");
+      const turnOneUsage = tokenUsages().at(-1)!.usage;
+      assert.equal(turnOneUsage.usedTokens, 850);
+      assert.notProperty(turnOneUsage, "contextCategories");
+      assert.equal(turnOneUsage.autoCompactThreshold, 160_000);
+      // The end-of-turn refresh hangs; the turn still ends.
+      yield* harness.offerAndWait(
+        makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000a03", result: "Done." }),
+      );
+      assert.equal((yield* Queue.take(harness.terminalReceipts)).status, "completed");
+
+      yield* startTurn(2);
+      yield* harness.offerAndWait(usage("00000000-0000-4000-8000-000000000a04", 900));
+      yield* awaitUntil(() => tokenUsages().length === 4, "turn 2's first usage update");
+      const turnTwo = tokenUsages().at(-1)!;
+      assert.notEqual(turnTwo.turnId, tokenUsages()[0]!.turnId);
+      assert.deepEqual(turnTwo.usage.contextCategories, [
+        { name: "Messages", tokens: 900, kind: "used" },
+      ]);
+      assert.deepEqual(turnTwo.usage.contextMemoryFiles, [
+        { path: "/workspace/CLAUDE.md", tokens: 40 },
+      ]);
+      // Compaction makes the breakdown stale, so the next update clears it.
+      yield* harness.offerAndWait(
+        claudeSdkFrame({
+          type: "system",
+          subtype: "compact_boundary",
+          compact_metadata: { trigger: "auto", pre_tokens: 900, post_tokens: 300 },
+          uuid: "00000000-0000-4000-8000-000000000a05",
+          session_id: WAKE_NATIVE_SESSION,
+        }),
+      );
+      yield* harness.offerAndWait(usage("00000000-0000-4000-8000-000000000a06", 300));
+      yield* awaitUntil(() => tokenUsages().at(-1)?.usage.usedTokens === 300, "post-compaction");
+      assert.deepEqual(tokenUsages().at(-1)!.usage.contextCategories, []);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
 
   it.effect("reports context from final stream usage when the request starts at zero", () =>
     Effect.gen(function* () {

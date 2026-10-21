@@ -51,6 +51,48 @@ describe("whisper-server helpers", () => {
   );
 });
 
+// Code Atlas: a whisper-server that serves its readiness probe, then crashes on a phrase.
+const CRASHING_WHISPER_SERVER = String.raw`#!/usr/bin/env node
+const http = require("node:http");
+const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
+http
+  .createServer((request, response) => {
+    if (request.method === "GET") return response.end("ok");
+    process.exit(1);
+  })
+  .listen(port, "127.0.0.1");
+`;
+
+it.live("asks for a reload when whisper-server dies during a phrase", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-whisper-crash-" });
+    const fake = path.join(dir, "whisper-server");
+    yield* fs.writeFileString(fake, CRASHING_WHISPER_SERVER);
+    yield* fs.chmod(fake, 0o755);
+    const recognizer = yield* loadWhisperServerRecognizer({
+      binary: Option.some(fake),
+      modelFile: "/unused",
+      threads: 1,
+      cleanText: cleanWhisperText,
+      resolveLanguage: () => "",
+      languageCodes: new Map(),
+    });
+    const error = yield* recognizer
+      .decode(
+        Float32Array.from({ length: 16_000 }, (_, index) => Math.sin(index / 8) * 0.5),
+        "auto",
+      )
+      .pipe(Effect.flip);
+    yield* recognizer.release;
+    assert.strictEqual(error.reason, "load-failed");
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Layer.mergeAll(NodeServices.layer, NetService.layer, FetchHttpClient.layer)),
+  ),
+);
+
 const binary = process.env.CODE_ATLAS_WHISPER_SERVER_PATH;
 const modelFile = process.env.CODE_ATLAS_WHISPER_E2E_MODEL;
 const wavFile = process.env.CODE_ATLAS_WHISPER_E2E_WAV;

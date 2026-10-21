@@ -247,7 +247,7 @@ describe("getChangedBrowserSettingLabels", () => {
         browserRecordingFrameRate: 60,
         browserRecordingShowKeyPresses: true,
         browserRecordingShowMousePresses: true,
-        browserLinkTarget: "app",
+        browserLinkTarget: "system",
         browserAutoShowFloatingPreview: !DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
         pullRequestLinksOpenInApp: false,
       }),

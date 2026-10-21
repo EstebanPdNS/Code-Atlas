@@ -47,15 +47,67 @@ function tryResolveClaudeModelCatalog(
     const profile = decodeClaudeProfileAdapter(entry.profileAdapter ?? {});
     const adapter = decodeClaudeModelAdapter(entry.adapter ?? {});
     if (Option.isNone(profile) || Option.isNone(adapter)) return null;
-    models.push({
-      model: ModelCatalog.catalogServerModel(resolved, entry),
-      runtime: profile.value.claudeCode ?? {},
-      compatibility: adapter.value.claudeCode ?? {},
-    });
+    models.push(
+      withCodeAtlasEffortDefaults({
+        model: ModelCatalog.catalogServerModel(resolved, entry),
+        runtime: profile.value.claudeCode ?? {},
+        compatibility: adapter.value.claudeCode ?? {},
+      }),
+    );
   }
 
   return {
     models,
+  };
+}
+
+const CODE_ATLAS_HIGH_EFFORT_DEFAULT_MODEL = /^claude-(opus|fable|sonnet)-5(-|$)/;
+
+/**
+ * Code Atlas: the upstream manifest is fetched at runtime and replaces the
+ * bundled one, so these owner choices are applied to whichever manifest wins.
+ * Opus, Fable and Sonnet 5.x default to High rather than a lower effort, and
+ * Ultrathink also asks the SDK for Max (as mapped by the model) instead of
+ * running at the default.
+ */
+function withCodeAtlasEffortDefaults(entry: ClaudeCatalogModel): ClaudeCatalogModel {
+  const descriptors = entry.model.capabilities?.optionDescriptors;
+  const effort = descriptors?.find((descriptor) => descriptor.id === "effort");
+  if (!descriptors || effort?.type !== "select") return entry;
+  const offers = (id: string) => effort.options.some((option) => option.id === id);
+  const defaultId = effort.currentValue ?? effort.options.find((option) => option.isDefault)?.id;
+  const raiseDefault =
+    CODE_ATLAS_HIGH_EFFORT_DEFAULT_MODEL.test(entry.model.slug) &&
+    offers("high") &&
+    (defaultId === "low" || defaultId === "medium");
+  const effortMap = entry.runtime.effortMap;
+  const mapUltrathink =
+    offers("ultrathink") && offers("max") && (effortMap?.["ultrathink"] ?? null) === null;
+  if (!raiseDefault && !mapUltrathink) return entry;
+  return {
+    ...entry,
+    model: raiseDefault
+      ? {
+          ...entry.model,
+          capabilities: {
+            ...entry.model.capabilities,
+            optionDescriptors: descriptors.map((descriptor) =>
+              descriptor !== effort
+                ? descriptor
+                : {
+                    ...effort,
+                    ...(effort.currentValue === undefined ? {} : { currentValue: "high" }),
+                    options: effort.options.map(({ isDefault: _isDefault, ...option }) =>
+                      option.id === "high" ? { ...option, isDefault: true } : option,
+                    ),
+                  },
+            ),
+          },
+        }
+      : entry.model,
+    runtime: mapUltrathink
+      ? { ...entry.runtime, effortMap: { ...effortMap, ultrathink: effortMap?.["max"] ?? "max" } }
+      : entry.runtime,
   };
 }
 

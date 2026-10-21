@@ -149,7 +149,8 @@ export const loadWhisperServerRecognizer = Effect.fnUntraced(function* (input: {
   yield* Effect.gen(function* () {
     if (!(yield* child.isRunning))
       return yield* new DictationError({ reason: "load-failed", message: "Whisper exited." });
-    const response = yield* http.get(`${baseUrl}/`);
+    // Code Atlas: a probe that hangs counts as one failed attempt.
+    const response = yield* http.get(`${baseUrl}/`).pipe(Effect.timeout("2 seconds"));
     if (response.status !== 200)
       return yield* new DictationError({ reason: "load-failed", message: "Whisper is loading." });
   }).pipe(
@@ -182,14 +183,34 @@ export const loadWhisperServerRecognizer = Effect.fnUntraced(function* (input: {
         });
       return yield* response.text;
     }).pipe(
-      Effect.mapError(
-        (cause) =>
-          new DictationError({
-            reason: "transcription-failed",
-            message: "Could not transcribe the recording.",
-            cause,
-          }),
+      Effect.timeout("2 minutes"),
+      Effect.catch((cause) =>
+        Effect.gen(function* () {
+          // A server that died or hangs needs a reload, not another request. A
+          // crash can drop the connection just before its exit is reported.
+          const stopped = yield* child.exitCode.pipe(
+            Effect.timeoutOption("250 millis"),
+            Effect.map(Option.isSome),
+            Effect.orElseSucceed(() => true),
+          );
+          return yield* new DictationError(
+            stopped || cause._tag === "TimeoutError"
+              ? {
+                  reason: "load-failed",
+                  message: "Whisper stopped responding. It reloads with the next recording.",
+                  cause,
+                }
+              : {
+                  reason: "transcription-failed",
+                  message: "Could not transcribe the recording.",
+                  cause,
+                },
+          );
+        }),
       ),
+      // Code Atlas: callers run decode uninterruptibly (native recognizers cannot
+      // stop), but an HTTP request can, so the timeout and a quit still reach it.
+      Effect.interruptible,
     );
     const result = yield* Effect.try({
       try: () => parseWhisperResponse(body),

@@ -53,6 +53,7 @@ import {
   hasSavedBearerRoute,
   connectionStatusText,
   environmentMcpUrl,
+  isLocalHostEntry,
 } from "@t3tools/client-runtime/connection";
 import {
   isAtomCommandInterrupted,
@@ -1452,7 +1453,7 @@ function savedBackendStatus(environment: EnvironmentPresentation): {
     case "reconnecting":
       return {
         text: connection.error ? `Reconnecting: ${connection.error}` : "Reconnecting",
-        tone: "error",
+        tone: isLocalHostEntry(environment.entry) ? "muted" : "error",
       };
     case "unsupported":
       return { text: "Client not supported", tone: "muted" };

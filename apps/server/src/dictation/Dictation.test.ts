@@ -651,6 +651,87 @@ it.effect(
     }),
 );
 
+// Code Atlas: a recognizer whose server died reloads instead of failing every phrase.
+it.effect("reloads a recognizer whose decode reports it stopped", () =>
+  Effect.gen(function* () {
+    const released = yield* Deferred.make<void>();
+    let loads = 0;
+    yield* Effect.gen(function* () {
+      const service = yield* Dictation.Dictation;
+      const first = yield* service.start;
+      yield* service.append({ sessionId: first.sessionId, seq: 0, pcm: pcm(0.1) });
+      assert.strictEqual(
+        (yield* service.finish({ sessionId: first.sessionId, chunkCount: 1 }).pipe(Effect.flip))
+          .reason,
+        "load-failed",
+      );
+      const second = yield* service.start;
+      yield* Deferred.await(released);
+      yield* service.append({ sessionId: second.sessionId, seq: 0, pcm: pcm(0.1) });
+      assert.strictEqual(
+        (yield* service.finish({ sessionId: second.sessionId, chunkCount: 1 })).text,
+        "one",
+      );
+      assert.strictEqual(loads, 2);
+    }).pipe(
+      Effect.provide(
+        testLayer({
+          load: () =>
+            Effect.sync(() => {
+              loads++;
+              const broken = loads === 1;
+              return {
+                decode: () =>
+                  broken
+                    ? Effect.fail(
+                        new DictationError({ reason: "load-failed", message: "Whisper stopped." }),
+                      )
+                    : Effect.succeed({ text: "one", locale: "en" }),
+                release: broken
+                  ? Deferred.succeed(released, undefined).pipe(Effect.asVoid)
+                  : Effect.void,
+              };
+            }),
+        }),
+      ),
+      Effect.scoped,
+    );
+  }),
+);
+
+// Code Atlas: closing the service mid-load must not orphan the recognizer.
+it.effect("releases a recognizer whose load finishes while the service closes", () =>
+  Effect.gen(function* () {
+    const loading = yield* Deferred.make<void>();
+    const proceed = yield* Deferred.make<void>();
+    const released = yield* Deferred.make<void>();
+    const closing = yield* Effect.gen(function* () {
+      const service = yield* Dictation.Dictation;
+      yield* service.start;
+      yield* Deferred.await(loading);
+    }).pipe(
+      Effect.provide(
+        testLayer({
+          load: () =>
+            Deferred.succeed(loading, undefined).pipe(
+              Effect.andThen(Deferred.await(proceed)),
+              Effect.as({
+                decode: () => Effect.succeed({ text: "one", locale: "en" }),
+                release: Deferred.succeed(released, undefined).pipe(Effect.asVoid),
+              }),
+            ),
+        }),
+      ),
+      Effect.scoped,
+      Effect.forkChild,
+    );
+    yield* Deferred.await(loading);
+    yield* Deferred.succeed(proceed, undefined);
+    yield* Fiber.join(closing);
+    assert.isTrue(yield* Deferred.isDone(released));
+  }),
+);
+
 it.effect("switching models retires the previous recognizer", () =>
   Effect.gen(function* () {
     const released = yield* Deferred.make<void>();

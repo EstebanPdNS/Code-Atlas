@@ -52,6 +52,7 @@ import { makeThreadFixture, makeThreadProjectionFixture } from "../test-fixtures
 import {
   agentControlledBrowserCloseConfirmation,
   ENVIRONMENT_RECONNECT_WARNING_GRACE_MS,
+  LOCAL_ENVIRONMENT_RECONNECT_WARNING_GRACE_MS,
   getAntigravitySendBlockReason,
   resolveBackgroundDraftWorkspaceOptions,
   resolveComposerInteractionMode,
@@ -1344,6 +1345,18 @@ describe("environment reconnect warning grace", () => {
 
     scheduleEnvironmentReconnectWarning(showWarning);
     vi.advanceTimersByTime(ENVIRONMENT_RECONNECT_WARNING_GRACE_MS - 1);
+    expect(showWarning).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(showWarning).toHaveBeenCalledOnce();
+  });
+
+  it("waits longer before warning about a local host", () => {
+    vi.useFakeTimers();
+    const showWarning = vi.fn();
+
+    scheduleEnvironmentReconnectWarning(showWarning, { localHost: true });
+    vi.advanceTimersByTime(LOCAL_ENVIRONMENT_RECONNECT_WARNING_GRACE_MS - 1);
     expect(showWarning).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);

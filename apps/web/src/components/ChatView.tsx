@@ -12,6 +12,7 @@ import {
 } from "./ChatView.logic";
 import { restorePlanFollowUpComposer } from "./ChatView.logic";
 import { useQueuedRunEdit } from "./chat/useQueuedRunEdit";
+import { getComposerPromptLengthValidationMessage } from "./chat/composerSubmission";
 import {
   isPaintOnlyThreadTimeline,
   peekHeldThreadTimeline,
@@ -65,6 +66,7 @@ import {
   isProviderNativeSubagentThread,
   type EnvironmentId,
   type MessageId,
+  type ChatAttachment,
   type ModelSelection,
   type OrchestrationV2ProviderTurn,
   type ProjectScript,
@@ -82,7 +84,10 @@ import {
   resolveProjectProviderInstanceEnabled,
   RuntimeMode,
 } from "@t3tools/contracts";
-import { type EnvironmentConnectionPresentation } from "@t3tools/client-runtime/connection";
+import {
+  isLocalHostEntry,
+  type EnvironmentConnectionPresentation,
+} from "@t3tools/client-runtime/connection";
 import { deriveThreadTitleSeed } from "@t3tools/client-runtime/operations";
 import {
   wasBootstrapThreadDeleted,
@@ -410,8 +415,9 @@ import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/intro/AtlasTerminal";
 import { AtlasClaudeProgress } from "~/atlas/progress/AtlasClaudeProgress";
 import { atlasActivityLabel } from "~/atlas/progress/claudeProgress";
+import { useAtlasPausedTask } from "~/atlas/progress/pausedTask";
 import { computerUseApp, useAgentControlOverlay } from "~/atlas/desktop/agentControlOverlay";
-import { useAtlasTerminalSummary } from "~/atlas/rail/AtlasRailSections";
+import { useAtlasTerminalSummary } from "~/atlas/intro/terminalSummary";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
   BranchRestoreConfirmHost,
@@ -1666,13 +1672,15 @@ export default function ChatView(props: ChatViewProps) {
   const activeThreadRef = useActiveThreadRef(activeThread);
   const terminalActions = useThreadTerminalActions(activeThreadRef);
   const activeThreadKey = activeThreadRef ? scopedThreadKey(activeThreadRef) : null;
-  // Code Atlas: Stop on a paused task hides Resume for that run on this thread.
-  const resumeKey =
-    resumableRunId !== null || hasHeldQueuedRuns
-      ? `${activeThreadKey ?? ""}:${resumableRunId ?? "held"}`
-      : null;
-  const [dismissedResumeKey, setDismissedResumeKey] = useState<string | null>(null);
-  const canResumeTask = resumeKey !== null && resumeKey !== dismissedResumeKey;
+  // Code Atlas: Stop on a paused task cancels its held queue and drops Resume.
+  const atlasPausedTask = useAtlasPausedTask({
+    environmentId,
+    threadId: isServerThread ? (activeThread?.id ?? null) : null,
+    threadKey: activeThreadKey,
+    resumableRunId,
+    runs: isServerThread ? (serverProjection?.runs ?? []) : [],
+  });
+  const canResumeTask = atlasPausedTask.canResume;
   const activeEnvironmentServerBrowser = useEnvironmentSupportsServerBrowser(
     activeThreadRef?.environmentId ?? null,
   );
@@ -2056,6 +2064,8 @@ export default function ChatView(props: ChatViewProps) {
     activeEnvironmentConnectionPhase === "reconnecting"
       ? (activeEnvironment?.environmentId ?? null)
       : null;
+  const activeEnvironmentIsLocalHost =
+    activeEnvironment !== null && isLocalHostEntry(activeEnvironment.entry);
   const [reconnectWarningGraceElapsedEnvironmentId, setReconnectWarningGraceElapsedEnvironmentId] =
     useState<EnvironmentId | null>(null);
   // Each reconnect attempt gets its own grace period, including a later one to
@@ -2073,10 +2083,11 @@ export default function ChatView(props: ChatViewProps) {
   );
   useEffect(() => {
     if (activeReconnectingEnvironmentId === null) return;
-    return scheduleEnvironmentReconnectWarning(() =>
-      setReconnectWarningGraceElapsedEnvironmentId(activeReconnectingEnvironmentId),
+    return scheduleEnvironmentReconnectWarning(
+      () => setReconnectWarningGraceElapsedEnvironmentId(activeReconnectingEnvironmentId),
+      { localHost: activeEnvironmentIsLocalHost },
     );
-  }, [activeReconnectingEnvironmentId]);
+  }, [activeReconnectingEnvironmentId, activeEnvironmentIsLocalHost]);
   const activeEnvironmentUnavailableLabel = activeEnvironment?.label ?? null;
   const activeEnvironmentUnavailableState = (() => {
     if (!activeEnvironmentUnavailable || !activeEnvironmentUnavailableLabel || !activeEnvironment) {
@@ -2369,10 +2380,16 @@ export default function ChatView(props: ChatViewProps) {
         id: `environment-unavailable:${activeEnvironmentUnavailableState.environmentId}`,
         variant: unavailableConnection.phase === "error" ? "error" : "warning",
         icon: <WifiOffIcon />,
-        title: `${activeEnvironmentUnavailableState.label} is ${environmentReconnecting ? "reconnecting" : "offline"}`,
-        description: activeEnvironment ? (
-          <ConnectionDiagnosisHeadline environment={activeEnvironment} />
-        ) : undefined,
+        // This machine's host always comes back on its own; a failure
+        // diagnosis would only alarm.
+        title:
+          activeEnvironmentIsLocalHost && environmentReconnecting
+            ? "Reconnecting…"
+            : `${activeEnvironmentUnavailableState.label} is ${environmentReconnecting ? "reconnecting" : "offline"}`,
+        description:
+          activeEnvironment && !(activeEnvironmentIsLocalHost && environmentReconnecting) ? (
+            <ConnectionDiagnosisHeadline environment={activeEnvironment} />
+          ) : undefined,
         actions: (
           <>
             {!environmentReconnecting ? (
@@ -7599,16 +7616,39 @@ export default function ChatView(props: ChatViewProps) {
     const createdAt = new Date().toISOString();
     const nextThreadId = newThreadId();
     const planMarkdown = activeProposedPlan.planMarkdown;
-    const implementationPrompt = buildPlanImplementationPrompt(planMarkdown);
-    const outgoingImplementationPrompt = formatOutgoingPrompt({
-      provider: ctxSelectedProvider,
-      model: ctxSelectedModel,
-      models: ctxSelectedProviderModels,
-      effort: ctxSelectedPromptEffort,
-      text: implementationPrompt,
-    });
+    const formatImplementationPrompt = (text: string) =>
+      formatOutgoingPrompt({
+        provider: ctxSelectedProvider,
+        model: ctxSelectedModel,
+        models: ctxSelectedProviderModels,
+        effort: ctxSelectedPromptEffort,
+        text,
+      });
+    let outgoingImplementationPrompt = formatImplementationPrompt(
+      buildPlanImplementationPrompt(planMarkdown),
+    );
     const nextThreadTitle = truncate(buildPlanImplementationThreadTitle(planMarkdown));
     const nextThreadModelSelection: ModelSelection = ctxSelectedModelSelection;
+    // A plan over the message limit goes as an attached file, as a long draft does.
+    const planFile =
+      getComposerPromptLengthValidationMessage(outgoingImplementationPrompt) !== null &&
+      supportsAttachmentUploads &&
+      maxFileAttachmentBytes !== null
+        ? new File([planMarkdown], "plan.md", { type: "text/plain;charset=utf-8" })
+        : null;
+    const planAttachment: ComposerFileAttachment | null =
+      planFile !== null &&
+      maxFileAttachmentBytes !== null &&
+      planFile.size <= maxFileAttachmentBytes
+        ? {
+            type: "file",
+            id: randomUUID(),
+            name: planFile.name,
+            mimeType: planFile.type,
+            sizeBytes: planFile.size,
+            file: planFile,
+          }
+        : null;
 
     sendInFlightRef.current = true;
     beginLocalDispatch({ preparingWorktree: false });
@@ -7616,6 +7656,31 @@ export default function ChatView(props: ChatViewProps) {
       sendInFlightRef.current = false;
       resetLocalDispatch();
     };
+
+    let implementationAttachments: ChatAttachment[] = [];
+    if (planAttachment !== null) {
+      startAttachmentUpload({ environmentId, image: planAttachment });
+      await awaitAttachmentUploads([planAttachment.id]);
+      const uploaded = getUploadedAttachments({ environmentId, images: [planAttachment] });
+      if (uploaded === null) {
+        releaseDraftAttachments([planAttachment]);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Could not start implementation thread",
+            description: "The plan is too long to send inline, and attaching it failed.",
+          }),
+        );
+        finish();
+        return;
+      }
+      implementationAttachments = uploaded;
+      outgoingImplementationPrompt = formatImplementationPrompt(
+        buildPlanImplementationPrompt(
+          `The plan is too long to include here; it is attached as ${planAttachment.name}. Read it in full first.`,
+        ),
+      );
+    }
 
     const createResult = await createThread({
       environmentId,
@@ -7643,7 +7708,7 @@ export default function ChatView(props: ChatViewProps) {
             messageId: newMessageId(),
             role: "user",
             text: outgoingImplementationPrompt,
-            attachments: [],
+            attachments: implementationAttachments,
           },
           modelSelection: ctxSelectedModelSelection,
           titleSeed: nextThreadTitle,
@@ -7680,6 +7745,7 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     if (failure !== null) {
+      if (planAttachment !== null) releaseDraftAttachments([planAttachment]);
       const cleanupResult = await deleteThread({
         environmentId,
         input: {
@@ -8517,7 +8583,7 @@ export default function ChatView(props: ChatViewProps) {
                                 isResuming
                               }
                               canResume={canResumeTask}
-                              onDismissResume={() => setDismissedResumeKey(resumeKey)}
+                              onDismissResume={atlasPausedTask.stop}
                               isRevertingCheckpoint={isRevertingCheckpoint}
                               sendDisabledReason={
                                 !canOperateThread

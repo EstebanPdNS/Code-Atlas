@@ -12,6 +12,7 @@ import {
   PlusIcon,
 } from "lucide-react";
 import {
+  useRef,
   useState,
   type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
@@ -40,6 +41,8 @@ import type { SidebarProjectSnapshot } from "~/sidebarProjectGrouping";
 import { projectEnvironment } from "~/state/projects";
 import { useOrchestrationCommand } from "~/state/use-orchestration-command";
 import { useUiStateStore } from "~/uiStateStore";
+import { AtlasActivityDots } from "~/atlas/brand/ActivityDots";
+import { usePublishRunningAgents } from "~/atlas/desktop/runningAgents";
 
 import {
   compareAttentionReasons,
@@ -48,7 +51,6 @@ import {
   type AtlasAttentionReason,
 } from "./atlasThreadSections";
 import { GroupIcon, GroupSettingsDialog } from "./GroupSettingsDialog";
-import { usePublishRunningAgents } from "./runningAgents";
 import {
   resolveProjectFolders,
   useProjectFoldersStore,
@@ -102,6 +104,15 @@ async function showRowMenu(event: ReactMouseEvent<HTMLElement>): Promise<RowMenu
     x: event.clientX,
     y: event.clientY,
   });
+}
+
+function sameDropTarget(left: DropTarget | null, right: DropTarget): boolean {
+  if (left === null || left.kind !== right.kind) return false;
+  if (left.kind === "folder" && right.kind === "folder") return left.folderId === right.folderId;
+  if (left.kind === "project" && right.kind === "project") {
+    return left.projectKey === right.projectKey;
+  }
+  return true;
 }
 
 function draggedKind(event: ReactDragEvent): "project" | "folder" | null {
@@ -218,7 +229,15 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
     if (kind === "folder" && target.kind !== "folder") return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    setDropTarget(target);
+    // dragover fires continuously; keep the same state so the sidebar does not re-render.
+    setDropTarget((current) => (sameDropTarget(current, target) ? current : target));
+  };
+  // dragleave also fires when the pointer moves onto a child of the row.
+  const leaveDrop = (event: ReactDragEvent<HTMLElement>) => {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+      return;
+    }
+    clearDrop();
   };
   const handleDrop = (event: ReactDragEvent, target: DropTarget, folderId: string | null) => {
     const projectKey = event.dataTransfer.getData(PROJECT_DRAG_TYPE);
@@ -240,16 +259,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
     }
   };
 
-  const isDropTarget = (target: DropTarget) =>
-    dropTarget !== null &&
-    dropTarget.kind === target.kind &&
-    (target.kind === "ungrouped" ||
-      (target.kind === "folder" &&
-        dropTarget.kind === "folder" &&
-        dropTarget.folderId === target.folderId) ||
-      (target.kind === "project" &&
-        dropTarget.kind === "project" &&
-        dropTarget.projectKey === target.projectKey));
+  const isDropTarget = (target: DropTarget) => sameDropTarget(dropTarget, target);
 
   const renderProject = (project: SidebarProjectSnapshot, folderId: string | null) => {
     const active = projectActive.get(project.projectKey) ?? [];
@@ -270,10 +280,11 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           }}
           onDragEnd={clearDrop}
           onDragOver={(event) => allowDrop(event, target)}
-          onDragLeave={clearDrop}
+          onDragLeave={leaveDrop}
           onDrop={(event) => handleDrop(event, target, folderId)}
           onClick={() => store.toggleProjectExpanded(project.projectKey)}
           onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               store.toggleProjectExpanded(project.projectKey);
@@ -397,7 +408,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           }}
           onDragEnd={clearDrop}
           onDragOver={(event) => allowDrop(event, target)}
-          onDragLeave={clearDrop}
+          onDragLeave={leaveDrop}
           onDrop={(event) => handleDrop(event, target, folder.id)}
           onClick={() => store.toggleFolder(folder.id)}
           onDoubleClick={() => setRenamingFolderId(folder.id)}
@@ -484,11 +495,10 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
 
   // Pinned threads keep their row in Pinned, so count their running agents too.
   usePublishRunningAgents(
-    working.length +
-      pinnedThreads.filter((thread) => {
-        const status = resolveSidebarThreadStatus(thread);
-        return status === "working" || status === "waiting";
-      }).length,
+    [...working, ...pinnedThreads].map((thread) => ({
+      environmentId: thread.environmentId,
+      status: resolveSidebarThreadStatus(thread),
+    })),
   );
 
   const settingsFolder =
@@ -603,7 +613,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
               }
             }}
             onDragOver={(event) => allowDrop(event, { kind: "ungrouped" })}
-            onDragLeave={clearDrop}
+            onDragLeave={leaveDrop}
             onDrop={(event) => handleDrop(event, { kind: "ungrouped" }, null)}
             className={cn(
               "flex h-7 cursor-pointer items-center gap-1 rounded-md pr-1 pl-2 outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
@@ -694,21 +704,6 @@ function AtlasSection(props: {
   );
 }
 
-/** Three Code Atlas dots that pulse while agents run (compositor-only). */
-export function AtlasActivityDots({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      data-atlas-activity
-      className={cn("inline-grid grid-cols-2 gap-0.5", className)}
-    >
-      <span className="size-1 rounded-full bg-primary" />
-      <span className="size-1 rounded-full bg-primary" />
-      <span className="col-span-2 mx-auto size-1 rounded-full bg-primary" />
-    </span>
-  );
-}
-
 function FolderNameInput(props: {
   readonly initialValue: string;
   readonly ariaLabel?: string;
@@ -717,10 +712,19 @@ function FolderNameInput(props: {
   readonly onCancel: () => void;
 }) {
   const [value, setValue] = useState(props.initialValue);
-  const commit = () => {
-    if (value.trim().length === 0) props.onCancel();
-    else props.onCommit(value);
+  // Enter or Escape unmounts the input, which can also fire blur: finish once.
+  const finishedRef = useRef(false);
+  const finish = (action: () => void) => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    action();
   };
+  const commit = () =>
+    finish(() => {
+      if (value.trim().length === 0) props.onCancel();
+      else props.onCommit(value);
+    });
+  const cancel = () => finish(props.onCancel);
   return (
     <input
       autoFocus
@@ -732,7 +736,7 @@ function FolderNameInput(props: {
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.key === "Enter") commit();
-        else if (event.key === "Escape") props.onCancel();
+        else if (event.key === "Escape") cancel();
       }}
       onBlur={commit}
       className="h-6 min-w-0 flex-1 rounded-sm border border-input bg-background px-1.5 text-sm text-foreground outline-hidden focus-visible:border-ring"

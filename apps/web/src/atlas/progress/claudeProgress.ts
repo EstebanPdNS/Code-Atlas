@@ -24,13 +24,16 @@ export function atlasActivityLabel(entries: readonly TimelineEntry[]): string {
 /** Plans longer than this start folded, so the card never covers the chat. */
 export const ATLAS_PLAN_FOLD_THRESHOLD = 5;
 
+/** How many steps a folded plan card shows; a plan this short never folds. */
+export const ATLAS_PLAN_FOCUS_LIMIT = 3;
+
 /**
  * Which steps a folded plan card shows: the ones in progress, topped up with
  * the next pending steps to at most `limit`; a finished plan shows its last step.
  */
 export function atlasPlanFocus(
   steps: readonly { readonly status: "pending" | "inProgress" | "completed" }[],
-  limit = 3,
+  limit = ATLAS_PLAN_FOCUS_LIMIT,
 ): number[] {
   const focus = steps.flatMap((step, index) => (step.status === "inProgress" ? [index] : []));
   const after = focus.at(-1) ?? -1;

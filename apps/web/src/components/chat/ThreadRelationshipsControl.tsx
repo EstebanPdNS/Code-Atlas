@@ -529,6 +529,7 @@ export function ThreadRelationshipsPanel(props: {
                   {agent && !workflowGroup ? (
                     <AgentFaceIcon
                       persona={agentPersona(agent.id, agentOrder)}
+                      fresh={agent.status === "pending" || agent.status === "running"}
                       className="size-4 shrink-0"
                     />
                   ) : (

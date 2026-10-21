@@ -23,7 +23,8 @@ export const installAgentControlOverlay = Effect.fn("desktop.ipc.installAgentCon
         channel: SET_AGENT_CONTROL_OVERLAY_CHANNEL,
         payload: AgentControlTarget,
         result: Schema.Void,
-        handler: (target) => Effect.sync(() => overlay.set(target?.app ?? null)),
+        handler: (target, event) =>
+          Effect.sync(() => overlay.set(target?.app ?? null, event?.sender.id)),
       }),
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => overlay.set(null)));

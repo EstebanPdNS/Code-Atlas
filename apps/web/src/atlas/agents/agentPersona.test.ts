@@ -1,7 +1,11 @@
-import * as DateTime from "effect/DateTime";
 import { describe, expect, it } from "vite-plus/test";
 
-import { AGENT_NAMES, agentPersona, agentPersonaHeadline, atlasSubagentOrder } from "./agentPersona";
+import {
+  AGENT_NAMES,
+  agentPersona,
+  agentPersonaHeadline,
+  atlasSubagentOrder,
+} from "./agentPersona";
 
 describe("agentPersona", () => {
   it("gives an agent the same name and face every time", () => {
@@ -23,15 +27,24 @@ describe("agentPersona", () => {
 });
 
 describe("atlasSubagentOrder", () => {
-  it("lists agents oldest first, unstarted last", () => {
-    const at = (ms: number) => DateTime.makeUnsafe(ms);
-    expect(
-      atlasSubagentOrder([
-        { id: "c", startedAt: null },
-        { id: "b", startedAt: at(2000) },
-        { id: "a", startedAt: at(1000) },
-      ]),
-    ).toBe("a\nb\nc");
+  it("orders agents by id, whatever order they arrive in", () => {
+    expect(atlasSubagentOrder([{ id: "c" }, { id: "a" }, { id: "b" }])).toBe("a\nb\nc");
+  });
+
+  it("keeps every agent's name when a start time arrives", () => {
+    const before = [
+      { id: "node:b", startedAt: null },
+      { id: "node:a", startedAt: null },
+    ];
+    const after = [
+      { id: "node:b", startedAt: "2026-10-20T00:00:01Z" },
+      { id: "node:a", startedAt: "2026-10-20T00:00:02Z" },
+    ];
+    const names = (agents: typeof before | typeof after) => {
+      const order = atlasSubagentOrder(agents).split("\n");
+      return agents.map((agent) => agentPersona(agent.id, order).name);
+    };
+    expect(names(after)).toEqual(names(before));
   });
 });
 

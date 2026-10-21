@@ -172,7 +172,8 @@ const make = Effect.gen(function* () {
           previous.recognizer = null;
         }),
       );
-      yield* release.pipe(Effect.forkIn(scope, { startImmediately: true }));
+      // Code Atlas: a quit must not stop a release halfway and orphan whisper-server.
+      yield* release.pipe(Effect.uninterruptible, Effect.forkIn(scope, { startImmediately: true }));
     }
     yield* update((current) => ({ ...current, loadedModel: null }));
   });
@@ -368,46 +369,48 @@ const make = Effect.gen(function* () {
    * Starts loading the selected model in the background unless it is already
    * loaded or loading, and counts as use for the 30 minute idle unload.
    */
-  const ensureLoaded = (current: DictationState) =>
-    Effect.gen(function* (): Effect.fn.Return<LoadedModel, DictationError> {
-      lastModelUse = yield* Clock.currentTimeMillis;
-      if (loaded?.error) yield* unload();
-      if (!loaded) {
-        const slot: LoadedModel = {
-          model: current.settings.localModel,
-          loading: null,
-          recognizer: null,
-          error: null,
-          retired: false,
-        };
-        loaded = slot;
-        slot.loading = yield* native
-          .withPermit(
-            Effect.gen(function* () {
-              if (slot.retired) return;
-              const recognizer = yield* recognizers
-                .load(slot.model, current.settings.language)
-                .pipe(Effect.uninterruptible);
-              if (slot.retired) {
-                yield* recognizer.release;
-                return;
-              }
-              slot.recognizer = recognizer;
-              yield* update((current) => ({ ...current, loadedModel: slot.model }));
-            }),
-          )
-          .pipe(
-            Effect.catchTags({
-              DictationError: (error) =>
-                Effect.sync(() => {
-                  slot.error = error;
-                }),
-            }),
-            Effect.forkIn(scope),
-          );
-      }
-      return loaded;
-    });
+  const ensureLoaded = Effect.fn("Dictation.ensureLoaded")(function* (
+    current: DictationState,
+  ): Effect.fn.Return<LoadedModel, DictationError> {
+    lastModelUse = yield* Clock.currentTimeMillis;
+    if (loaded?.error) yield* unload();
+    if (!loaded) {
+      const slot: LoadedModel = {
+        model: current.settings.localModel,
+        loading: null,
+        recognizer: null,
+        error: null,
+        retired: false,
+      };
+      loaded = slot;
+      slot.loading = yield* native
+        .withPermit(
+          // Code Atlas: the whole body, so a quit during the load still
+          // reaches the retired check or hands the recognizer to the slot,
+          // whose release the finalizer owns; never an orphaned whisper-server.
+          Effect.gen(function* () {
+            if (slot.retired) return;
+            const recognizer = yield* recognizers.load(slot.model, current.settings.language);
+            if (slot.retired) {
+              yield* recognizer.release;
+              return;
+            }
+            slot.recognizer = recognizer;
+            yield* update((current) => ({ ...current, loadedModel: slot.model }));
+          }).pipe(Effect.uninterruptible),
+        )
+        .pipe(
+          Effect.catchTags({
+            DictationError: (error) =>
+              Effect.sync(() => {
+                slot.error = error;
+              }),
+          }),
+          Effect.forkIn(scope),
+        );
+    }
+    return loaded;
+  });
 
   /**
    * Best-effort warm-up for a client that is about to dictate, e.g. when its
@@ -507,9 +510,18 @@ const make = Effect.gen(function* () {
     yield* native.withPermit(
       Effect.gen(function* () {
         if (session.closed || !session.model.recognizer) return;
+        const model = session.model;
         const result = yield* session.model.recognizer
           .decode(samples, session.language, session.vocabulary)
-          .pipe(Effect.uninterruptible);
+          .pipe(
+            Effect.uninterruptible,
+            // Code Atlas: a recognizer that stopped working reloads with the next use.
+            Effect.tapError((error) =>
+              Effect.sync(() => {
+                if (error.reason === "load-failed" && !model.retired) model.error = error;
+              }),
+            ),
+          );
         if (!session.closed && result.text.trim()) {
           session.texts.push(result.text);
           session.locale = result.locale;
