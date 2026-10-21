@@ -25,7 +25,7 @@ Code Atlas keeps its settings, projects and threads in `~/.code-atlas`. It does 
 
 ## Settings
 
-**Settings → General → Code Atlas** turns the Background tasks card and the startup sound on or off and replays the launch intro. **Settings → Appearance → Progress style** switches between the Claude Code and Codex ways of showing a running agent, and **Settings → General → Plan first** decides whether agents always start with a task list.
+**Settings → General → Code Atlas** turns the Background tasks card and the startup sound on or off and replays the launch intro. **Settings → Appearance → Progress style** switches between the Claude Code and Codex ways of showing a running agent, and **Settings → General → Plan first** decides whether agents start every request that takes action with a task list.
 
 ## Running tasks
 
