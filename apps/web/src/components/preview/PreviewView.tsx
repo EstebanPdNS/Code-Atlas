@@ -29,7 +29,6 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   BROWSER_HISTORY_MAX_ENTRIES_PER_PROJECT,
   recordVisitForThread,
-  removeUrlForThread,
   setTitleForThreadUrl,
   useThreadRecentHistory,
 } from "~/browserHistoryStore";
@@ -66,7 +65,10 @@ import { closePreviewSession } from "./closePreviewSession";
 import { openPreviewSession } from "./openPreviewSession";
 import { showPreviewPopup } from "./showPreviewPopup";
 import { PreviewChromeRow } from "./PreviewChromeRow";
-import { PreviewEmptyState } from "./PreviewEmptyState";
+// Code Atlas: a Codex-style new tab (Recents, Favorites) and the address bar's star.
+import { BrowserNewTabPage } from "~/atlas/browser/BrowserNewTabPage";
+import { FavoriteSiteButton } from "~/atlas/browser/FavoriteSiteButton";
+import { useBrowserSite } from "~/atlas/browser/useBrowserSite";
 import { PreviewMoreMenu, type PreviewMoreMenuActions } from "./PreviewMoreMenu";
 import {
   commitBrowserViewportChange,
@@ -246,6 +248,8 @@ export function PreviewView({
 
   const navUrl = navStatus._tag === "Success" ? navStatus.url : null;
   const navTitle = navStatus._tag === "Success" ? navStatus.title : null;
+  // Code Atlas: loaded pages become Recents; the star saves the current page.
+  const atlasSite = useBrowserSite({ threadRef, url, title: navTitle, loaded: navUrl !== null });
   const latestHistoryUrl = recentHistoryEntries[0]?.url;
   // Keyed on the ids rather than threadRef, which is recreated on every update.
   const { environmentId: threadEnvironmentId, threadId } = threadRef;
@@ -943,6 +947,7 @@ export function PreviewView({
         pickDisabledReason={
           isUnreachable ? "Page didn't load — pick unavailable until the page renders" : undefined
         }
+        addressActions={atlasSite ? <FavoriteSiteButton site={atlasSite} /> : null}
         leadingActions={
           activeProfileId !== browserDefaults.profileId ? (
             <Tooltip>
@@ -1041,12 +1046,10 @@ export function PreviewView({
           )
         ) : null}
         {showEmptyState ? (
-          <PreviewEmptyState
+          <BrowserNewTabPage
             threadRef={threadRef}
             environmentId={threadRef.environmentId}
             configuredUrls={configuredUrls}
-            recentEntries={recentHistoryEntries}
-            onRemoveRecent={(url) => removeUrlForThread(threadRef, url)}
             onOpenUrl={(next) => void handleOpenServerUrl(next)}
           />
         ) : null}
