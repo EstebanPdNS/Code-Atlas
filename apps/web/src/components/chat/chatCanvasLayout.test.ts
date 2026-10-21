@@ -59,10 +59,10 @@ describe("chat canvas layout", () => {
       }).chat,
     ).toEqual({ left: 12, width: 366, insetStart: 0, insetEnd: 0 });
   });
-  it("does not move chat when a bottom-right preview fits in its margin", () => {
+  it("does not move chat when a top-right preview fits in its margin", () => {
     const result = resolve(1600);
     expect(result.chat.insetEnd).toBe(0);
-    expect(result.frame!.y + result.frame!.height).toBe(888);
+    expect(result.frame!.y).toBe(12);
     expectClear(result);
   });
   it("moves chat only as far as the preview requires", () => {
@@ -373,12 +373,11 @@ describe("workspace card beside chat", () => {
       insetEnd: 276,
     });
   });
-  it("keeps centered chat in place when a new preview opens below the card", () => {
-    expect(withCard(1440, preview)).toEqual({
-      chat: { left: 352, width: 736, insetStart: 0, insetEnd: 0 },
-      frame: { x: 1108, y: 688, width: 320, height: 200 },
-      overlapsChat: false,
-      overlapsDetailsCard: false,
-    });
+  it("opens a new preview beside the card, its top lined up with the card", () => {
+    const result = withCard(1440, preview);
+    expect(result.frame).toEqual({ x: 816, y: 12, width: 320, height: 200 });
+    expect(result.overlapsChat).toBe(false);
+    expect(result.overlapsDetailsCard).toBe(false);
+    expect(result.chat.left + result.chat.width).toBeLessThanOrEqual(816 - 12);
   });
 });

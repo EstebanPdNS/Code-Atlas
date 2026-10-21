@@ -27,9 +27,9 @@ import {
   AtlasBackgroundSection,
   AtlasContextSection,
   AtlasUsageSection,
-} from "~/atlas/AtlasRailSections";
+} from "~/atlas/rail/AtlasRailSections";
 import type { ContextWindowSnapshot } from "~/lib/contextWindow";
-import { useAtlasBackgroundTasksCard } from "~/atlas/AtlasSettingsSection";
+import { useAtlasBackgroundTasksCard } from "~/atlas/settings/AtlasSettingsSection";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -188,12 +188,9 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
             ) : null}
           </ThreadDetailsSection>
 
-          {density !== "essential" ? (
-            <AtlasContextSection contextWindow={props.contextWindow ?? null} />
-          ) : null}
-          {density !== "essential" ? (
-            <AtlasUsageSection environmentId={props.environmentId} />
-          ) : null}
+          {/* Code Atlas: Context and Usage always stay; a short window scrolls the card. */}
+          <AtlasContextSection contextWindow={props.contextWindow ?? null} />
+          <AtlasUsageSection environmentId={props.environmentId} />
           {showBackgroundTasks ? (
             <AtlasBackgroundSection
               environmentId={props.environmentId}

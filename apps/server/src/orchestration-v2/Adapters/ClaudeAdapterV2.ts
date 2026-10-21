@@ -102,6 +102,7 @@ import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
@@ -157,7 +158,10 @@ import {
 } from "../../provider/claudeUsageLimits.ts";
 import type { ManagedServerProvider } from "@t3tools/provider-core/server/snapshot";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import { T3_CODE_ORCHESTRATION_INSTRUCTIONS } from "@t3tools/provider-core/server/orchestrationInstructions";
+import {
+  T3_CODE_BROWSER_TOOL_INSTRUCTIONS,
+  T3_CODE_ORCHESTRATION_INSTRUCTIONS,
+} from "@t3tools/provider-core/server/orchestrationInstructions";
 import {
   buildPlanFirstInstructions,
   buildRuntimeInstructions,
@@ -235,6 +239,11 @@ function claudeMessageInputTokens(usage: {
   );
 }
 
+/** Code Atlas: how often a long Claude turn refreshes its /context breakdown. */
+const CLAUDE_CONTEXT_BREAKDOWN_REFRESH_MS = 20_000;
+/** The context card lists at most this many memory files. */
+const CLAUDE_CONTEXT_MEMORY_FILES_LIMIT = 20;
+
 /**
  * Code Atlas: adds Claude's /context categories, and its real auto-compact
  * threshold when auto-compact is on, to a turn's context usage.
@@ -246,13 +255,15 @@ export function withClaudeContextBreakdown<
   breakdown: Pick<
     SDKControlGetContextUsageResponse,
     "categories" | "autoCompactThreshold" | "isAutoCompactEnabled"
-  >,
+  > &
+    Partial<Pick<SDKControlGetContextUsageResponse, "memoryFiles">>,
 ): Usage & {
   readonly contextCategories: ReadonlyArray<{
     readonly name: string;
     readonly tokens: number;
     readonly kind: "used" | "free" | "buffer" | "deferred";
   }>;
+  readonly contextMemoryFiles?: ReadonlyArray<{ readonly path: string; readonly tokens: number }>;
 } {
   const threshold =
     breakdown.isAutoCompactEnabled && breakdown.autoCompactThreshold !== undefined
@@ -268,6 +279,13 @@ export function withClaudeContextBreakdown<
         tokens: Math.max(0, Math.round(category.tokens)),
         kind: category.kind,
       })),
+    ...(breakdown.memoryFiles !== undefined && breakdown.memoryFiles.length > 0
+      ? {
+          contextMemoryFiles: breakdown.memoryFiles
+            .slice(0, CLAUDE_CONTEXT_MEMORY_FILES_LIMIT)
+            .map((file) => ({ path: file.path, tokens: Math.max(0, Math.round(file.tokens)) })),
+        }
+      : {}),
   };
 }
 
@@ -1300,6 +1318,8 @@ export function makeClaudeQueryOptions(input: {
   readonly sdkSettings?: string | ClaudeSdkSettings;
   readonly environment?: NodeJS.ProcessEnv;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+  /** Code Atlas: the MCP server offers the in-app browser's preview_* tools. */
+  readonly browserTools?: boolean;
   readonly tools?: ClaudeAgentSdkQueryTools;
   readonly allowedTools?: ReadonlyArray<string>;
   readonly disallowedTools?: ReadonlyArray<string>;
@@ -1416,7 +1436,10 @@ export function makeClaudeQueryOptions(input: {
       preset: "claude_code" as const,
       append: [
         buildRuntimeInstructions({ harness: "Claude Code" }) +
-          (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
+          (input.mcpServers === undefined
+            ? ""
+            : (input.browserTools === true ? T3_CODE_BROWSER_TOOL_INSTRUCTIONS : "") +
+              T3_CODE_ORCHESTRATION_INSTRUCTIONS),
         ...(input.planFirst === true
           ? [
               buildPlanFirstInstructions(
@@ -1521,6 +1544,7 @@ export function claudeMcpQueryOverrides(input: {
 }): {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+  readonly browserTools?: boolean;
 } {
   const session = input.mcpSession;
   if (session === undefined) {
@@ -1531,6 +1555,7 @@ export function claudeMcpQueryOverrides(input: {
     : [CLAUDE_T3_MCP_TOOL_WILDCARD];
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
+    browserTools: session.browserToolsAvailable,
     mcpServers: {
       "t3-code": {
         type: "http",
@@ -4015,6 +4040,12 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         const interruptedTurns = yield* Ref.make(new Set<OrchestrationV2ProviderTurn["id"]>());
         const steeredTurns = yield* Ref.make(new Set<OrchestrationV2ProviderTurn["id"]>());
         const queryContext = yield* Ref.make<ClaudeLiveQueryContext | null>(null);
+        // Code Atlas: Claude's latest /context breakdown for this session.
+        const contextBreakdown: {
+          latest: SDKControlGetContextUsageResponse | null;
+          refreshedAt: number;
+          refreshing: boolean;
+        } = { latest: null, refreshedAt: 0, refreshing: false };
         // A worktree handoff changes the project settings even within one session.
         let bypassCache: { cwd: string | null; availability: ClaudeBypassAvailability } | null =
           null;
@@ -4288,10 +4319,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             context.streamUsage?.requestedAt,
           );
           if (tokenUsage.inputTokens <= 0) return;
+          // Code Atlas: every usage update carries Claude's latest breakdown, so
+          // the context card keeps its categories between refreshes.
+          const latestBreakdown = breakdown ?? contextBreakdown.latest;
           const detailedUsage =
-            breakdown === undefined
+            latestBreakdown === null
               ? tokenUsage
-              : withClaudeContextBreakdown(tokenUsage, breakdown);
+              : withClaudeContextBreakdown(tokenUsage, latestBreakdown);
           yield* emitProviderEvent({
             type: "provider_turn.updated",
             driver: CLAUDE_PROVIDER,
@@ -4315,8 +4349,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           });
         });
 
-        // Code Atlas: once a turn ends, refresh the context card with Claude's
-        // own breakdown. Bounded so a slow CLI never holds up the turn.
+        // Code Atlas: refresh the context card with Claude's own breakdown when a
+        // turn ends, and every so often while a long turn runs. Bounded so a slow
+        // CLI never holds up the turn.
         const emitContextBreakdown = Effect.fnUntraced(function* (
           context: ActiveClaudeTurnContext,
         ) {
@@ -4329,8 +4364,34 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             Effect.timeoutOption("2 seconds"),
             Effect.orElseSucceed(() => Option.none<SDKControlGetContextUsageResponse>()),
           );
-          if (Option.isSome(breakdown))
-            yield* emitContextUsage(context, usage, false, breakdown.value);
+          if (Option.isNone(breakdown)) return;
+          contextBreakdown.latest = breakdown.value;
+          contextBreakdown.refreshedAt = yield* Clock.currentTimeMillis;
+          // A reply that lands after its turn ended must not mark it running again.
+          if ((yield* Ref.get(activeTurn)) !== context) return;
+          yield* emitContextUsage(context, usage, false, breakdown.value);
+        });
+
+        // At most one in-turn refresh at a time, and one per interval.
+        const refreshContextBreakdownInTurn = Effect.fnUntraced(function* (
+          context: ActiveClaudeTurnContext,
+        ) {
+          const now = yield* Clock.currentTimeMillis;
+          if (
+            contextBreakdown.refreshing ||
+            now - contextBreakdown.refreshedAt < CLAUDE_CONTEXT_BREAKDOWN_REFRESH_MS
+          ) {
+            return;
+          }
+          contextBreakdown.refreshing = true;
+          yield* emitContextBreakdown(context).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                contextBreakdown.refreshing = false;
+              }),
+            ),
+            Effect.forkIn(sessionScope),
+          );
         });
 
         // Claude emits retry progress but no recovered frame; the next
@@ -7934,6 +7995,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 // Remember the request so a compaction can mark its later snapshots stale.
                 context.streamUsage = { messageId: message.message.id, usage: snapshotUsage };
                 yield* emitContextUsage(context, snapshotUsage);
+                yield* refreshContextBreakdownInTurn(context);
               } else if (
                 stream.usage !== null &&
                 claudeMessageInputTokens(stream.usage) <= 0 &&
@@ -9253,6 +9315,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             ...(mcpOverrides.mcpServers === undefined
               ? {}
               : { mcpServers: mcpOverrides.mcpServers }),
+            ...(mcpOverrides.browserTools === undefined
+              ? {}
+              : { browserTools: mcpOverrides.browserTools }),
             permissionMode: queryPolicy.permissionMode,
             ...(queryPolicy.allowDangerouslySkipPermissions === undefined
               ? {}
@@ -9498,7 +9563,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 }
                 const nativeItemId = `bypass-policy-downgrade:${context.providerTurnId}`;
                 const notice =
-                  "T3 could not confirm Claude bypass permissions here, so Full access is running with approval checks.";
+                  "Code Atlas could not confirm Claude bypass permissions here, so Full access is running with approval checks.";
                 yield* emitProviderEvent({
                   type: "turn_item.updated",
                   driver: CLAUDE_PROVIDER,

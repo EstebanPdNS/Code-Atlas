@@ -142,7 +142,7 @@ import {
 } from "../threadSelectionStore";
 import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { AtlasSidebarSections } from "~/atlas/AtlasSidebarSections";
+import { AtlasActivityDots, AtlasSidebarSections } from "~/atlas/sidebar/AtlasSidebarSections";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
@@ -2017,7 +2017,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 "truncate group-focus-within/sidebar-row:text-foreground group-hover/sidebar-row:text-foreground",
                 shouldRecede
                   ? "text-secondary-label/70"
-                  : props.isActive || isWoke || status === "input"
+                  : props.isActive ||
+                      isWoke ||
+                      status === "input" ||
+                      // Code Atlas: a running thread reads in full color.
+                      (CODE_ATLAS_SIDEBAR && (status === "working" || status === "waiting"))
                     ? "text-foreground"
                     : isUnread
                       ? "text-muted-foreground"
@@ -2077,6 +2081,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   ) : null;
   const showPin =
     props.isPinned && (!sortable?.isDragging || (props.dragOverPinned && props.dropVerb === null));
+  // Code Atlas: a pinned thread whose agent is running shows the working dots by its pin.
+  const pinWorkingDots =
+    CODE_ATLAS_SIDEBAR && (status === "working" || status === "waiting") ? (
+      <AtlasActivityDots className="me-1" />
+    ) : null;
   const pinIndicator = showPin ? (
     props.pinningSupported && canOperateThread && !sortable?.isDragging ? (
       <Tooltip>
@@ -2145,6 +2154,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               className={cn(
                 "flex shrink-0 items-center transition-opacity",
                 (!props.isActive || variantAction === "unsettle") &&
+                  // Code Atlas: only stopped threads go gray; a running one keeps its color.
+                  !(CODE_ATLAS_SIDEBAR && (status === "working" || status === "waiting")) &&
                   "opacity-40 grayscale group-focus-within/sidebar-row:opacity-100 group-focus-within/sidebar-row:grayscale-0 group-hover/sidebar-row:opacity-100 group-hover/sidebar-row:grayscale-0",
               )}
             >
@@ -2152,6 +2163,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </span>
             {draftIndicator}
             {title}
+            {pinWorkingDots}
             {pinIndicator}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
@@ -2308,6 +2320,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ) : null}
               {/* Left of the status slot, the pin would slide when hover swaps the
                 label for the wider row controls. */}
+              {pinWorkingDots}
               {pinIndicator}
               {props.projectDisplayName ? (
                 <span
@@ -4831,8 +4844,9 @@ export default function Sidebar() {
                             contextDrag={isContextDrag}
                             sortableDisabled={
                               // Code Atlas lays rows out by project group, where the
-                              // section drag model does not apply.
-                              CODE_ATLAS_SIDEBAR ||
+                              // section drag model does not apply; Pinned keeps its
+                              // drag to reorder.
+                              (CODE_ATLAS_SIDEBAR && section !== "pinned") ||
                               renamingThreadKey === threadKey ||
                               !draggableThreadKeys.has(threadKey) ||
                               optimisticDrop !== null

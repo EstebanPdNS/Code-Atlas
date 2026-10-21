@@ -2,6 +2,7 @@ import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
 import {
   CheckIcon,
   ChevronDownIcon,
+  CornerDownLeftIcon,
   ChevronLeftIcon,
   Minimize2Icon,
   PauseIcon,
@@ -9,11 +10,9 @@ import {
 } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
-import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
-import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../SidebarStageBackdrop";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
@@ -83,6 +82,10 @@ const formatPendingPrimaryActionLabel = (input: {
 const messageActionPillClassName =
   "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-message-action font-medium text-base text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:text-sm";
 
+/** Code Atlas: send, pause and resume share Claude Code's quiet icon button. */
+const atlasIconActionClassName =
+  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring enabled:text-foreground disabled:pointer-events-none [&_svg]:pointer-events-none";
+
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
   event.preventDefault();
 };
@@ -119,7 +122,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const pointerFocusProps = preserveComposerFocusOnPointerDown
     ? { onPointerDown: preventPointerFocus }
     : undefined;
-  const environmentIdentificationMode = useEnvironmentIdentificationMode();
   const shortcutModifiers = useShortcutModifierState();
   const isQueuing =
     !isEditingQueuedMessage &&
@@ -131,9 +133,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     }) === "queue";
   const alternateAction = alternateComposerDispatchAction(followUpBehavior);
   const isSendDisabled = !canOperateThread || sendDisabledReason !== null;
-  const stageBackdropVariant = useSidebarStageBackdropVariant(
-    environmentIdentificationMode === "artwork",
-  );
 
   const renderStopGenerationButton = (insidePendingAction: boolean) => (
     <Tooltip key="interrupt">
@@ -278,7 +277,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           render={
             <button
               type="button"
-              className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-message-action text-message-action-foreground shadow-xs inset-shadow-control-highlight transition-colors duration-150 hover:bg-message-action-hover active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none"
+              className={atlasIconActionClassName}
               {...pointerFocusProps}
               disabled={!canOperateThread}
               onClick={() => {
@@ -334,15 +333,12 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         ? `Click to ${followUpBehavior}, Ctrl/⌘-click${alternateShortcutLabel ? ` or ${alternateShortcutLabel}` : ""} to ${alternateAction}`
         : submitLabel);
 
+  // Code Atlas: Claude Code's composer buttons, plain icons (⏎ to send) instead
+  // of a filled circle.
   const sendButton = (
     <button
       type={showResume ? "button" : "submit"}
-      className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover",
-      )}
+      className={cn(atlasIconActionClassName, "disabled:opacity-40")}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
       disabled={
@@ -354,11 +350,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       }
       aria-label={submitStatus ?? submitLabel}
     >
-      {stageBackdropVariant ? (
-        <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-          <StageBackdropButtonArt variant={stageBackdropVariant} />
-        </span>
-      ) : null}
       {isConnecting || isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
@@ -368,15 +359,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       ) : isRunning ? (
         <MorphIcon className="size-4" icon={isQueuing ? ListPlus : CornerUpRight} />
       ) : (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path
-            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <CornerDownLeftIcon className="size-4" aria-hidden="true" />
       )}
     </button>
   );

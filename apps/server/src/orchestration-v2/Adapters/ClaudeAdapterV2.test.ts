@@ -685,6 +685,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
 
     assert.deepEqual(overrides, {
       allowedTools: [ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD],
+      browserTools: true,
       mcpServers: T3_MCP_SERVERS,
     });
   });
@@ -700,6 +701,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
 
     assert.deepEqual(overrides, {
       allowedTools: ["Read", "mcp__t3-code__*"],
+      browserTools: true,
       mcpServers: T3_MCP_SERVERS,
     });
   });
@@ -718,6 +720,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
         ...ClaudeAdapterV2.CLAUDE_READ_ONLY_ALLOWED_TOOLS,
         ...ClaudeAdapterV2.CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS,
       ],
+      browserTools: true,
       mcpServers: T3_MCP_SERVERS,
     });
     assert.isFalse(overrides.allowedTools?.includes(ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD));
@@ -833,6 +836,7 @@ describe("ClaudeAdapterV2 native protocol logging", () => {
     });
     assert.deepEqual(overrides, {
       allowedTools: ["Read", "mcp__t3-code__*"],
+      browserTools: true,
       mcpServers: {
         "t3-code": {
           type: "http",

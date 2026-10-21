@@ -302,7 +302,7 @@ import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
-import { AtlasPausedControls } from "~/atlas/AtlasPausedControls";
+import { AtlasPausedControls } from "~/atlas/progress/AtlasPausedControls";
 import { ComposerDictationControl } from "./ComposerDictationControl";
 import { useComposerDictation } from "../../dictation/useComposerDictation";
 import { useDictationHoldShortcut } from "../../dictation/useDictationHoldShortcut";
@@ -4950,6 +4950,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     hasExpandedChrome: composerHasExpandedChrome,
     hasMultilinePrompt,
     timelineOverflows,
+    alwaysRest: settings.workDisplayStyle === "claude",
   });
   const expandedComposerImages = isComposerResting
     ? standaloneComposerImages.filter((image) => pendingSnapShotIdSet.has(image.id))
@@ -7419,13 +7420,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       onStop={onDismissResume}
                     />
                   ) : null}
-                  <ComposerDictationControl
-                    dictation={dictation}
-                    disabled={composerTextUnavailable}
-                    shortcutLabel={shortcutLabelForCommand(keybindings, "composer.dictate")}
-                    onStopAndSend={stopDictationAndSend}
-                  />
-                  {/* Code Atlas: while dictating, ⏎ and the mic are the only two controls. */}
+                  {/* Code Atlas: Claude Code's order, ⏎ then the mic; while dictating
+                      they are the only two controls. */}
                   {dictation.active ? null : (
                     <ComposerFooterPrimaryActions
                       compact={isComposerResting || isComposerPrimaryActionsCompact}
@@ -7489,6 +7485,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         : {})}
                     />
                   )}
+                  <ComposerDictationControl
+                    dictation={dictation}
+                    disabled={composerTextUnavailable}
+                    shortcutLabel={shortcutLabelForCommand(keybindings, "composer.dictate")}
+                    onStopAndSend={stopDictationAndSend}
+                  />
                 </div>
               </div>
             )}

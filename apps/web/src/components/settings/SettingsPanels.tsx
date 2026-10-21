@@ -142,7 +142,7 @@ import {
 } from "../ui/number-field";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
-import { AtlasSettingsSection } from "~/atlas/AtlasSettingsSection";
+import { AtlasSettingsSection } from "~/atlas/settings/AtlasSettingsSection";
 import { ScopedSwitch } from "./ScopedSwitch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -3370,7 +3370,7 @@ export function GeneralSettingsPanel() {
         <MobileAppSettingsRow />
         <SettingsRow
           {...searchableSetting("privacy-policy")}
-          description="How we handle your data, including the anonymous usage data T3 Code collects."
+          description="How we handle your data, including the anonymous usage data Code Atlas collects."
           control={
             <Button
               render={<a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer noopener" />}
@@ -3404,7 +3404,7 @@ export function GeneralSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by T3 Code."
+          description="Notices for dependencies, assets, and optional tools used by Code Atlas."
           control={
             <Button
               render={<Link to="/settings/open-source-licenses" />}

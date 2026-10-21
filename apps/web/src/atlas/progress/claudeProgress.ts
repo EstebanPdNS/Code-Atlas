@@ -21,6 +21,28 @@ export function atlasActivityLabel(entries: readonly TimelineEntry[]): string {
   return entry.toolTitle?.trim() || entry.label.trim() || "Working";
 }
 
+/** Plans longer than this start folded, so the card never covers the chat. */
+export const ATLAS_PLAN_FOLD_THRESHOLD = 5;
+
+/**
+ * Which steps a folded plan card shows: the ones in progress, topped up with
+ * the next pending steps to at most `limit`; a finished plan shows its last step.
+ */
+export function atlasPlanFocus(
+  steps: readonly { readonly status: "pending" | "inProgress" | "completed" }[],
+  limit = 3,
+): number[] {
+  const focus = steps.flatMap((step, index) => (step.status === "inProgress" ? [index] : []));
+  const after = focus.at(-1) ?? -1;
+  for (let index = 0; index < steps.length && focus.length < limit; index += 1) {
+    if (steps[index]!.status === "pending" && (index > after || focus.length === 0)) {
+      focus.push(index);
+    }
+  }
+  if (focus.length === 0 && steps.length > 0) focus.push(steps.length - 1);
+  return focus.slice(0, limit).toSorted((a, b) => a - b);
+}
+
 /** "8s", "1m 8s", "1h 2m". */
 export function formatAtlasElapsed(elapsedMs: number): string {
   const seconds = Math.max(0, Math.floor(elapsedMs / 1000));

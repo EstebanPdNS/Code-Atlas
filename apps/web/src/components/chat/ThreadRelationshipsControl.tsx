@@ -1,3 +1,5 @@
+import { AgentFaceIcon } from "~/atlas/agents/agentFaces";
+import { agentPersona, atlasSubagentOrder } from "~/atlas/agents/agentPersona";
 import { useAtomValue } from "@effect/atom-react";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { ThreadHoverCardPopup } from "../ThreadHoverCard";
@@ -255,6 +257,8 @@ export function ThreadRelationshipsPanel(props: {
     ? deriveProviderSubagentStatus(parentProjection)?.status
     : undefined;
   const projected = projection?.subagents ?? [];
+  // Code Atlas: the same names and faces the timeline gives these agents.
+  const agentOrder = atlasSubagentOrder(projected).split("\n");
   const runtimeSubagents = projectedSubagentsToRuntime(projected);
   const byId = new Map(runtimeSubagents.map((agent) => [agent.id, agent]));
   const subagentsByThreadId = new Map(
@@ -522,14 +526,24 @@ export function ThreadRelationshipsPanel(props: {
               );
               const relationshipContent = (
                 <>
-                  <ThreadRelationshipIcon
-                    driver={isSubagent && !isParent ? providerDriver : undefined}
-                    provider={provider}
-                    fallbackIcon={RelationshipIcon}
-                    status={rowStatus}
-                  />
+                  {agent && !workflowGroup ? (
+                    <AgentFaceIcon
+                      persona={agentPersona(agent.id, agentOrder)}
+                      className="size-4 shrink-0"
+                    />
+                  ) : (
+                    <ThreadRelationshipIcon
+                      driver={isSubagent && !isParent ? providerDriver : undefined}
+                      provider={provider}
+                      fallbackIcon={RelationshipIcon}
+                      status={rowStatus}
+                    />
+                  )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-left text-sm font-medium leading-4 text-foreground/85">
+                      {agent && !workflowGroup
+                        ? `${agentPersona(agent.id, agentOrder).name} · `
+                        : ""}
                       {threadTitle}
                     </span>
                   </span>

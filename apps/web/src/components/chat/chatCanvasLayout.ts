@@ -76,7 +76,15 @@ export function resolveChatCanvasLayout({
       container.width <= padding + minChatWidth + frame.width + GAP * 2
         ? GAP
         : padding + minChatWidth + GAP;
-    if (preview.position === null) frame = { ...frame, y: container.height - frame.height - GAP };
+    // Code Atlas: a preview that was never moved opens beside the details rail,
+    // its top lined up with the Environment card, not loose at the bottom.
+    if (preview.position === null) {
+      frame = {
+        ...frame,
+        y: GAP,
+        ...(detailsCard ? { x: Math.max(GAP, detailsCard.left - GAP - frame.width) } : {}),
+      };
+    }
     if (preview.lastInteraction === "resize" && composerHeight > 0) {
       const laneWidth = Math.min(normalWidth, minChatWidth);
       const transitionWidth = Math.max(GAP, normalWidth - laneWidth);

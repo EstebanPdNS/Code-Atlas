@@ -1,5 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
-import { AtlasLaunchIntro } from "~/atlas/AtlasTerminal";
+import { AtlasLaunchIntro } from "~/atlas/intro/AtlasTerminal";
 import * as Schema from "effect/Schema";
 import {
   useEffect,

@@ -1,6 +1,6 @@
 import { DICTATION_SAMPLE_RATE } from "@t3tools/contracts";
 
-import { preferredInputDeviceConstraint } from "~/atlas/dictationInputDevice";
+import { preferredInputDeviceConstraint } from "~/atlas/dictation/dictationInputDevice";
 import processorUrl from "./pcmProcessor.worklet.ts?worker&url";
 
 // Must match the name pcmProcessor.worklet.ts registers.
@@ -52,7 +52,7 @@ export class PcmCapture {
     if (!navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined") {
       return {
         granted: false,
-        message: "This page cannot use the microphone. Open T3 Code over HTTPS or localhost.",
+        message: "This page cannot use the microphone. Open Code Atlas over HTTPS or localhost.",
       };
     }
     this.context = new AudioContext();

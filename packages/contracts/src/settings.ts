@@ -265,7 +265,8 @@ export type BrowserRecordingFrameRate = typeof BrowserRecordingFrameRate.Type;
 export const DEFAULT_BROWSER_RECORDING_FRAME_RATE: BrowserRecordingFrameRate = 30;
 export const BrowserLinkTarget = Schema.Literals(["system", "app"]);
 export type BrowserLinkTarget = typeof BrowserLinkTarget.Type;
-export const DEFAULT_BROWSER_LINK_TARGET: BrowserLinkTarget = "system";
+// Code Atlas: links open in the in-app browser; Cmd-click still opens the system browser.
+export const DEFAULT_BROWSER_LINK_TARGET: BrowserLinkTarget = "app";
 /**
  * What the address bar searches with when the input is not an address.
  * "custom" uses `browserCustomSearchUrl`, a template with `%s` for the query.
