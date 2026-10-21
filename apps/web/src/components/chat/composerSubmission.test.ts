@@ -256,6 +256,62 @@ describe("submitComposerDraft", () => {
     expect(preventDefault).not.toHaveBeenCalled();
   });
 
+  it("folds an oversized draft into an attachment instead of refusing it", () => {
+    const draft = "x".repeat(PROVIDER_SEND_TURN_MAX_INPUT_CHARS + 1);
+    const folded: string[] = [];
+    const onSend = vi.fn();
+    const preventDefault = vi.fn();
+
+    const result = submitComposerDraft({
+      prompt: draft,
+      submissionTarget: "provider-turn",
+      event: { preventDefault },
+      onSend,
+      foldOversizedPrompt: (prompt) => {
+        folded.push(prompt);
+        return true;
+      },
+    });
+
+    // Folding replaces the draft with its attachment; the user sends that next.
+    expect(result).toEqual({ validationMessage: null, didDispatch: false });
+    expect(folded).toEqual([draft]);
+    expect(onSend).not.toHaveBeenCalled();
+    expect(preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the limit message when the draft cannot be folded", () => {
+    const result = submitComposerDraft({
+      prompt: "x".repeat(PROVIDER_SEND_TURN_MAX_INPUT_CHARS + 1),
+      submissionTarget: "provider-turn",
+      event: undefined,
+      onSend: vi.fn(),
+      foldOversizedPrompt: () => false,
+    });
+
+    expect(result).toEqual({
+      validationMessage:
+        "Prompt is 1 character over the 120,000-character limit. Shorten or split it before sending.",
+      didDispatch: false,
+    });
+  });
+
+  it("does not fold a short draft that only composed context pushes over the limit", () => {
+    const foldOversizedPrompt = vi.fn(() => true);
+
+    const result = submitComposerDraft({
+      prompt: "Short draft",
+      providerInput: "x".repeat(PROVIDER_SEND_TURN_MAX_INPUT_CHARS + 1),
+      submissionTarget: "provider-turn",
+      event: undefined,
+      onSend: vi.fn(),
+      foldOversizedPrompt,
+    });
+
+    expect(result.validationMessage).toContain("over the 120,000-character limit");
+    expect(foldOversizedPrompt).not.toHaveBeenCalled();
+  });
+
   it("dispatches pending user input answers on their separate response path", () => {
     const answer = "x".repeat(PROVIDER_SEND_TURN_MAX_INPUT_CHARS + 1);
     const onSend = vi.fn();

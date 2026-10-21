@@ -41,7 +41,14 @@ import {
   contextUsageForHandoff,
   historicalMessage,
   latestNativeContextUsage,
+  messageHeadroom,
+  nativeContextOverflows,
 } from "@t3tools/provider-core/server/handoffBudget";
+import {
+  CONTEXT_WINDOW_FULL_CODE,
+  overflowCompactionFor,
+  overflowResendFor,
+} from "./ContextOverflowRecovery.ts";
 import {
   deliverContextHandoffs,
   pendingContextHandoffs,
@@ -645,6 +652,7 @@ export const layer: Layer.Layer<
         restartCancelledWork.length === 0
           ? ""
           : restartCancelledBackgroundWorkNote(restartCancelledWork);
+      const promptText = restartNote === "" ? userText : `${restartNote}\n\n${userText}`;
       const tokenCap = yield* handoffTokenCapConfig.pipe(
         Effect.orElseSucceed(() => DEFAULT_HANDOFF_TOKEN_CAP),
       );
@@ -820,7 +828,7 @@ export const layer: Layer.Layer<
             return handoffBudget({
               tokenCap,
               modelContextWindow,
-              userText: restartNote === "" ? userText : `${restartNote}\n\n${userText}`,
+              userText: promptText,
               attachments: message.attachments,
               providerThread: deliveryThread,
               nativeContextEstimate:
@@ -836,23 +844,46 @@ export const layer: Layer.Layer<
           missedItems,
           retryHandoffs,
           budget,
-          // Messages are optional; only the coverage marker can fail to fit.
+          headroom: messageHeadroom({
+            userText: promptText,
+            attachments: message.attachments,
+            providerThread: deliveryThread,
+            modelContextWindow,
+          }),
+          // Messages are optional; only the coverage marker can fail to fit. Without
+          // pending history, a measured native thread that cannot take this message
+          // is replaced too, instead of sending a prompt the provider will refuse.
           overflows: Effect.gen(function* () {
             const pending = pendingContextHandoffs([...handoffs, ...retryHandoffs], deliveryThread);
-            return (
-              pending.length > 0 &&
-              !selectContextHandoffHistory({
-                pending,
-                providerThread: deliveryThread,
-                budget: yield* budget,
-                alreadyDeliveredItemIds: deliveredItemIds,
-              }).fits
-            );
+            if (pending.length === 0) {
+              return (
+                handoffUsage?.usedTokens !== undefined &&
+                nativeContextOverflows({
+                  usedTokens: handoffUsage.usedTokens,
+                  userText: promptText,
+                  attachments: message.attachments,
+                  providerThread: deliveryThread,
+                  modelContextWindow,
+                })
+              );
+            }
+            return !selectContextHandoffHistory({
+              pending,
+              providerThread: deliveryThread,
+              budget: yield* budget,
+              alreadyDeliveredItemIds: deliveredItemIds,
+            }).fits;
           }),
         };
       });
       let resumePlan: Effect.Success<ReturnType<typeof handoffPlan>> | undefined;
       let effectiveHandoffs = handoffs;
+      let forkResolvedPortably = false;
+      // A calm, visible record of automatic context recovery for this run.
+      let contextNotice: string | undefined =
+        compaction && overflowCompactionFor(projection.thread.id, message.id) !== null
+          ? "Code Atlas compacted the conversation to continue."
+          : undefined;
       const loadedProviderThread = yield* Effect.gen(function* () {
         if (nativeForkTransfer !== undefined) {
           const sourceProjection = yield* projectionStore.getThreadRecords(
@@ -878,6 +909,103 @@ export const layer: Layer.Layer<
               runId,
               cause: `Native fork transfer ${nativeForkTransfer.id} has no source provider execution.`,
             });
+          }
+          const sourceUsedTokens =
+            sourceProviderTurn?.tokenUsage?.usedTokens ??
+            latestNativeContextUsage(sourceProjection, sourceProviderThread)?.usage.usedTokens;
+          // A native fork inherits the source's whole transcript, so a source too full
+          // for this message starts fresh with the portable summary instead.
+          if (
+            sourceUsedTokens !== undefined &&
+            nativeContextOverflows({
+              usedTokens: sourceUsedTokens,
+              userText: promptText,
+              attachments: message.attachments,
+              providerThread: sourceProviderThread,
+              modelContextWindow: knownModelWindow,
+            })
+          ) {
+            yield* Effect.logWarning("Starting a fork on a fresh native session", {
+              driver: session.driver,
+              providerThreadId: providerThread.id,
+              runId,
+              reason: "fork_source_context_full",
+            });
+            const fresh = yield* loadFromProvider(
+              session.ensureThread({
+                threadId: projection.thread.id,
+                title: projection.thread.title,
+                modelSelection: run.modelSelection,
+                runtimePolicy: resolvedRuntimePolicy,
+                providerSessionId,
+                existingProviderThread: { ...providerThread, nativeThreadRef: null },
+              }),
+            );
+            if (fresh === undefined) return undefined;
+            const sourceRunIds = sourceProjection.runs
+              .filter((candidate) => candidate.ordinal <= sourceRun.ordinal)
+              .map((candidate) => candidate.id);
+            const items = yield* projectionStore.getTurnStartHistory(
+              nativeForkTransfer.sourceThreadId,
+              sourceRunIds,
+            );
+            const ordinals = items.flatMap((item) => {
+              const source = sourceProjection.runs.find((candidate) => candidate.id === item.runId);
+              return source === undefined ? [] : [source.ordinal];
+            });
+            const createdAt = yield* DateTime.now;
+            const handoff = yield* contextHandoffService.prepareProviderHandoff({
+              threadId: projection.thread.id,
+              targetRunId: run.id,
+              transferId: nativeForkTransfer.id,
+              fromProviderThreadIds: [sourceProviderThread.id],
+              toProviderThreadId: providerThread.id,
+              fromProviderInstanceId: sourceRun.providerInstanceId,
+              toProviderInstanceId: run.providerInstanceId,
+              coveredRunOrdinals:
+                ordinals.length === 0
+                  ? { from: 1, to: 1 }
+                  : { from: Math.min(...ordinals), to: Math.max(...ordinals) },
+              strategy: "full_thread_summary",
+              items,
+              runs: sourceProjection.runs,
+              createdAt,
+            });
+            effectiveHandoffs = [handoff, ...effectiveHandoffs];
+            forkResolvedPortably = true;
+            contextNotice =
+              "The forked conversation was too long for the model's context window, so Code Atlas continued it in a fresh session with a summary of earlier messages.";
+            yield* eventSink.write({
+              events: [
+                {
+                  id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+                  type: "context-handoff.updated",
+                  threadId: projection.thread.id,
+                  runId: run.id,
+                  providerInstanceId: run.providerInstanceId,
+                  occurredAt: createdAt,
+                  payload: handoff,
+                },
+                {
+                  id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+                  type: "context-transfer.updated",
+                  threadId: projection.thread.id,
+                  runId: run.id,
+                  providerInstanceId: run.providerInstanceId,
+                  occurredAt: createdAt,
+                  payload: {
+                    ...nativeForkTransfer,
+                    targetProviderInstanceId: run.providerInstanceId,
+                    targetRunId: run.id,
+                    status: "resolved_portable",
+                    resolution: { strategy: "portable_context", contextHandoffId: handoff.id },
+                    error: null,
+                    updatedAt: createdAt,
+                  },
+                },
+              ],
+            });
+            return fresh;
           }
           return yield* loadFromProvider(
             session.forkThread({
@@ -919,9 +1047,34 @@ export const layer: Layer.Layer<
         let resumeErrorTag: string | undefined;
         if (!uncertainDelivery) {
           resumePlan = yield* handoffPlan(providerThread);
-          // A native thread too full for even the coverage marker is replaced, so the turn
-          // starts on a compacted conversation instead of being refused.
+          // A native thread too full for this turn is compacted natively first: the turn
+          // is refused with a recoverable code, and ContextOverflowRecoveryService
+          // compacts and resends it. A resend that still overflows, or a provider
+          // without native compaction, gets a fresh native thread with a summary.
           if (!compaction && (yield* resumePlan.overflows)) {
+            if (
+              session.compactThread !== undefined &&
+              overflowResendFor(projection.thread.id, message.id) === null
+            ) {
+              yield* settleRunBeforeStart({
+                signal: "context-window-full",
+                status: "failed",
+                now: yield* DateTime.now,
+                providerInstanceId: run.providerInstanceId,
+                itemProviderThreadId: providerThread.id,
+                item: {
+                  type: "error",
+                  title: "Compacting to continue",
+                  failure: makeProviderFailure({
+                    class: "provider_error",
+                    code: CONTEXT_WINDOW_FULL_CODE,
+                    message:
+                      "This conversation is too long for the model's context window. Code Atlas is compacting it and will send this message again.",
+                  }),
+                },
+              });
+              return undefined;
+            }
             replacementReason = "handoff_budget";
           } else {
             const resumed = yield* Effect.result(
@@ -961,6 +1114,10 @@ export const layer: Layer.Layer<
           }),
         );
         if (replacement === undefined) return undefined;
+        if (replacementReason === "handoff_budget") {
+          contextNotice =
+            "This conversation was too long for the model's context window, so Code Atlas continued it in a fresh session with a summary of earlier messages.";
+        }
         const transferId = yield* idAllocator.allocate.contextTransfer({
           sourceThreadId: projection.thread.id,
           targetThreadId: projection.thread.id,
@@ -1042,6 +1199,7 @@ export const layer: Layer.Layer<
         missedItems,
         retryHandoffs,
         budget,
+        headroom,
       } =
         // Adapters resume with the stored row's identity and usage, so the
         // pre-resume plan already describes the resumed thread.
@@ -1108,7 +1266,9 @@ export const layer: Layer.Layer<
           occurredAt: now,
           payload: runningProviderThread,
         },
-        ...(nativeForkTransfer === undefined || runningProviderThread.nativeThreadRef === null
+        ...(nativeForkTransfer === undefined ||
+        forkResolvedPortably ||
+        runningProviderThread.nativeThreadRef === null
           ? []
           : [
               {
@@ -1165,6 +1325,41 @@ export const layer: Layer.Layer<
           payload: runningRootNode,
         },
       ];
+      if (contextNotice !== undefined) {
+        events.push({
+          id: yield* idAllocator.allocate.event({ threadId: projection.thread.id }),
+          type: "turn-item.updated",
+          threadId: projection.thread.id,
+          runId: run.id,
+          nodeId: rootNode.id,
+          providerInstanceId: run.providerInstanceId,
+          occurredAt: now,
+          payload: {
+            id: idAllocator.derive.runSignalTurnItem({ runId, signal: "context-recovery" }),
+            threadId: projection.thread.id,
+            runId,
+            nodeId: rootNode.id,
+            providerThreadId: providerThread.id,
+            providerTurnId: null,
+            nativeItemRef: null,
+            parentItemId: null,
+            ordinal:
+              Math.max(
+                0,
+                ...projection.turnItems
+                  .filter((item) => item.runId === runId)
+                  .map((item) => item.ordinal),
+              ) + 1,
+            type: "system_notice",
+            status: "completed",
+            title: contextNotice,
+            message: contextNotice,
+            startedAt: now,
+            completedAt: now,
+            updatedAt: now,
+          },
+        });
+      }
       const runningWrite = yield* eventSink.writeIfRunCurrent({
         threadId: projection.thread.id,
         runId: run.id,
@@ -1193,6 +1388,7 @@ export const layer: Layer.Layer<
             deferInline: compact,
             providerThread: runningProviderThread,
             budget,
+            headroom,
             alreadyDeliveredItemIds: deliveredItemIds,
             ...(session.injectHistory === undefined
               ? {}

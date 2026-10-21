@@ -85,6 +85,11 @@ export const deliverContextHandoffs = Effect.fn("orchestrationV2.deliverContextH
     readonly handoffs: ReadonlyArray<OrchestrationV2ContextHandoff>;
     readonly providerThread: OrchestrationV2ProviderThread;
     readonly budget: number | Effect.Effect<number, BudgetError>;
+    /**
+     * Room the current message leaves in an empty context window (see
+     * `messageHeadroom`). Without it, the recovery pointer is always sent.
+     */
+    readonly headroom?: number | Effect.Effect<number, BudgetError>;
     readonly deferInline?: boolean;
     readonly alreadyDeliveredItemIds: ReadonlySet<string>;
     readonly inject?: (
@@ -96,17 +101,37 @@ export const deliverContextHandoffs = Effect.fn("orchestrationV2.deliverContextH
     const pending = pendingContextHandoffs(input.handoffs, input.providerThread);
     if (pending.length === 0 || (input.deferInline && input.inject === undefined))
       return { context: "", delivered: Effect.void, unsent: Effect.void };
-    const selected = selectContextHandoffHistory({
+    const fitted = selectContextHandoffHistory({
       pending,
       providerThread: input.providerThread,
       budget: typeof input.budget === "number" ? input.budget : yield* input.budget,
       alreadyDeliveredItemIds: input.alreadyDeliveredItemIds,
     });
-    // Turn startup replaces a native thread too full for this envelope, so this
-    // remains only when the current request leaves no room even on a fresh one.
-    if (!selected.fits) {
+    let selected = fitted;
+    // Turn startup replaces a native thread too full for this envelope. When the
+    // current request still leaves no budget, the turn proceeds with only the
+    // one-line t3_thread_read pointer (a zero budget selects exactly that), which
+    // the space reserved for work absorbs. Only a message that cannot fit even an
+    // empty window is refused.
+    if (!fitted.fits) {
       if (input.deferInline) return { context: "", delivered: Effect.void, unsent: Effect.void };
-      return yield* new ContextHandoffBudgetError();
+      selected = selectContextHandoffHistory({
+        pending,
+        providerThread: input.providerThread,
+        budget: 0,
+        alreadyDeliveredItemIds: input.alreadyDeliveredItemIds,
+      });
+      const headroom =
+        input.headroom === undefined
+          ? Infinity
+          : typeof input.headroom === "number"
+            ? input.headroom
+            : yield* input.headroom;
+      if (headroom < 0) return yield* new ContextHandoffBudgetError();
+      if (historyCost(selected.messages, selected.context) > headroom) {
+        // Leave the handoffs undelivered for the next turn that has room.
+        return { context: "", delivered: Effect.void, unsent: Effect.void };
+      }
     }
     const omittedItemIds = new Set(selected.omittedItemIds);
     const persist = (status: "pending" | "injected" | "inline") =>

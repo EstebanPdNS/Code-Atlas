@@ -23,6 +23,8 @@ import {
   historyResponseItems,
   selectHistory,
   historicalMessage,
+  messageHeadroom,
+  nativeContextOverflows,
 } from "@t3tools/provider-core/server/handoffBudget";
 import { projectContextHandoffForWire } from "./WireProjection.ts";
 import {
@@ -707,13 +709,63 @@ describe("handoff delivery", () => {
     assert.equal(markerOnly.omittedItems, 1);
   });
 
-  it.effect("fails before delivery when even the coverage marker cannot fit", () =>
+  it.effect("sends only the recovery pointer when the request leaves no history budget", () =>
+    Effect.gen(function* () {
+      let durable = handoff;
+      const result = yield* deliverContextHandoffs({
+        handoffs: [handoff],
+        providerThread,
+        budget: 0,
+        headroom: 50_000,
+        alreadyDeliveredItemIds: new Set(),
+        persist: (value) =>
+          Effect.sync(() => {
+            durable = value;
+          }),
+      });
+      assert.include(result.context, "t3_thread_read");
+      assert.include(result.context, threadId);
+      assert.notInclude(result.context, messages[0]!.text);
+      assert.isBelow(historyCost([], result.context), 1_000);
+      yield* result.delivered;
+      assert.equal(durable.delivery?.status, "inline");
+      // Every message stays discoverable through the pointer.
+      assert.deepEqual(
+        durable.delivery?.omittedItemIds,
+        messages.map((item) => item.itemId),
+      );
+    }),
+  );
+
+  it.effect("proceeds without history, still pending, when not even the pointer fits", () =>
+    Effect.gen(function* () {
+      let persisted = 0;
+      const result = yield* deliverContextHandoffs({
+        handoffs: [handoff],
+        providerThread,
+        budget: 0,
+        headroom: 10,
+        alreadyDeliveredItemIds: new Set(),
+        inject: () => Effect.succeed(true),
+        persist: () =>
+          Effect.sync(() => {
+            persisted++;
+          }),
+      });
+      assert.equal(result.context, "");
+      assert.equal(persisted, 0);
+      assert.lengthOf(pendingContextHandoffs([handoff], providerThread), 1);
+    }),
+  );
+
+  it.effect("refuses only a message that cannot fit an empty context window", () =>
     Effect.gen(function* () {
       let calls = 0;
       const result = yield* deliverContextHandoffs({
         handoffs: [handoff],
         providerThread,
         budget: 0,
+        headroom: -1,
         alreadyDeliveredItemIds: new Set(),
         inject: () =>
           Effect.sync(() => {
@@ -723,7 +775,49 @@ describe("handoff delivery", () => {
         persist: () => Effect.void,
       }).pipe(Effect.result);
       assert.equal(result._tag, "Failure");
+      if (result._tag === "Failure") {
+        assert.equal(result.failure._tag, "ContextHandoffBudgetError");
+      }
       assert.equal(calls, 0);
     }),
   );
+});
+
+describe("context window overflow", () => {
+  const usageThread = { contextUsage: { usedTokens: 0, maxTokens: 200_000 } };
+  it("replaces a measured native thread only when this message would not fit", () => {
+    const check = (usedTokens: number, userText = "Next step") =>
+      nativeContextOverflows({
+        usedTokens,
+        userText,
+        attachments: [],
+        providerThread: usageThread,
+        modelContextWindow: 200_000,
+      });
+    assert.isFalse(check(150_000));
+    assert.isTrue(check(190_000));
+    assert.isTrue(check(120_000, "x".repeat(70_000)));
+    // Without a measurement there is nothing to replace.
+    assert.isFalse(check(0, "x".repeat(300_000)));
+  });
+
+  it("ignores the auto-compaction threshold the provider applies on its own", () => {
+    assert.isFalse(
+      nativeContextOverflows({
+        usedTokens: 170_000,
+        userText: "Next step",
+        attachments: [],
+        providerThread: {
+          contextUsage: { usedTokens: 170_000, maxTokens: 200_000, autoCompactThreshold: 160_000 },
+        },
+      }),
+    );
+  });
+
+  it("measures headroom against an empty window", () => {
+    const headroom = (userText: string) =>
+      messageHeadroom({ userText, attachments: [], providerThread: usageThread });
+    assert.isAbove(headroom("Short"), 199_000);
+    assert.isBelow(headroom("x".repeat(250_000)), 0);
+  });
 });
