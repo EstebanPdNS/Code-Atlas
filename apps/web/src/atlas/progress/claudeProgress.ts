@@ -4,6 +4,8 @@
  */
 import type { TimelineEntry } from "~/session-logic";
 
+import { desktopActivityLabel } from "~/atlas/desktop/desktopTarget";
+
 /** What the agent is doing now, from the newest timeline entry of the turn. */
 export function atlasActivityLabel(entries: readonly TimelineEntry[]): string {
   const latest = entries.at(-1);
@@ -16,6 +18,8 @@ export function atlasActivityLabel(entries: readonly TimelineEntry[]): string {
     return "Thinking";
   }
   if (entry.itemType === "reasoning" || entry.tone === "thinking") return "Thinking";
+  const desktop = desktopActivityLabel(entries);
+  if (desktop !== null) return desktop;
   if (entry.command?.trim()) return "Running a command";
   if ((entry.changedFiles?.length ?? 0) > 0) return "Editing files";
   return entry.toolTitle?.trim() || entry.label.trim() || "Working";

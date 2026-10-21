@@ -90,6 +90,16 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(IpcChannels.SET_NOTIFICATION_BADGE_CHANNEL, badge),
   setAgentControlOverlay: (target) =>
     ipcRenderer.invoke(IpcChannels.SET_AGENT_CONTROL_OVERLAY_CHANNEL, target),
+  onAgentControlOverlayEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      if (typeof payload === "object" && payload !== null) {
+        listener(payload as Parameters<typeof listener>[0]);
+      }
+    };
+    ipcRenderer.on(IpcChannels.AGENT_CONTROL_OVERLAY_EVENT_CHANNEL, handler);
+    return () =>
+      ipcRenderer.removeListener(IpcChannels.AGENT_CONTROL_OVERLAY_EVENT_CHANNEL, handler);
+  },
   onNotificationBadgeClear: (listener) => {
     const handler = () => listener();
     ipcRenderer.on(IpcChannels.SET_NOTIFICATION_BADGE_CHANNEL, handler);
