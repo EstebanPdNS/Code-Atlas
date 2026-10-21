@@ -20,9 +20,11 @@ agent-written summary.
 ## Context limits
 
 A handoff must leave room for existing provider context, your request and attachments, instructions,
-tools, and subsequent work. If even its retrieval references cannot fit, T3 Code reports an error
-instead of shortening your request. Compact the target conversation or select a larger-context
-model before trying again.
+tools, and subsequent work. If the target provider conversation is too full for even its retrieval
+references, T3 Code starts a fresh provider conversation carrying a budgeted selection of the whole
+thread, so the turn continues on a compacted conversation. Your request is never shortened: only
+when the request and its attachments alone exceed the model's context window does T3 Code report an
+error. Shorten the request, send fewer attachments, or select a larger-context model.
 
 Server operators can set `T3CODE_CONTEXT_HANDOFF_TOKEN_CAP` to change the initial history allowance
 (default 16,000; clamped to 1,024–64,000). This is an upper bound, not a provider context-window

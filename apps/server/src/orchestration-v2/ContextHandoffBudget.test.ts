@@ -25,7 +25,11 @@ import {
   historicalMessage,
 } from "@t3tools/provider-core/server/handoffBudget";
 import { projectContextHandoffForWire } from "./WireProjection.ts";
-import { deliverContextHandoffs } from "./ContextHandoffDelivery.ts";
+import {
+  deliverContextHandoffs,
+  pendingContextHandoffs,
+  selectContextHandoffHistory,
+} from "./ContextHandoffDelivery.ts";
 
 const encodeJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown));
 const decodeHandoff = Schema.decodeUnknownSync(OrchestrationV2ContextHandoff);
@@ -666,6 +670,42 @@ describe("handoff delivery", () => {
       assert.include(serialized, "Latest result");
     }),
   );
+
+  it("needs room only for the coverage marker, not for any historical message", () => {
+    const oversized: OrchestrationV2ContextHandoff = {
+      ...handoff,
+      history: {
+        ...handoff.history!,
+        messages: [message("item:oversized", "user", "x".repeat(5_000))],
+      },
+    };
+    const injected: OrchestrationV2ContextHandoff = {
+      ...handoff,
+      id: ContextHandoffId.make("handoff:injected"),
+      delivery: {
+        nativeThreadId: providerThread.nativeThreadRef!.nativeId!,
+        status: "injected",
+        itemIds: [],
+      },
+    };
+    const pending = pendingContextHandoffs([oversized, injected], providerThread);
+    assert.deepEqual(
+      pending.map((candidate) => candidate.id),
+      [oversized.id],
+    );
+    const select = (budget: number) =>
+      selectContextHandoffHistory({
+        pending,
+        providerThread,
+        budget,
+        alreadyDeliveredItemIds: new Set(),
+      });
+    assert.isFalse(select(0).fits);
+    const markerOnly = select(1_000);
+    assert.isTrue(markerOnly.fits);
+    assert.lengthOf(markerOnly.messages, 0);
+    assert.equal(markerOnly.omittedItems, 1);
+  });
 
   it.effect("fails before delivery when even the coverage marker cannot fit", () =>
     Effect.gen(function* () {

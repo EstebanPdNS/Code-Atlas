@@ -70,13 +70,15 @@ const CODEX_APP_SERVER_PROBE_FORCE_KILL_AFTER = "2 seconds" as const;
 const CODEX_CATALOG_REFRESH_TIMEOUT_MS = 3_000;
 const CODEX_CONFIG_PROBE_TIMEOUT_MS = 3_000;
 const CODEX_CATALOG_REFRESH_POLL = "100 millis" as const;
-const CODEX_CLIENT_NAME = "T3 Code";
+const CODEX_CLIENT_NAME = "Code Atlas";
 // Codex's probe does a full handshake plus account, models, and skills requests, which can
 // legitimately run past the shared 10s AUTH_PROBE_TIMEOUT_MS on a loaded or slow machine
 // (most often reported on Windows). Give Codex its own longer budget instead of raising the
 // timeout for every provider.
 const CODEX_AUTH_PROBE_TIMEOUT_MS = 20_000;
 const CODEX_DISCOVERY_MARGIN_MS = 250;
+const CODEX_ACCOUNT_RETRY_DELAY = "500 millis" as const;
+const CODEX_WORKSPACE_ROUTING_ERROR = /workspace routing discovery (timed out|cancelled|failed)/i;
 
 const CODEX_PRESENTATION = {
   displayName: "Codex",
@@ -86,6 +88,8 @@ const CODEX_PRESENTATION = {
 
 export interface CodexAppServerProviderSnapshot {
   readonly account: CodexSchema.V2GetAccountResponse;
+  /** account/read could not resolve the ChatGPT workspace route this probe. */
+  readonly accountUnavailable?: boolean;
   readonly rateLimits?: CodexRateLimitsProbe;
   readonly version: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel> | undefined;
@@ -517,6 +521,39 @@ export const withCodexAppServerClient = Effect.fn("withCodexAppServerClient")(fu
   return { client, initialize };
 });
 
+/**
+ * Codex resolves the ChatGPT workspace route inside account/read, and that
+ * lookup can time out while the CLI itself is healthy. Retry once, then report
+ * the account as unknown for this probe; the next health refresh tries again.
+ */
+const readCodexAccount = Effect.fn("readCodexAccount")(function* (
+  client: CodexClient.CodexAppServerClient["Service"],
+  deadlineMs: number,
+) {
+  const read = client.request("account/read", {});
+  const first = yield* read.pipe(
+    Effect.asSome,
+    Effect.catchTags({
+      CodexAppServerRequestError: (error) =>
+        CODEX_WORKSPACE_ROUTING_ERROR.test(error.errorMessage)
+          ? Effect.succeedNone
+          : Effect.fail(error),
+    }),
+  );
+  if (Option.isSome(first)) return first.value;
+  yield* Effect.sleep(CODEX_ACCOUNT_RETRY_DELAY);
+  const remainingMs = deadlineMs - DateTime.toEpochMillis(yield* DateTime.now);
+  if (remainingMs <= 0) return undefined;
+  return yield* read.pipe(
+    Effect.timeoutOption(Duration.millis(remainingMs)),
+    Effect.map(Option.getOrUndefined),
+    Effect.catchTags({
+      CodexAppServerRequestError: (error) =>
+        CODEX_WORKSPACE_ROUTING_ERROR.test(error.errorMessage) ? Effect.void : Effect.fail(error),
+    }),
+  );
+});
+
 const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(function* (input: {
   readonly binaryPath: string;
   readonly homePath?: string;
@@ -531,7 +568,10 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   const versionMatch = initialize.userAgent.match(/\/([^\s]+)/);
   const version = versionMatch ? versionMatch[1] : undefined;
 
-  const accountResponse = yield* client.request("account/read", {});
+  // Optional discovery must finish before the outer timeout can discard the account result.
+  const deadlineMs = spawnedAtMs + CODEX_AUTH_PROBE_TIMEOUT_MS - CODEX_DISCOVERY_MARGIN_MS;
+  const readAccount = yield* readCodexAccount(client, deadlineMs);
+  const accountResponse = readAccount ?? { requiresOpenaiAuth: false };
   if (!accountResponse.account && accountResponse.requiresOpenaiAuth) {
     return {
       account: accountResponse,
@@ -541,8 +581,6 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
-  // Optional discovery must finish before the outer timeout can discard the account result.
-  const deadlineMs = spawnedAtMs + CODEX_AUTH_PROBE_TIMEOUT_MS - CODEX_DISCOVERY_MARGIN_MS;
   const [skillsResponse, models, serviceTier, rateLimits] = yield* Effect.all(
     [
       withCodexDiscoveryDeadline(client.request("skills/list", { cwds: [input.cwd] }), deadlineMs),
@@ -594,6 +632,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
 
   return {
     account: accountResponse,
+    ...(readAccount === undefined ? { accountUnavailable: true } : {}),
     ...(rateLimits ? { rateLimits } : {}),
     version,
     models,
@@ -635,7 +674,7 @@ const makePendingCodexProvider = Effect.fn("CodexProvider.makePendingCodexProvid
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Codex is disabled in T3 Code settings.",
+        message: "Codex is disabled in Code Atlas settings.",
       },
     });
   }
@@ -656,11 +695,22 @@ const makePendingCodexProvider = Effect.fn("CodexProvider.makePendingCodexProvid
   });
 });
 
-function accountProbeStatus({ account, rateLimits }: CodexAppServerProviderSnapshot): {
+function accountProbeStatus({
+  account,
+  accountUnavailable,
+  rateLimits,
+}: CodexAppServerProviderSnapshot): {
   readonly status: Exclude<ServerProviderState, "disabled">;
   readonly auth: ServerProvider["auth"];
   readonly message?: string;
 } {
+  if (accountUnavailable) {
+    return {
+      status: "warning",
+      auth: { status: "unknown" },
+      message: "Codex couldn't reach ChatGPT workspace routing; it will retry.",
+    };
+  }
   const authLabel = codexAccountAuthLabel(account.account);
   const authEmail = codexAccountEmail(account.account);
   const workspaceId =
@@ -725,7 +775,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Codex is disabled in T3 Code settings.",
+        message: "Codex is disabled in Code Atlas settings.",
       },
     });
   }

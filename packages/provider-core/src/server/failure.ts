@@ -22,7 +22,7 @@ export class ContextHandoffBudgetError extends Schema.TaggedError<ContextHandoff
   {},
 ) {
   override get message() {
-    return "Insufficient context allowance for the provider handoff. Compact the target conversation or use a larger-context model; the current request has not been truncated.";
+    return "This message and its attachments are too large for the model's context window. Shorten the message, send fewer attachments, or use a larger-context model; nothing was truncated.";
   }
 }
 
@@ -96,7 +96,7 @@ function curatedCauseMessages(cause: unknown): {
         case "ContextHandoffDeliveryUncertainError":
           return {
             known:
-              "T3 could not confirm whether conversation history reached the provider. Retry the turn to recover the session.",
+              "Code Atlas could not confirm whether conversation history reached the provider. Retry the turn to recover the session.",
             category: categoryMessage(),
           };
         case "ProviderAdapterProtocolError": {

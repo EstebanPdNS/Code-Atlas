@@ -12,6 +12,69 @@ import {
   selectHistory,
 } from "@t3tools/provider-core/server/handoffBudget";
 
+/** Handoffs the target native thread has not confirmed receiving. */
+export function pendingContextHandoffs(
+  handoffs: ReadonlyArray<OrchestrationV2ContextHandoff>,
+  providerThread: OrchestrationV2ProviderThread,
+) {
+  const nativeThreadId = providerThread.nativeThreadRef?.nativeId ?? undefined;
+  return handoffs.filter(
+    (handoff) =>
+      nativeThreadId === undefined ||
+      handoff.delivery?.nativeThreadId !== nativeThreadId ||
+      handoff.delivery.status === "pending",
+  );
+}
+
+/**
+ * Messages are optional, so the envelope fits whenever its coverage marker
+ * (collapsed to a single t3_thread_read pointer when needed) does.
+ */
+export function selectContextHandoffHistory(input: {
+  readonly pending: ReadonlyArray<OrchestrationV2ContextHandoff>;
+  readonly providerThread: OrchestrationV2ProviderThread;
+  readonly budget: number;
+  readonly alreadyDeliveredItemIds: ReadonlySet<string>;
+}) {
+  const { pending, budget } = input;
+  let coverage = pending
+    .map(
+      (handoff) =>
+        `Context handoff (${handoff.strategy === "fork_delta_summary" ? "merge_back / fork_delta_summary" : handoff.strategy}):\n${
+          handoff.history?.coverage ??
+          `From thread ${handoff.threadId}, runs ${handoff.coveredRunOrdinals.from}-${handoff.coveredRunOrdinals.to}. Recover history with t3_thread_read, view=activity; paginate with afterPosition, and use itemId/textOffset for long items.`
+        }`,
+    )
+    .join("\n");
+  if (historyCost([], coverage) > Math.min(4_000, budget / 2)) {
+    const strategies = Array.from(new Set(pending.map((handoff) => handoff.strategy)));
+    coverage = `Context handoff (${strategies.join(", ")}). ${pending.length} handoff records; detailed coverage references omitted. Recover history with t3_thread_read({threadId:"${input.providerThread.appThreadId ?? pending[0]!.threadId}",view:"activity",limit:20,maxCharsPerItem:4000}); paginate with afterPosition=nextPosition. Follow fork/handoff source references in activity. For long items use itemId and textOffset=nextTextOffset until null.`;
+  }
+  const seen = new Set(input.alreadyDeliveredItemIds);
+  const messages = pending
+    .flatMap((handoff) => handoff.history?.messages ?? [])
+    .filter((message) => {
+      if (seen.has(message.itemId)) return false;
+      seen.add(message.itemId);
+      return true;
+    });
+  const oldContext = pending
+    .filter((handoff) => handoff.history === undefined)
+    .map((handoff) => handoff.summaryText)
+    .join("\n\n");
+  const fullCoverage =
+    oldContext && historyCost([], `${coverage}\n${oldContext}`) + 512 <= budget
+      ? `${coverage}\n${oldContext}`
+      : coverage;
+  const selected = selectHistory({
+    messages,
+    coverage: fullCoverage,
+    omittedItems: pending.reduce((sum, handoff) => sum + (handoff.history?.omittedItems ?? 0), 0),
+    budget,
+  });
+  return { ...selected, fits: historyCost(selected.messages, selected.context) <= budget };
+}
+
 /**
  * Persist before/after injection: an ambiguous pending delivery requires a fresh native thread.
  * Run `unsent` when the provider refused the turn before reading the prompt, so that
@@ -30,51 +93,18 @@ export const deliverContextHandoffs = Effect.fn("orchestrationV2.deliverContextH
     readonly persist: (handoff: OrchestrationV2ContextHandoff) => Effect.Effect<void, PersistError>;
   }) {
     const nativeThreadId = input.providerThread.nativeThreadRef?.nativeId ?? undefined;
-    const pending = input.handoffs.filter(
-      (handoff) =>
-        nativeThreadId === undefined ||
-        handoff.delivery?.nativeThreadId !== nativeThreadId ||
-        handoff.delivery.status === "pending",
-    );
+    const pending = pendingContextHandoffs(input.handoffs, input.providerThread);
     if (pending.length === 0 || (input.deferInline && input.inject === undefined))
       return { context: "", delivered: Effect.void, unsent: Effect.void };
-    const budget = typeof input.budget === "number" ? input.budget : yield* input.budget;
-    let coverage = pending
-      .map(
-        (handoff) =>
-          `Context handoff (${handoff.strategy === "fork_delta_summary" ? "merge_back / fork_delta_summary" : handoff.strategy}):\n${
-            handoff.history?.coverage ??
-            `From thread ${handoff.threadId}, runs ${handoff.coveredRunOrdinals.from}-${handoff.coveredRunOrdinals.to}. Recover history with t3_thread_read, view=activity; paginate with afterPosition, and use itemId/textOffset for long items.`
-          }`,
-      )
-      .join("\n");
-    if (historyCost([], coverage) > Math.min(4_000, budget / 2)) {
-      const strategies = Array.from(new Set(pending.map((handoff) => handoff.strategy)));
-      coverage = `Context handoff (${strategies.join(", ")}). ${pending.length} handoff records; detailed coverage references omitted. Recover history with t3_thread_read({threadId:"${input.providerThread.appThreadId ?? pending[0]!.threadId}",view:"activity",limit:20,maxCharsPerItem:4000}); paginate with afterPosition=nextPosition. Follow fork/handoff source references in activity. For long items use itemId and textOffset=nextTextOffset until null.`;
-    }
-    const seen = new Set(input.alreadyDeliveredItemIds);
-    const messages = pending
-      .flatMap((handoff) => handoff.history?.messages ?? [])
-      .filter((message) => {
-        if (seen.has(message.itemId)) return false;
-        seen.add(message.itemId);
-        return true;
-      });
-    const oldContext = pending
-      .filter((handoff) => handoff.history === undefined)
-      .map((handoff) => handoff.summaryText)
-      .join("\n\n");
-    const fullCoverage =
-      oldContext && historyCost([], `${coverage}\n${oldContext}`) + 512 <= budget
-        ? `${coverage}\n${oldContext}`
-        : coverage;
-    const selected = selectHistory({
-      messages,
-      coverage: fullCoverage,
-      omittedItems: pending.reduce((sum, handoff) => sum + (handoff.history?.omittedItems ?? 0), 0),
-      budget,
+    const selected = selectContextHandoffHistory({
+      pending,
+      providerThread: input.providerThread,
+      budget: typeof input.budget === "number" ? input.budget : yield* input.budget,
+      alreadyDeliveredItemIds: input.alreadyDeliveredItemIds,
     });
-    if (historyCost(selected.messages, selected.context) > budget) {
+    // Turn startup replaces a native thread too full for this envelope, so this
+    // remains only when the current request leaves no room even on a fresh one.
+    if (!selected.fits) {
       if (input.deferInline) return { context: "", delivered: Effect.void, unsent: Effect.void };
       return yield* new ContextHandoffBudgetError();
     }
