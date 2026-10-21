@@ -592,10 +592,10 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
   min-height: 2.75rem;
 }
 
-/* Dictation trace: exactly 22 bars wide (2px bars, 2px gaps); the extra bar
+/* Dictation trace: exactly 17 bars wide (3px bars, 3px gaps); the extra bar
    past the right edge is clipped while the row slides. */
 [data-atlas-waveform] {
-  width: calc(22 * 0.25rem - 0.125rem);
+  width: calc(17 * 0.375rem - 0.1875rem);
 }
 
 /* Sidebar wordmark: "code atlas." spans nearly the whole sidebar header. A
@@ -667,7 +667,7 @@ span[data-atlas-hero-heading] {
 }
 
 [data-atlas-status-line] {
-  padding-inline-start: 5%;
+  padding-inline-start: 2%;
 }
 
 /* Sidebar project and group rows: the count sits flush right; on hover it
@@ -706,4 +706,10 @@ span[data-atlas-hero-heading] {
   [data-atlas-row-actions] {
     transition: none;
   }
+}
+
+/* Beside the details rail, the conversation text keeps 5% of the lane free on
+   each side, so long lines don't run edge to edge. */
+[data-chat-canvas][data-atlas-lane-fill] .messages-timeline-scroll .chat-content-lane {
+  padding-inline: 5%;
 }

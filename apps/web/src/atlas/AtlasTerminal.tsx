@@ -8,6 +8,7 @@ import { getLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
 
 import auroraUrl from "./aurora.mp3";
+import { atlasProviderFill } from "./providerColors";
 import {
   ATLAS_SOUND_STORAGE_KEY,
   publishAtlasTerminalMeta,
@@ -132,6 +133,8 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
           <span className="mx-1.5 text-muted-foreground">&gt;</span>
           <span>{command.slice(0, props.typed)}</span>
           {props.caret ? <span data-atlas-caret /> : null}
+          {/* The untyped rest keeps its width, so the intro frames the whole command from the start. */}
+          <span className="invisible">{command.slice(props.typed)}</span>
         </p>
         <div data-atlas-layout className="my-4">
           <div ref={artRef} aria-hidden data-atlas-art>
@@ -183,7 +186,14 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
                     <span key={entry.label} className="inline-flex items-center gap-1.5">
                       {entry.label}
                       <span data-atlas-meter aria-hidden>
-                        <span style={{ width: `${entry.percent ?? 0}%` }} />
+                        <span
+                          style={{
+                            width: `${entry.percent ?? 0}%`,
+                            ...(atlasProviderFill(entry.label) === null
+                              ? {}
+                              : { background: atlasProviderFill(entry.label)! }),
+                          }}
+                        />
                       </span>
                       <strong className="font-medium text-foreground tabular-nums">
                         {entry.percent === null ? "—" : `${Math.round(entry.percent)}%`}
