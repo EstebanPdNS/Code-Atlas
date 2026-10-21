@@ -60,6 +60,8 @@ export class DesktopLocalEnvironmentAuth extends Context.Service<
   DesktopLocalEnvironmentAuth,
   {
     readonly getBearerToken: Effect.Effect<string, DesktopLocalEnvironmentAuthError>;
+    /** Mints a new token in place of a cached one the backend rejected. */
+    readonly refreshBearerToken: Effect.Effect<string, DesktopLocalEnvironmentAuthError>;
   }
 >()("@t3tools/desktop/backend/DesktopLocalEnvironmentAuth") {}
 
@@ -123,7 +125,12 @@ export const make = Effect.gen(function* () {
     )
     .pipe(Effect.withSpan("desktop.localEnvironmentAuth.getBearerToken"));
 
-  return DesktopLocalEnvironmentAuth.of({ getBearerToken });
+  const refreshBearerToken = Ref.set(tokenRef, Option.none()).pipe(
+    Effect.andThen(getBearerToken),
+    Effect.withSpan("desktop.localEnvironmentAuth.refreshBearerToken"),
+  );
+
+  return DesktopLocalEnvironmentAuth.of({ getBearerToken, refreshBearerToken });
 });
 
 export const layer = Layer.effect(DesktopLocalEnvironmentAuth, make);

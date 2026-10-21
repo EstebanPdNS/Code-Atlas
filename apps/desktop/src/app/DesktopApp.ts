@@ -2,15 +2,20 @@ import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 
+import type { DesktopSystemWakeup } from "@t3tools/contracts";
 import * as NetService from "@t3tools/shared/Net";
 import * as Crypto from "effect/Crypto";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
+import * as ElectronPowerMonitor from "../electron/ElectronPowerMonitor.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
+import * as ElectronWindow from "../electron/ElectronWindow.ts";
+import * as IpcChannels from "../ipc/channels.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
@@ -159,6 +164,25 @@ export const stopAllPoolInstances = Effect.fn("desktop.app.stopAllPoolInstances"
   },
 );
 
+// Sleep kills sockets without a close event. Renderers replace them on resume
+// instead of waiting for a health check or a long retry delay to notice.
+const forwardSystemWakeups = Effect.gen(function* () {
+  const powerMonitor = yield* ElectronPowerMonitor.ElectronPowerMonitor;
+  const electronWindow = yield* ElectronWindow.ElectronWindow;
+  const wakeups = yield* Queue.unbounded<DesktopSystemWakeup>();
+  yield* powerMonitor.onSimpleEvent("resume", () => {
+    Queue.offerUnsafe(wakeups, "resume");
+  });
+  yield* powerMonitor.onSimpleEvent("unlock-screen", () => {
+    Queue.offerUnsafe(wakeups, "unlock-screen");
+  });
+  yield* Queue.take(wakeups).pipe(
+    Effect.flatMap((wakeup) => electronWindow.sendAll(IpcChannels.SYSTEM_WAKEUP_CHANNEL, wakeup)),
+    Effect.forever,
+    Effect.forkScoped,
+  );
+}).pipe(Effect.withSpan("desktop.forwardSystemWakeups"));
+
 const bootstrap = Effect.gen(function* () {
   const state = yield* DesktopState.DesktopState;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -179,6 +203,7 @@ const bootstrap = Effect.gen(function* () {
   });
   yield* installDesktopIpcHandlers();
   yield* logBootstrapInfo("bootstrap ipc handlers registered");
+  yield* forwardSystemWakeups;
   // Before any window: the preload merges these items before the app reads storage.
   yield* (yield* DesktopLegacyLocalStorage.DesktopLegacyLocalStorage).load(
     yield* (yield* DesktopAppIdentity.DesktopAppIdentity).resolveUserDataPath,

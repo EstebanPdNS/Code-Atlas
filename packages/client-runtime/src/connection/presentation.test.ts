@@ -241,6 +241,52 @@ describe("connection presentation", () => {
     });
   });
 
+  it("presents every lost connection to a local host as a calm reconnect", () => {
+    const failure = new ConnectionTransientError({
+      reason: "timeout",
+      detail: "Code Atlas did not answer.",
+      traceId: "trace-local",
+    });
+    const lost = [
+      supervisorState({ network: "offline", phase: "offline", stage: null }),
+      supervisorState({ phase: "backoff", stage: null, attempt: 3, lastFailure: failure }),
+      supervisorState({ phase: "connecting", stage: "opening", attempt: 2, lastFailure: failure }),
+      supervisorState({
+        phase: "blocked",
+        stage: null,
+        lastFailure: new ConnectionBlockedError({
+          reason: "authentication",
+          detail: "Token rejected.",
+        }),
+      }),
+    ];
+    for (const state of lost) {
+      expect(presentEnvironmentConnection(state, { localHost: true })).toEqual({
+        phase: "reconnecting",
+        error: null,
+        traceId: null,
+      });
+    }
+    expect(
+      presentEnvironmentConnection(supervisorState({ phase: "offline", stage: null }), {
+        localHost: false,
+      }).phase,
+    ).toBe("offline");
+  });
+
+  it("keeps an incompatible local host unsupported", () => {
+    expect(
+      presentEnvironmentConnection(
+        supervisorState({
+          phase: "blocked",
+          stage: null,
+          lastFailure: new ConnectionBlockedError({ reason: "unsupported", detail: "Too old." }),
+        }),
+        { localHost: true },
+      ),
+    ).toEqual({ phase: "unsupported", error: "Too old.", traceId: null });
+  });
+
   it("preserves an explicitly available environment while offline", () => {
     expect(
       presentEnvironmentConnection(

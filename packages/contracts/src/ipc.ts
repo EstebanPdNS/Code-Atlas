@@ -78,6 +78,7 @@ export type DesktopUpdateStatus =
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopUpdateChannel = "latest" | "nightly";
+export type DesktopSystemWakeup = "resume" | "unlock-screen";
 export type DesktopAppStageLabel = "Alpha" | "Beta" | "Dev" | "Nightly";
 
 export const DesktopUpdateStatusSchema = Schema.Literals([
@@ -1051,7 +1052,8 @@ export interface DesktopBridge {
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
   getLocalEnvironmentEnabled?: () => boolean;
   setLocalEnvironmentEnabled?: (enabled: boolean) => Promise<void>;
-  getLocalEnvironmentBearerToken: () => Promise<string>;
+  /** `refresh` replaces a cached token the local backend rejected. */
+  getLocalEnvironmentBearerToken: (options?: { readonly refresh?: boolean }) => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;
   getConnectionCatalog?: () => Promise<string | null>;
@@ -1129,6 +1131,12 @@ export interface DesktopBridge {
   onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
+  /**
+   * The OS woke from sleep or the screen unlocked. Sleep kills sockets without a
+   * close event, so connections are replaced or checked at once. Older desktop
+   * shells omit it.
+   */
+  onSystemWakeup?: (listener: (event: DesktopSystemWakeup) => void) => () => void;
   /** App window zoom; older desktop shells omit this method. */
   getWindowZoomFactor?: () => number;
   getUpdateState: () => Promise<DesktopUpdateState>;

@@ -16,6 +16,7 @@ import {
   credentialConnectionId,
   insertRoute,
   entryWithRoutes,
+  isLocalHostEntry,
   mergeLearnedRoutes,
   removedWithRelay,
   routesAfterRemoving,
@@ -86,6 +87,20 @@ describe("connection routes", () => {
   it("keeps a user's order when a saved route is replaced", () => {
     const repaired = direct("lan", "http://192.168.1.11:3773/");
     expect(upsertRoute([RELAY, LAN], repaired)).toEqual([RELAY, repaired]);
+  });
+});
+
+describe("isLocalHostEntry", () => {
+  it("treats only a loopback main route as this machine", () => {
+    const entry = (route: ConnectionRoute): ConnectionCatalogEntry => ({
+      target: route.target,
+      profile: route.profile,
+      enabled: true,
+    });
+    expect(isLocalHostEntry(entry(direct("local:primary", "http://127.0.0.1:3773/")))).toBe(true);
+    expect(isLocalHostEntry(entry(direct("saved", "http://localhost:3773/")))).toBe(true);
+    expect(isLocalHostEntry(entry(direct("lan", "http://192.168.1.10:3773/")))).toBe(false);
+    expect(isLocalHostEntry(entry(RELAY))).toBe(false);
   });
 });
 

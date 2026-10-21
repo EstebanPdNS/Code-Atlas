@@ -43,7 +43,10 @@ import * as Stream from "effect/Stream";
 import { FetchHttpClient } from "effect/http";
 
 import { APP_VERSION } from "../branding";
-import { readDesktopPrimaryBearerToken } from "../environments/primary/desktopAuth";
+import {
+  invalidateDesktopPrimaryBearerToken,
+  readDesktopPrimaryBearerToken,
+} from "../environments/primary/desktopAuth";
 import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer";
 import {
   readPrimaryEnvironmentTarget,
@@ -125,6 +128,25 @@ const networkPathChanges = Stream.callback<"network-changed">((queue) =>
   ).pipe(Effect.asVoid),
 );
 
+/**
+ * The OS sleeps without hiding the window, so `visibilitychange` misses it and
+ * the socket dies silently. A resume replaces the session at once; an unlock
+ * only checks it, since the machine may not have slept.
+ */
+const desktopSystemWakeups = Stream.callback<Wakeups.ConnectionWakeup>((queue) =>
+  Effect.acquireRelease(
+    Effect.sync(() =>
+      window.desktopBridge?.onSystemWakeup?.((wakeup) => {
+        Queue.offerUnsafe(
+          queue,
+          wakeup === "resume" ? "application-active-reconnect" : "application-active-probe",
+        );
+      }),
+    ),
+    (unsubscribe) => Effect.sync(() => unsubscribe?.()),
+  ).pipe(Effect.asVoid),
+);
+
 const layerWakeups = Wakeups.layer({
   changes: Stream.mergeAll(
     [
@@ -149,6 +171,7 @@ const layerWakeups = Wakeups.layer({
         Stream.map(() => "credentials-changed" as const),
       ),
       networkPathChanges,
+      desktopSystemWakeups,
     ],
     { concurrency: "unbounded" },
   ),
@@ -363,6 +386,7 @@ const layerCapabilities = Layer.effectContext(
             detail: `Could not load the desktop primary credential: ${String(cause)}`,
           }),
       }).pipe(Effect.map(Option.fromNullishOr)),
+      invalidateBearerToken: Effect.sync(invalidateDesktopPrimaryBearerToken),
     });
     const ssh = ClientCapabilities.SshEnvironmentGateway.of({
       provision: Effect.fn("web.connectionPlatform.ssh.provision")(

@@ -62,6 +62,11 @@ export class PrimaryEnvironmentAuth extends Context.Service<
   PrimaryEnvironmentAuth,
   {
     readonly bearerToken: Effect.Effect<Option.Option<string>, ConnectionAttemptError>;
+    /**
+     * Drops a cached token the host rejected, so the next `bearerToken` mints a
+     * fresh one. Platforms that cache nothing omit it.
+     */
+    readonly invalidateBearerToken?: Effect.Effect<void>;
   }
 >()("@t3tools/client-runtime/platform/capabilities/PrimaryEnvironmentAuth") {}
 
