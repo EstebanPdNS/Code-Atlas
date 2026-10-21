@@ -145,7 +145,12 @@ import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { AtlasActivityDots } from "~/atlas/brand/ActivityDots";
 import { AtlasSidebarSections } from "~/atlas/sidebar/AtlasSidebarSections";
 import { isAtlasThreadRunning } from "~/atlas/sidebar/atlasThreadSections";
-import { createAtlasPinnedSortingStrategy } from "~/atlas/sidebar/pinnedReorder";
+import {
+  atlasSortableLists,
+  createAtlasSortingStrategy,
+  withAtlasCollisions,
+} from "~/atlas/sidebar/atlasSorting";
+import { applyAtlasSidebarDrop, isAtlasSortableDrag } from "~/atlas/sidebar/AtlasSortable";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
@@ -3397,10 +3402,12 @@ export default function Sidebar() {
   const isContextDrag = dragState?.contextDrag === true || dragState?.activeSection === "working";
   const dragTargetSection = isContextDrag ? null : (dragState?.targetSection ?? null);
   const finishThreadDrag = (started: boolean) => {
+    // Code Atlas: project and group drags share the sensor but never touch the thread list.
+    const threadDrag = contextDragKeyRef.current !== null;
     dragSensorRef.current = null;
     contextDragKeyRef.current = null;
     endThreadContextDrag();
-    if (started) {
+    if (started && threadDrag) {
       listMotionRef.current?.release();
       setDragState(null);
     }
@@ -3426,6 +3433,8 @@ export default function Sidebar() {
     return bounds !== undefined && (point.x < bounds.left || point.x > bounds.right);
   };
   const moveThreadContextDrag = (point: { x: number; y: number }) => {
+    // Code Atlas: a project or group never drags out as chat context.
+    if (contextDragKeyRef.current === null) return false;
     const contextDrag = pointerOutsideThreadList(point);
     setDragState((current) =>
       current === null || current.contextDrag === contextDrag
@@ -3715,9 +3724,13 @@ export default function Sidebar() {
     routeThreadKey: routeRowThreadKey,
     snoozedThreadCount: snoozedThreads.length,
   });
-  // Code Atlas: only Pinned reorders by drag, and its rows shift with dnd-kit's
-  // own list strategy (see pinnedReorder).
-  const atlasSortingStrategy = createAtlasPinnedSortingStrategy(sidebarListItems, !isContextDrag);
+  // Code Atlas: each list's rows shift with dnd-kit's own list strategy, and
+  // projects and groups drag in the same context (see atlasSorting).
+  const atlasSortingStrategy = createAtlasSortingStrategy(
+    sidebarListItems,
+    atlasSortableLists,
+    !isContextDrag,
+  );
   const draggedThreadKey = dragState?.activeKey;
   const draggedFromSection = dragState?.activeSection;
   const dragActivationY = dragState?.activationY;
@@ -4843,11 +4856,19 @@ export default function Sidebar() {
               <DndContext
                 sensors={dndSensors}
                 autoScroll={!isContextDrag}
-                collisionDetection={dndCollisionDetection}
+                // Code Atlas: project and group drags share this context.
+                collisionDetection={withAtlasCollisions(dndCollisionDetection, atlasSortableLists)}
                 modifiers={dndModifiers}
-                onDragStart={handleThreadDragStart}
-                onDragOver={handleThreadDragOver}
-                onDragEnd={handleThreadDragEnd}
+                onDragStart={(event) => {
+                  if (!isAtlasSortableDrag(event.active)) handleThreadDragStart(event);
+                }}
+                onDragOver={(event) => {
+                  if (!isAtlasSortableDrag(event.active)) handleThreadDragOver(event);
+                }}
+                onDragEnd={(event) => {
+                  if (isAtlasSortableDrag(event.active)) applyAtlasSidebarDrop(event);
+                  else handleThreadDragEnd(event);
+                }}
               >
                 <SidebarDragLifecycle onUnmount={cancelThreadDrag} />
                 <SortableContext
@@ -4872,6 +4893,7 @@ export default function Sidebar() {
                         thread: EnvironmentThreadShell,
                         section: SidebarSection,
                         variantOverride?: "card" | "slim",
+                        atlasDraggable = false,
                       ) => {
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
@@ -4885,10 +4907,9 @@ export default function Sidebar() {
                             sortableId={threadKey}
                             contextDrag={isContextDrag}
                             sortableDisabled={
-                              // Code Atlas lays rows out by project group, where the
-                              // section drag model does not apply; Pinned keeps its
-                              // drag to reorder.
-                              (CODE_ATLAS_SIDEBAR && section !== "pinned") ||
+                              // Code Atlas: Pinned and each project's threads drag; the
+                              // status sections and settled rows only take drops.
+                              (CODE_ATLAS_SIDEBAR && !atlasDraggable) ||
                               renamingThreadKey === threadKey ||
                               !draggableThreadKeys.has(threadKey) ||
                               optimisticDrop !== null
@@ -5005,9 +5026,9 @@ export default function Sidebar() {
                             settledThreads={settledThreads}
                             projects={projectGroups}
                             snoozeNow={snoozeNow}
-                            pinnedDropPreview={!isContextDrag}
-                            renderThreadRow={(thread, section) =>
-                              renderThreadRow(thread, section, "slim")
+                            dropPreview={!isContextDrag}
+                            renderThreadRow={(thread, section, draggable) =>
+                              renderThreadRow(thread, section, "slim", draggable)
                             }
                             onNewThreadInProject={(project) => {
                               if (isMobile) setOpenMobile(false);

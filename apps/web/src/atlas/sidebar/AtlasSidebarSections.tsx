@@ -12,9 +12,9 @@ import {
   PlusIcon,
 } from "lucide-react";
 import {
+  useLayoutEffect,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
@@ -51,8 +51,20 @@ import {
   resolveAtlasThreadPlacement,
   type AtlasAttentionReason,
 } from "./atlasThreadSections";
+import { AtlasDropSlot } from "./AtlasDropSlot";
+import {
+  ATLAS_DRAGGING_ROW_CLASS,
+  ATLAS_DROP_INTO_ROW_CLASS,
+  AtlasSortableRow,
+  AtlasUngroupedDropZone,
+} from "./AtlasSortable";
+import {
+  atlasFolderSortableId,
+  atlasProjectSortableId,
+  atlasProjectThreadsList,
+  atlasSortableLists,
+} from "./atlasSorting";
 import { GroupIcon, GroupSettingsDialog } from "./GroupSettingsDialog";
-import { PinnedDropSlot } from "./PinnedDropSlot";
 import {
   resolveProjectFolders,
   useProjectFoldersStore,
@@ -69,9 +81,14 @@ export interface AtlasSidebarSectionsProps {
   readonly settledThreads: readonly EnvironmentThreadShell[];
   readonly projects: readonly SidebarProjectSnapshot[];
   readonly snoozeNow: string;
-  /** Outline where a dragged pinned thread will land (off while it drags out as chat context). */
-  readonly pinnedDropPreview: boolean;
-  readonly renderThreadRow: (thread: EnvironmentThreadShell, section: AtlasRowSection) => ReactNode;
+  /** Outline where a dragged row will land (off while a thread drags out as chat context). */
+  readonly dropPreview: boolean;
+  /** `draggable`: the row drags to reorder its list, to Pinned or out as chat context. */
+  readonly renderThreadRow: (
+    thread: EnvironmentThreadShell,
+    section: AtlasRowSection,
+    draggable: boolean,
+  ) => ReactNode;
   readonly onNewThreadInProject: (project: SidebarProjectSnapshot) => void;
   readonly onProjectSettings: (
     event: ReactMouseEvent<HTMLElement>,
@@ -79,14 +96,6 @@ export interface AtlasSidebarSectionsProps {
   ) => void;
   readonly onAddProject: () => void;
 }
-
-const PROJECT_DRAG_TYPE = "application/x-codeatlas-project";
-const FOLDER_DRAG_TYPE = "application/x-codeatlas-folder";
-
-type DropTarget =
-  | { readonly kind: "folder"; readonly folderId: string }
-  | { readonly kind: "project"; readonly projectKey: string }
-  | { readonly kind: "ungrouped" };
 
 function threadKeyOf(thread: Pick<EnvironmentThreadShell, "environmentId" | "id">): string {
   return scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
@@ -110,22 +119,6 @@ async function showRowMenu(event: ReactMouseEvent<HTMLElement>): Promise<RowMenu
   });
 }
 
-function sameDropTarget(left: DropTarget | null, right: DropTarget): boolean {
-  if (left === null || left.kind !== right.kind) return false;
-  if (left.kind === "folder" && right.kind === "folder") return left.folderId === right.folderId;
-  if (left.kind === "project" && right.kind === "project") {
-    return left.projectKey === right.projectKey;
-  }
-  return true;
-}
-
-function draggedKind(event: ReactDragEvent): "project" | "folder" | null {
-  const types = event.dataTransfer.types;
-  if (types.includes(PROJECT_DRAG_TYPE)) return "project";
-  if (types.includes(FOLDER_DRAG_TYPE)) return "folder";
-  return null;
-}
-
 /**
  * The Code Atlas thread navigator: Pinned, Needs attention, Working, then the
  * user's project groups with each project's remaining threads. Every thread is
@@ -140,12 +133,11 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
     settledThreads,
     projects,
     snoozeNow,
-    pinnedDropPreview,
+    dropPreview,
     renderThreadRow,
   } = props;
   const lastVisitedById = useUiStateStore((state) => state.threadLastVisitedAtById);
   const store = useProjectFoldersStore();
-  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
   const [renamingProjectKey, setRenamingProjectKey] = useState<string | null>(null);
@@ -228,146 +220,127 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
 
   const { folders, ungrouped } = resolveProjectFolders(store, projects);
 
-  const clearDrop = () => setDropTarget(null);
-  const allowDrop = (event: ReactDragEvent, target: DropTarget) => {
-    const kind = draggedKind(event);
-    if (kind === null) return;
-    if (kind === "folder" && target.kind !== "folder") return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    // dragover fires continuously; keep the same state so the sidebar does not re-render.
-    setDropTarget((current) => (sameDropTarget(current, target) ? current : target));
-  };
-  // dragleave also fires when the pointer moves onto a child of the row.
-  const leaveDrop = (event: ReactDragEvent<HTMLElement>) => {
-    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
-      return;
+  // Every rendered thread row by list, so only the dragged row's own list makes room for it.
+  const sortableLists = new Map<string, string>();
+  for (const thread of pinnedThreads) sortableLists.set(threadKeyOf(thread), "pinned");
+  for (const { thread } of attention) sortableLists.set(threadKeyOf(thread), "attention");
+  for (const thread of working) sortableLists.set(threadKeyOf(thread), "working");
+  for (const [projectKey, threads] of projectActive) {
+    for (const thread of threads) {
+      sortableLists.set(threadKeyOf(thread), atlasProjectThreadsList(projectKey));
     }
-    clearDrop();
-  };
-  const handleDrop = (event: ReactDragEvent, target: DropTarget, folderId: string | null) => {
-    const projectKey = event.dataTransfer.getData(PROJECT_DRAG_TYPE);
-    const draggedFolderId = event.dataTransfer.getData(FOLDER_DRAG_TYPE);
-    event.preventDefault();
-    setDropTarget(null);
-    if (projectKey) {
-      store.moveProject({
-        projectKey,
-        folderId,
-        beforeProjectKey: target.kind === "project" ? target.projectKey : null,
-      });
-      if (folderId !== null) {
-        const folder = store.folders.find((candidate) => candidate.id === folderId);
-        if (folder?.collapsed) store.toggleFolder(folderId);
-      }
-    } else if (draggedFolderId && target.kind === "folder") {
-      store.moveFolder(draggedFolderId, target.folderId);
-    }
-  };
+  }
+  for (const [projectKey, rows] of projectHidden) {
+    for (const { thread } of rows) sortableLists.set(threadKeyOf(thread), `hidden:${projectKey}`);
+  }
+  useLayoutEffect(() => {
+    atlasSortableLists.current = sortableLists;
+  }, [sortableLists]);
 
-  const isDropTarget = (target: DropTarget) => sameDropTarget(dropTarget, target);
-
-  const renderProject = (project: SidebarProjectSnapshot, folderId: string | null) => {
+  /** `siblings`: the project keys of its list when the user orders it (a group), else empty. */
+  const renderProject = (
+    project: SidebarProjectSnapshot,
+    folderId: string | null,
+    siblings: readonly string[],
+  ) => {
     const active = projectActive.get(project.projectKey) ?? [];
     const hidden = projectHidden.get(project.projectKey) ?? [];
     const expanded = store.expandedProjectKeys[project.projectKey] === true;
     const revealed = store.revealedProjectKeys[project.projectKey] === true;
-    const target: DropTarget = { kind: "project", projectKey: project.projectKey };
     return (
-      <li key={project.projectKey} className="list-none">
-        <div
-          role="button"
-          tabIndex={0}
-          draggable={renamingProjectKey !== project.projectKey}
-          aria-expanded={expanded}
-          onDragStart={(event) => {
-            event.dataTransfer.setData(PROJECT_DRAG_TYPE, project.projectKey);
-            event.dataTransfer.effectAllowed = "move";
-          }}
-          onDragEnd={clearDrop}
-          onDragOver={(event) => allowDrop(event, target)}
-          onDragLeave={leaveDrop}
-          onDrop={(event) => handleDrop(event, target, folderId)}
-          onClick={() => store.toggleProjectExpanded(project.projectKey)}
-          onKeyDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              store.toggleProjectExpanded(project.projectKey);
-            }
-          }}
-          onContextMenu={(event) => {
-            void showRowMenu(event).then((action) => {
-              if (action === "rename") setRenamingProjectKey(project.projectKey);
-              else if (action === "settings") props.onProjectSettings(event, project);
-            });
-          }}
-          data-atlas-row="project"
-          className={cn(
-            "group/atlas-project relative flex h-8 cursor-pointer items-center gap-2 rounded-md pr-1 pl-2 text-sm text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-            folderId !== null && "ml-3",
-            isDropTarget(target) &&
-              "before:absolute before:inset-x-1 before:-top-px before:h-0.5 before:rounded-full before:bg-primary",
-          )}
-        >
-          <ProjectFavicon project={project} className="size-4 shrink-0" />
-          {renamingProjectKey === project.projectKey ? (
-            <FolderNameInput
-              initialValue={project.displayName}
-              ariaLabel="Project name"
-              onCommit={(name) => {
-                setRenamingProjectKey(null);
-                void renameProject(project, name);
-              }}
-              onCancel={() => setRenamingProjectKey(null)}
-            />
-          ) : (
-            <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
-          )}
-          {active.length > 0 && !expanded ? (
-            <span
-              data-atlas-row-count
-              className="text-2xs text-sidebar-muted-foreground tabular-nums"
-            >
-              {active.length} {active.length === 1 ? "thread" : "threads"}
-            </span>
-          ) : null}
-          <span
-            data-atlas-row-actions
-            className="flex items-center opacity-0 group-hover/atlas-project:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100"
-          >
-            <Button
-              size="icon-micro"
-              variant="ghost-muted"
-              aria-label={`New thread in ${project.displayName}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                props.onNewThreadInProject(project);
-              }}
-            >
-              <PlusIcon />
-            </Button>
-            <ProjectMenu
-              project={project}
-              folders={store.folders}
-              currentFolderId={folderId}
-              onMove={(targetFolderId) =>
-                store.moveProject({ projectKey: project.projectKey, folderId: targetFolderId })
+      <AtlasSortableRow
+        key={project.projectKey}
+        data={{ kind: "project", projectKey: project.projectKey, folderId, siblings }}
+        disabled={renamingProjectKey === project.projectKey}
+        renderRow={({ listeners, isDragging }) => (
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={expanded}
+            {...listeners}
+            onClick={() => store.toggleProjectExpanded(project.projectKey)}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                store.toggleProjectExpanded(project.projectKey);
               }
-              onNewThread={() => props.onNewThreadInProject(project)}
-              onSettings={(event) => props.onProjectSettings(event, project)}
-            />
-          </span>
-        </div>
+            }}
+            onContextMenu={(event) => {
+              void showRowMenu(event).then((action) => {
+                if (action === "rename") setRenamingProjectKey(project.projectKey);
+                else if (action === "settings") props.onProjectSettings(event, project);
+              });
+            }}
+            data-atlas-row="project"
+            className={cn(
+              "group/atlas-project relative flex h-8 cursor-pointer items-center gap-2 rounded-md pr-1 pl-2 text-sm text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+              folderId !== null && "ml-3",
+              isDragging && ATLAS_DRAGGING_ROW_CLASS,
+            )}
+          >
+            <ProjectFavicon project={project} className="size-4 shrink-0" />
+            {renamingProjectKey === project.projectKey ? (
+              <FolderNameInput
+                initialValue={project.displayName}
+                ariaLabel="Project name"
+                onCommit={(name) => {
+                  setRenamingProjectKey(null);
+                  void renameProject(project, name);
+                }}
+                onCancel={() => setRenamingProjectKey(null)}
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate">{project.displayName}</span>
+            )}
+            {active.length > 0 && !expanded ? (
+              <span
+                data-atlas-row-count
+                className="text-2xs text-sidebar-muted-foreground tabular-nums"
+              >
+                {active.length} {active.length === 1 ? "thread" : "threads"}
+              </span>
+            ) : null}
+            <span
+              data-atlas-row-actions
+              className="flex items-center opacity-0 group-hover/atlas-project:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100"
+            >
+              <Button
+                size="icon-micro"
+                variant="ghost-muted"
+                aria-label={`New thread in ${project.displayName}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  props.onNewThreadInProject(project);
+                }}
+              >
+                <PlusIcon />
+              </Button>
+              <ProjectMenu
+                project={project}
+                folders={store.folders}
+                currentFolderId={folderId}
+                onMove={(targetFolderId) =>
+                  store.moveProject({ projectKey: project.projectKey, folderId: targetFolderId })
+                }
+                onNewThread={() => props.onNewThreadInProject(project)}
+                onSettings={(event) => props.onProjectSettings(event, project)}
+              />
+            </span>
+          </div>
+        )}
+      >
         {expanded ? (
           <ul
             role="presentation"
+            data-atlas-sortable-list
             className={cn(
-              "mt-px flex flex-col gap-px border-l border-sidebar-border pl-1",
+              "relative mt-px flex flex-col gap-px border-l border-sidebar-border pl-1",
               folderId !== null ? "ml-6" : "ml-3.5",
             )}
           >
-            {active.map((thread) => renderThreadRow(thread, "active"))}
+            <AtlasDropSlot ids={active.map(threadKeyOf)} enabled={dropPreview} />
+            {active.map((thread) => renderThreadRow(thread, "active", true))}
             {active.length === 0 && hidden.length === 0 ? (
               <li className="list-none px-2 py-1.5 text-xs text-sidebar-muted-foreground">
                 No threads yet
@@ -388,106 +361,114 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
               </li>
             ) : null}
             {revealed
-              ? hidden.map(({ thread, section }) => renderThreadRow(thread, section))
+              ? hidden.map(({ thread, section }) => renderThreadRow(thread, section, false))
               : null}
           </ul>
         ) : null}
-      </li>
+      </AtlasSortableRow>
     );
   };
 
+  const folderIds = folders.map(({ folder }) => folder.id);
   const renderFolder = (folder: ProjectFolder, members: readonly SidebarProjectSnapshot[]) => {
-    const target: DropTarget = { kind: "folder", folderId: folder.id };
     const hasAttention = members.some((project) =>
       attention.some(({ thread }) => projectKeyOfThread(thread) === project.projectKey),
     );
+    const memberKeys = members.map((project) => project.projectKey);
     return (
-      <li key={folder.id} className="list-none">
-        <div
-          role="button"
-          tabIndex={0}
-          draggable={renamingFolderId !== folder.id}
-          aria-expanded={!folder.collapsed}
-          onDragStart={(event) => {
-            event.dataTransfer.setData(FOLDER_DRAG_TYPE, folder.id);
-            event.dataTransfer.effectAllowed = "move";
-          }}
-          onDragEnd={clearDrop}
-          onDragOver={(event) => allowDrop(event, target)}
-          onDragLeave={leaveDrop}
-          onDrop={(event) => handleDrop(event, target, folder.id)}
-          onClick={() => store.toggleFolder(folder.id)}
-          onDoubleClick={() => setRenamingFolderId(folder.id)}
-          onContextMenu={(event) => {
-            void showRowMenu(event).then((action) => {
-              if (action === "rename") setRenamingFolderId(folder.id);
-              else if (action === "settings") setSettingsFolderId(folder.id);
-            });
-          }}
-          onKeyDown={(event) => {
-            if (event.target !== event.currentTarget) return;
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              store.toggleFolder(folder.id);
-            } else if (event.key === "F2") {
-              setRenamingFolderId(folder.id);
-            }
-          }}
-          data-atlas-row="folder"
-          className={cn(
-            "group/atlas-folder relative flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 text-sm font-medium text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-            isDropTarget(target) && "bg-primary/10 ring-1 ring-primary/40",
-          )}
-        >
-          <ChevronRightIcon
-            aria-hidden
+      <AtlasSortableRow
+        key={folder.id}
+        data={{ kind: "folder", folderId: folder.id, siblings: folderIds }}
+        disabled={renamingFolderId === folder.id}
+        renderRow={({ listeners, isDragging, isDropInto }) => (
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={!folder.collapsed}
+            {...listeners}
+            onClick={() => store.toggleFolder(folder.id)}
+            onDoubleClick={() => setRenamingFolderId(folder.id)}
+            onContextMenu={(event) => {
+              void showRowMenu(event).then((action) => {
+                if (action === "rename") setRenamingFolderId(folder.id);
+                else if (action === "settings") setSettingsFolderId(folder.id);
+              });
+            }}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                store.toggleFolder(folder.id);
+              } else if (event.key === "F2") {
+                setRenamingFolderId(folder.id);
+              }
+            }}
+            data-atlas-row="folder"
             className={cn(
-              "size-3.5 shrink-0 text-sidebar-muted-foreground transition-transform",
-              !folder.collapsed && "rotate-90",
+              "group/atlas-folder relative flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-1 text-sm font-medium text-sidebar-foreground outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+              isDragging && ATLAS_DRAGGING_ROW_CLASS,
+              isDropInto && ATLAS_DROP_INTO_ROW_CLASS,
             )}
-          />
-          {folder.icon ? (
-            <GroupIcon icon={folder.icon} />
-          ) : folder.collapsed ? (
-            <FolderIcon aria-hidden className="size-4 shrink-0 text-sidebar-muted-foreground" />
-          ) : (
-            <FolderOpenIcon aria-hidden className="size-4 shrink-0 text-sidebar-muted-foreground" />
-          )}
-          {renamingFolderId === folder.id ? (
-            <FolderNameInput
-              initialValue={folder.name}
-              onCommit={(name) => {
-                store.renameFolder(folder.id, name);
-                setRenamingFolderId(null);
-              }}
-              onCancel={() => setRenamingFolderId(null)}
-            />
-          ) : (
-            <span className="min-w-0 flex-1 truncate">{folder.name}</span>
-          )}
-          {folder.collapsed && hasAttention ? (
-            <span aria-label="Needs attention" className="size-1.5 rounded-full bg-primary" />
-          ) : null}
-          <span
-            data-atlas-row-count
-            className="shrink-0 text-2xs font-normal text-sidebar-muted-foreground tabular-nums"
           >
-            {members.length} {members.length === 1 ? "project" : "projects"}
-          </span>
-          <span
-            data-atlas-row-actions
-            className="flex items-center opacity-0 group-hover/atlas-folder:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100"
-          >
-            <FolderMenu
-              onRename={() => setRenamingFolderId(folder.id)}
-              onSettings={() => setSettingsFolderId(folder.id)}
-              onDelete={() => store.deleteFolder(folder.id)}
+            <ChevronRightIcon
+              aria-hidden
+              className={cn(
+                "size-3.5 shrink-0 text-sidebar-muted-foreground transition-transform",
+                !folder.collapsed && "rotate-90",
+              )}
             />
-          </span>
-        </div>
+            {folder.icon ? (
+              <GroupIcon icon={folder.icon} />
+            ) : folder.collapsed ? (
+              <FolderIcon aria-hidden className="size-4 shrink-0 text-sidebar-muted-foreground" />
+            ) : (
+              <FolderOpenIcon
+                aria-hidden
+                className="size-4 shrink-0 text-sidebar-muted-foreground"
+              />
+            )}
+            {renamingFolderId === folder.id ? (
+              <FolderNameInput
+                initialValue={folder.name}
+                onCommit={(name) => {
+                  store.renameFolder(folder.id, name);
+                  setRenamingFolderId(null);
+                }}
+                onCancel={() => setRenamingFolderId(null)}
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate">{folder.name}</span>
+            )}
+            {folder.collapsed && hasAttention ? (
+              <span aria-label="Needs attention" className="size-1.5 rounded-full bg-primary" />
+            ) : null}
+            <span
+              data-atlas-row-count
+              className="shrink-0 text-2xs font-normal text-sidebar-muted-foreground tabular-nums"
+            >
+              {members.length} {members.length === 1 ? "project" : "projects"}
+            </span>
+            <span
+              data-atlas-row-actions
+              className="flex items-center opacity-0 group-hover/atlas-folder:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100"
+            >
+              <FolderMenu
+                onRename={() => setRenamingFolderId(folder.id)}
+                onSettings={() => setSettingsFolderId(folder.id)}
+                onDelete={() => store.deleteFolder(folder.id)}
+              />
+            </span>
+          </div>
+        )}
+      >
         {!folder.collapsed ? (
-          <ul role="presentation" className="mt-px flex flex-col gap-px">
-            {members.map((project) => renderProject(project, folder.id))}
+          <ul
+            role="presentation"
+            data-atlas-sortable-list
+            className="relative mt-px flex flex-col gap-px"
+          >
+            <AtlasDropSlot ids={memberKeys.map(atlasProjectSortableId)} enabled={dropPreview} />
+            {members.map((project) => renderProject(project, folder.id, memberKeys))}
             {members.length === 0 ? (
               <li className="ml-3 list-none rounded-md border border-dashed border-sidebar-border px-2 py-1.5 text-xs text-sidebar-muted-foreground">
                 Drag projects here
@@ -495,7 +476,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
             ) : null}
           </ul>
         ) : null}
-      </li>
+      </AtlasSortableRow>
     );
   };
 
@@ -522,8 +503,8 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           collapsed={store.collapsedSections.pinned === true}
           onToggle={() => store.toggleSection("pinned")}
         >
-          <PinnedDropSlot pinnedKeys={pinnedThreads.map(threadKeyOf)} enabled={pinnedDropPreview} />
-          {pinnedThreads.map((thread) => renderThreadRow(thread, "pinned"))}
+          <AtlasDropSlot ids={pinnedThreads.map(threadKeyOf)} enabled={dropPreview} />
+          {pinnedThreads.map((thread) => renderThreadRow(thread, "pinned", true))}
         </AtlasSection>
       ) : null}
       {attention.length > 0 ? (
@@ -536,7 +517,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           collapsed={store.collapsedSections.attention === true}
           onToggle={() => store.toggleSection("attention")}
         >
-          {attention.map(({ thread }) => renderThreadRow(thread, "active"))}
+          {attention.map(({ thread }) => renderThreadRow(thread, "active", false))}
         </AtlasSection>
       ) : null}
       {working.length > 0 ? (
@@ -548,7 +529,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           collapsed={store.collapsedSections.working === true}
           onToggle={() => store.toggleSection("working")}
         >
-          {working.map((thread) => renderThreadRow(thread, "working"))}
+          {working.map((thread) => renderThreadRow(thread, "working", false))}
         </AtlasSection>
       ) : null}
 
@@ -574,7 +555,8 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
             <PlusIcon />
           </Button>
         </div>
-        <ul role="presentation" className="flex flex-col gap-px">
+        <ul role="presentation" data-atlas-sortable-list className="relative flex flex-col gap-px">
+          <AtlasDropSlot ids={folderIds.map(atlasFolderSortableId)} enabled={dropPreview} />
           {creatingFolder ? (
             <li className="flex h-8 list-none items-center gap-1.5 rounded-md bg-sidebar-row-hover pl-1">
               <ChevronRightIcon aria-hidden className="size-3.5 text-sidebar-muted-foreground" />
@@ -607,46 +589,48 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
       </li>
 
       {ungrouped.length > 0 ? (
-        <li className="mt-2 list-none">
-          <div
-            role="button"
-            tabIndex={0}
-            aria-expanded={!store.ungroupedCollapsed}
-            onClick={store.toggleUngrouped}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                store.toggleUngrouped();
-              }
-            }}
-            onDragOver={(event) => allowDrop(event, { kind: "ungrouped" })}
-            onDragLeave={leaveDrop}
-            onDrop={(event) => handleDrop(event, { kind: "ungrouped" }, null)}
-            className={cn(
-              "flex h-7 cursor-pointer items-center gap-1 rounded-md pr-1 pl-2 outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-              isDropTarget({ kind: "ungrouped" }) && "bg-primary/10 ring-1 ring-primary/40",
-            )}
-          >
-            <span className="flex-1 font-mono text-2xs tracking-wider text-sidebar-muted-foreground uppercase">
-              Ungrouped
-            </span>
-            <span className="text-2xs text-sidebar-muted-foreground tabular-nums">
-              {ungrouped.length}
-            </span>
-            <ChevronRightIcon
-              aria-hidden
+        <AtlasUngroupedDropZone
+          className="mt-2 list-none"
+          renderHeader={(isDropInto) => (
+            <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={!store.ungroupedCollapsed}
+              onClick={store.toggleUngrouped}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  store.toggleUngrouped();
+                }
+              }}
               className={cn(
-                "size-3.5 text-sidebar-muted-foreground transition-transform",
-                !store.ungroupedCollapsed && "rotate-90",
+                "flex h-7 cursor-pointer items-center gap-1 rounded-md pr-1 pl-2 outline-hidden select-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                isDropInto && ATLAS_DROP_INTO_ROW_CLASS,
               )}
-            />
-          </div>
+            >
+              <span className="flex-1 font-mono text-2xs tracking-wider text-sidebar-muted-foreground uppercase">
+                Ungrouped
+              </span>
+              <span className="text-2xs text-sidebar-muted-foreground tabular-nums">
+                {ungrouped.length}
+              </span>
+              <ChevronRightIcon
+                aria-hidden
+                className={cn(
+                  "size-3.5 text-sidebar-muted-foreground transition-transform",
+                  !store.ungroupedCollapsed && "rotate-90",
+                )}
+              />
+            </div>
+          )}
+        >
           {!store.ungroupedCollapsed ? (
-            <ul role="presentation" className="flex flex-col gap-px">
-              {ungrouped.map((project) => renderProject(project, null))}
+            <ul role="presentation" data-atlas-sortable-list className="flex flex-col gap-px">
+              {/* Ungrouped follows the project sort setting: projects only drag out of it. */}
+              {ungrouped.map((project) => renderProject(project, null, []))}
             </ul>
           ) : null}
-        </li>
+        </AtlasUngroupedDropZone>
       ) : null}
       {settingsFolder ? (
         <GroupSettingsDialog
@@ -703,7 +687,11 @@ function AtlasSection(props: {
         />
       </button>
       {!props.collapsed ? (
-        <ul role="presentation" className="relative mt-px flex flex-col gap-px">
+        <ul
+          role="presentation"
+          data-atlas-sortable-list
+          className="relative mt-px flex flex-col gap-px"
+        >
           {props.children}
         </ul>
       ) : null}
