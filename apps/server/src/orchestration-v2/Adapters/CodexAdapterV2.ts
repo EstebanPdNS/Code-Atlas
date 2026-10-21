@@ -3,6 +3,16 @@ import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudge
 import { buildPlanFirstInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
 import {
+  codexBreakdownKey,
+  codexContextSkills,
+  codexEstimatedBreakdown,
+  codexInstructionsTokens,
+  codexTextInputTokens,
+  discoverCodexMemoryFiles,
+  noteCodexTurnStart,
+  type CodexContextEstimateState,
+} from "./codexContextEstimate.ts";
+import {
   mcpToolPresentation,
   type McpToolPresentation,
 } from "../../provider/CodexToolPresentation.ts";
@@ -31,6 +41,8 @@ import {
   defaultInstanceIdForDriver,
   isOrchestrationV2WorkActive,
   OrchestrationV2ProviderGoal,
+  // Code Atlas: goal controls.
+  type OrchestrationV2GoalAction,
   ProviderDriverKind,
   type ProviderSetupError,
 } from "@t3tools/contracts";
@@ -978,6 +990,33 @@ function describeCodexGoal(goal: OrchestrationV2ProviderGoal): string {
   return `Goal ${goal.status.replace("_", " ")}: ${goal.objective}`;
 }
 
+/**
+ * Code Atlas: the `thread/goal/set` change for a goal control, as the Codex
+ * TUI sends it. An edit keeps the status and usage, except a finished or
+ * over-budget goal, which becomes active again.
+ */
+export function codexGoalUpdate(
+  action: Exclude<OrchestrationV2GoalAction, { readonly type: "clear" }>,
+  current: OrchestrationV2ProviderGoal | null,
+): Omit<CodexSchema.V2ThreadGoalSetParams, "threadId"> {
+  switch (action.type) {
+    case "pause":
+      return { status: "paused" };
+    case "resume":
+      return { status: "active" };
+    case "edit": {
+      const status =
+        action.status ??
+        (current?.status === "complete" || current?.status === "budget_limited"
+          ? "active"
+          : undefined);
+      return status === undefined
+        ? { objective: action.objective }
+        : { objective: action.objective, status };
+    }
+  }
+}
+
 // Codex starts the next goal turn milliseconds after the last one completes.
 const CODEX_GOAL_CONTINUATION_GRACE = "5 seconds";
 
@@ -1633,7 +1672,10 @@ export type CodexAdapterV2DriverEnv =
 
 export const createCodexAdapterV2 = Effect.fn("CodexAdapterV2.createCodexAdapterV2")(function* (
   { instanceId, environment, enabled, config }: ProviderAdapterDriverCreateInput<CodexSettings>,
-  hooks: Pick<CodexAdapterV2Options, "onUsageLimits" | "resolveRuntime"> = {},
+  hooks: Pick<
+    CodexAdapterV2Options,
+    "onUsageLimits" | "resolveRuntime" | "getProviderSnapshot"
+  > = {},
 ) {
   const clientFactory = yield* CodexAppServerClientFactory;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
@@ -1725,6 +1767,8 @@ export interface CodexAdapterV2Options {
   readonly clientFactory: CodexAppServerClientFactoryShape;
   readonly onUsageLimits?: ManagedServerProvider["applyUsageLimits"];
   readonly resolveRuntime?: Effect.Effect<CodexEffectiveRuntime, ProviderSetupError, Scope.Scope>;
+  /** Code Atlas: the provider snapshot, whose skills the context breakdown counts. */
+  readonly getProviderSnapshot?: ManagedServerProvider["getSnapshot"];
   readonly crypto: Crypto.Crypto;
   readonly fileSystem: FileSystem.FileSystem;
   readonly idAllocator: IdAllocator.IdAllocatorV2["Service"];
@@ -1893,6 +1937,47 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             getCodexTurnAccumulator(state, context.nativeTurnId);
           }
         };
+        // Code Atlas: what the estimated context breakdown knows per native
+        // thread, the baselines measured per model, and the last breakdown each
+        // turn sent (usage without one keeps it).
+        const contextEstimates = new Map<string, CodexContextEstimateState>();
+        const baselineByModel = new Map<string, number>();
+        const contextBreakdownSent = new WeakMap<ActiveCodexTurnContext, string>();
+        const codexHome = (() => {
+          const environment = resolvedRuntime?.environment ?? adapterOptions.environment;
+          const configured = (resolvedRuntime?.config ?? adapterOptions.settings).homePath;
+          if (configured) return configured;
+          if (environment.CODEX_HOME) return environment.CODEX_HOME;
+          return environment.HOME ? `${environment.HOME}/.codex` : undefined;
+        })();
+        const contextEstimateFor = (nativeThreadId: string) => {
+          let state = contextEstimates.get(nativeThreadId);
+          if (!state) {
+            state = { measureBaseline: false };
+            contextEstimates.set(nativeThreadId, state);
+          }
+          return state;
+        };
+        // Reads AGENTS.md sizes and Codex's skills once per turn, beside the turn.
+        const refreshContextParts = Effect.fn("CodexAdapterV2.refreshContextParts")(
+          function* (state: CodexContextEstimateState, cwd: string, instructionsTokens: number) {
+            const memoryFiles = yield* discoverCodexMemoryFiles(fileSystem, { cwd, codexHome });
+            // The skills the provider probe already discovered; no extra app-server request.
+            const provider =
+              adapterOptions.getProviderSnapshot === undefined
+                ? undefined
+                : yield* adapterOptions.getProviderSnapshot;
+            const skills =
+              provider === undefined
+                ? undefined
+                : codexContextSkills(
+                    provider.workspaceSnapshots?.find((snapshot) => snapshot.cwd === cwd)?.skills ??
+                      provider.skills,
+                  );
+            state.parts = { instructionsTokens, memoryFiles, ...(skills ? { skills } : {}) };
+          },
+          (effect) => effect.pipe(Effect.timeout("5 seconds"), Effect.ignore),
+        );
         const markSubagentUsage = (context: ActiveCodexTurnContext) => {
           const nativeThreadId = context.providerThread.nativeThreadRef?.nativeId;
           if (!nativeThreadId) return;
@@ -4464,6 +4549,21 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               return;
             }
             const now = yield* DateTime.now;
+            const tokenUsage = codexProviderTurnTokenUsage(
+              payload.tokenUsage,
+              DateTime.formatIso(now),
+            );
+            // Code Atlas: the estimated breakdown rides along when it changed.
+            const contextEstimate =
+              context.subagent === null ? contextEstimates.get(payload.threadId) : undefined;
+            const breakdown =
+              contextEstimate === undefined
+                ? undefined
+                : codexEstimatedBreakdown(contextEstimate, baselineByModel, tokenUsage);
+            const breakdownKey = breakdown === undefined ? undefined : codexBreakdownKey(breakdown);
+            const sendBreakdown =
+              breakdownKey !== undefined && contextBreakdownSent.get(context) !== breakdownKey;
+            if (sendBreakdown) contextBreakdownSent.set(context, breakdownKey);
             yield* emitProviderEvent({
               type: "provider_turn.updated",
               driver: CODEX_PROVIDER,
@@ -4482,10 +4582,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 status: "running",
                 startedAt: context.startedAt,
                 completedAt: null,
-                tokenUsage: codexProviderTurnTokenUsage(
-                  payload.tokenUsage,
-                  DateTime.formatIso(now),
-                ),
+                tokenUsage: sendBreakdown ? { ...tokenUsage, ...breakdown } : tokenUsage,
               },
             });
           }).pipe(Effect.orDie),
@@ -6420,6 +6517,23 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               else next.delete(threadId);
               return next;
             });
+            // Code Atlas: inputs for the estimated context breakdown.
+            const contextEstimate = contextEstimateFor(threadId);
+            noteCodexTurnStart(contextEstimate, {
+              model: turnInput.modelSelection.model,
+              userMessageTokens: codexTextInputTokens(codexInput),
+            });
+            if (turnInput.runtimePolicy.cwd !== null) {
+              yield* refreshContextParts(
+                contextEstimate,
+                turnInput.runtimePolicy.cwd,
+                codexInstructionsTokens({
+                  developerInstructions:
+                    turnStartParams.collaborationMode?.settings.developer_instructions,
+                  additionalContext: turnStartParams.additionalContext,
+                }),
+              ).pipe(Effect.forkIn(scope));
+            }
             const started = yield* client.request("turn/start", turnStartParams);
             yield* registerRootTurn({
               turnInput,
@@ -6694,6 +6808,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               Effect.tap((response) =>
                 rememberConfiguredEffort(response.thread.id, response.reasoningEffort),
               ),
+              // Code Atlas: a new thread's first request measures Codex's own prompt.
+              Effect.tap((response) =>
+                Effect.sync(() =>
+                  contextEstimates.set(response.thread.id, { measureBaseline: true }),
+                ),
+              ),
               Effect.map((response): OrchestrationV2ProviderThread =>
                 providerThreadFromCodexThread({
                   appThreadId: threadInput.threadId,
@@ -6903,6 +7023,54 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                       providerTurnId: turnInput.providerTurnId,
                       cause,
                     }),
+                ),
+              ),
+          ),
+          // Code Atlas: goal controls outside a turn, like the Codex app. A
+          // running goal pauses after its current turn, and an edited
+          // objective reaches the running turn through Codex itself.
+          updateGoal: Effect.fn("CodexAdapterV2.updateGoal")(
+            function* ({ providerThread, action }) {
+              const threadId = yield* getNativeThreadId(providerThread);
+              if (!rootProviderThreads.has(threadId)) {
+                rootProviderThreads.set(threadId, providerThread);
+              }
+              if (action.type === "clear") {
+                yield* client.request("thread/goal/clear", { threadId });
+                yield* turnTerminalizationPermit.withPermits(1)(
+                  Effect.gen(function* () {
+                    goalsByNativeThread.set(threadId, null);
+                    yield* emitGoalUpdate(threadId);
+                    yield* releaseGoalHold(threadId);
+                  }),
+                );
+                return;
+              }
+              const current = goalsByNativeThread.has(threadId)
+                ? (goalsByNativeThread.get(threadId) ?? null)
+                : (providerThread.goal ?? null);
+              const { goal } = yield* client.request("thread/goal/set", {
+                threadId,
+                ...codexGoalUpdate(action, current),
+              });
+              yield* turnTerminalizationPermit.withPermits(1)(
+                Effect.gen(function* () {
+                  goalsByNativeThread.set(threadId, providerGoalFromCodex(goal));
+                  yield* emitGoalUpdate(threadId);
+                  if (goal.status !== "active") yield* releaseGoalHold(threadId);
+                }),
+              );
+            },
+            (effect, { providerThread }) =>
+              effect.pipe(
+                Effect.mapError((cause) =>
+                  cause._tag === "ProviderAdapterProtocolError"
+                    ? cause
+                    : new ProviderAdapter.ProviderAdapterProtocolError({
+                        driver: CODEX_PROVIDER,
+                        detail: `Failed to update the Codex goal for provider thread ${providerThread.id}`,
+                        cause: normalizeCodexCause(cause),
+                      }),
                 ),
               ),
           ),

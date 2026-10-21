@@ -8,6 +8,7 @@ Everything Code Atlas adds to the T3 Code web client lives here, grouped by feat
 | `intro/`     | The launch intro and the Code Atlas terminal on new threads, with its startup sound and the summary it shows (`terminalSummary`).                     |
 | `sidebar/`   | Pinned, Needs attention and Working sections, project groups (`projectFolders`) and group settings.                                                   |
 | `progress/`  | The Claude Code progress style: the plan card, the status line and the paused task's Stop and Resume (`pausedTask`).                                  |
+| `goal/`      | The thread goal card above the composer, Codex-style: status line, Open (full editor), Pause/Resume, Clear.                                           |
 | `agents/`    | Subagent personas: names, faces (vector art generated with Codex) and headlines.                                                                      |
 | `rail/`      | The Context, Usage and Background tasks cards beside the conversation; the context breakdown logic is `contextBreakdown`.                             |
 | `settings/`  | The Code Atlas section in Settings → General.                                                                                                         |

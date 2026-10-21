@@ -1,4 +1,6 @@
 import type { OrchestrationV2HistoricalMessage } from "@t3tools/contracts";
+// Code Atlas: goal controls.
+import type { OrchestrationV2GoalAction } from "@t3tools/contracts";
 import {
   ChatAttachment,
   CheckpointId,
@@ -609,6 +611,14 @@ export interface ProviderAdapterV2SessionRuntime {
   readonly stopTask?: (input: {
     readonly providerThread: OrchestrationV2ProviderThread;
     readonly taskId: string;
+  }) => Effect.Effect<void, ProviderAdapterV2Error>;
+  /**
+   * Code Atlas: pause, resume, edit or clear the provider goal outside a turn.
+   * Absent means goals change only through `/goal` turns.
+   */
+  readonly updateGoal?: (input: {
+    readonly providerThread: OrchestrationV2ProviderThread;
+    readonly action: OrchestrationV2GoalAction;
   }) => Effect.Effect<void, ProviderAdapterV2Error>;
   readonly interruptTurn: (
     input: ProviderAdapterV2InterruptInput,

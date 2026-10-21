@@ -108,7 +108,6 @@ import {
   deriveLatestThreadRun,
   deriveThreadRuntime,
   presentPendingBackgroundWork,
-  presentProviderGoal,
 } from "@t3tools/client-runtime/state/thread-execution";
 import {
   resolveWorkflowOpening,
@@ -285,7 +284,6 @@ import {
   DownloadIcon,
   GitBranchIcon,
   ShieldQuestionIcon,
-  TargetIcon,
   WifiOffIcon,
 } from "lucide-react";
 import { cn, randomUUID } from "~/lib/utils";
@@ -414,6 +412,8 @@ import { createUpwardScrollDetector, isTimelineScrollTarget } from "./chat/timel
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
 import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/intro/AtlasTerminal";
 import { AtlasClaudeProgress } from "~/atlas/progress/AtlasClaudeProgress";
+import { AtlasGoalCard } from "~/atlas/goal/AtlasGoalCard";
+import { atlasGoalProvider } from "~/atlas/goal/goalPresentation";
 import { atlasActivityLabel } from "~/atlas/progress/claudeProgress";
 import { useAtlasPausedTask } from "~/atlas/progress/pausedTask";
 import { computerUseApp, useAgentControlOverlay } from "~/atlas/desktop/agentControlOverlay";
@@ -5363,7 +5363,12 @@ export default function ChatView(props: ChatViewProps) {
     };
   })() as ComposerBannerStackItem | null;
 
-  const sendStandaloneCommand = async (text: string, failureMessage: string) => {
+  // Code Atlas: `queue` holds a goal change for after the running turn.
+  const sendStandaloneCommand = async (
+    text: string,
+    failureMessage: string,
+    options?: { readonly queue?: boolean },
+  ) => {
     if (!activeThread || !clientSettingsHydrated || sendInFlightRef.current) return;
     const context = composerRef.current?.getSendContext();
     if (!context?.providerAvailable) return;
@@ -5407,6 +5412,7 @@ export default function ChatView(props: ChatViewProps) {
               runtimeMode,
               interactionMode: context.interactionMode,
               createdAt,
+              ...(options?.queue ? { dispatchMode: "queue" as const } : {}),
             },
           });
     if (result._tag === "Failure") {
@@ -5425,43 +5431,8 @@ export default function ChatView(props: ChatViewProps) {
   };
   const sendStandaloneCommandStable = useStableCallback(sendStandaloneCommand);
   const activeGoal = activeThreadShell?.goal ?? null;
-  const goalBannerItem = (() => {
-    if (!activeThread || activeGoal === null) return null;
-    const presentation = presentProviderGoal(activeGoal, isWorking);
-    return {
-      id: `goal:${activeThread.id}`,
-      variant: "default",
-      priority: "activity",
-      icon: <TargetIcon />,
-      title:
-        presentation.usage === null
-          ? presentation.title
-          : `${presentation.title} · ${presentation.usage}`,
-      description: presentation.objective,
-      actions: isWorking ? undefined : (
-        <>
-          {presentation.canResume ? (
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={() =>
-                void sendStandaloneCommandStable("/goal resume", "Failed to resume goal.")
-              }
-            >
-              Resume
-            </Button>
-          ) : null}
-          <Button
-            size="xs"
-            variant="ghost"
-            onClick={() => void sendStandaloneCommandStable("/goal clear", "Failed to clear goal.")}
-          >
-            Clear
-          </Button>
-        </>
-      ),
-    };
-  })() as ComposerBannerStackItem | null;
+  // Code Atlas: the goal shows as AtlasGoalCard above the composer, like Codex's.
+  const atlasGoalProviderKind = atlasGoalProvider(activeProviderThread?.driver);
 
   const backgroundWorkBannerItem = (() => {
     const presentation = presentPendingBackgroundWork(activeBackgroundTasks);
@@ -5667,11 +5638,9 @@ export default function ChatView(props: ChatViewProps) {
       : null;
   const composerBannerItems = (() => {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
-    const backgroundWorkItems = [
-      childInputBannerItem,
-      goalBannerItem,
-      backgroundWorkBannerItem,
-    ].filter((item) => item !== null);
+    const backgroundWorkItems = [childInputBannerItem, backgroundWorkBannerItem].filter(
+      (item) => item !== null,
+    );
     const usageLimitsItems = usageLimitsBanner === null ? [] : [usageLimitsBanner];
     const projectCloneItems = projectCloneBannerItem === null ? [] : [projectCloneBannerItem];
     if (!localCheckoutBranchMismatch || !showBranchMismatchBanner || !activeBranchMismatchKey) {
@@ -8500,6 +8469,19 @@ export default function ChatView(props: ChatViewProps) {
                       steps={activeComposerTaskSteps ?? activePlan?.steps ?? null}
                     />
                   ) : null}
+                  {/* Code Atlas: the thread goal, Codex-style, in the composer lane. */}
+                  {activeGoal !== null && activeThread && !isDraftHeroState ? (
+                    <div data-atlas-goal className="mb-3">
+                      <AtlasGoalCard
+                        environmentId={environmentId}
+                        threadId={activeThread.id}
+                        goal={activeGoal}
+                        working={isWorking}
+                        provider={atlasGoalProviderKind}
+                        sendCommand={sendStandaloneCommandStable}
+                      />
+                    </div>
+                  ) : null}
                   <div
                     ref={draftHeroComposerAnchorRef}
                     data-atlas-composer-anchor={isDraftHeroState ? undefined : ""}
@@ -8824,6 +8806,9 @@ export default function ChatView(props: ChatViewProps) {
               onPresentationChange={setThreadPanelPresentation}
               forceNewWorktree={multipleModelSelections !== null}
               contextWindow={activeContextWindow}
+              // Code Atlas: the Context card compacts like the composer's /compact.
+              onCompactContext={onComposerCompactContextStable}
+              compactContextDisabled={compactDisabled}
               backgroundTasks={pendingBackgroundTasks}
               environmentId={activeThread.environmentId}
               threadId={activeThread.id}

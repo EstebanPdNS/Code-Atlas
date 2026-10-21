@@ -13,6 +13,9 @@ import {
   MessageId,
   OrchestrationV2StopWorkflowError,
   type OrchestrationV2StopWorkflowInput,
+  // Code Atlas: goal controls.
+  OrchestrationV2UpdateGoalError,
+  type OrchestrationV2UpdateGoalInput,
   type ModelSelection,
   type OrchestrationV2Actor,
   type OrchestrationV2Command,
@@ -420,6 +423,10 @@ export interface ThreadManagementServiceShape {
   readonly stopWorkflow: (
     input: OrchestrationV2StopWorkflowInput,
   ) => Effect.Effect<void, OrchestrationV2StopWorkflowError>;
+  /** Code Atlas: Codex-style goal controls. */
+  readonly updateGoal: (
+    input: OrchestrationV2UpdateGoalInput,
+  ) => Effect.Effect<void, OrchestrationV2UpdateGoalError>;
   readonly stopDelegatedTasks: (input: {
     readonly threadId: ThreadId;
     readonly commandId: CommandId;
@@ -1096,6 +1103,43 @@ const make = Effect.gen(function* () {
     (effect, input) => effect.pipe((effect) => threadDispatch.withLock(input.threadId, effect)),
   );
 
+  // Code Atlas: Codex-style goal controls. The provider owns the goal and
+  // reports the change back as a provider thread update, so nothing is
+  // recorded here; this only reaches the live provider session.
+  const updateGoal: ThreadManagementServiceShape["updateGoal"] = Effect.fn(
+    "ThreadManagementService.updateGoal",
+  )(
+    function* (input) {
+      const fail = (reason: OrchestrationV2UpdateGoalError["reason"], cause?: unknown) =>
+        new OrchestrationV2UpdateGoalError({
+          threadId: input.threadId,
+          reason,
+          ...(cause === undefined ? {} : { cause }),
+        });
+      const records = yield* orchestrator
+        .getThreadRecords(input.threadId, ["providerThreads"])
+        .pipe(Effect.mapError((cause) => fail("unavailable", cause)));
+      if (records.thread.deletedAt !== null) return yield* fail("unavailable");
+      const providerThread = records.providerThreads.find(
+        (candidate) => candidate.id === records.thread.activeProviderThreadId,
+      );
+      if (providerThread === undefined) return yield* fail("unavailable");
+      if ((providerThread.goal ?? null) === null) return yield* fail("no-goal");
+      if (providerThread.providerSessionId === null) return yield* fail("unavailable");
+      const runtime = yield* sessions
+        .get(providerThread.providerSessionId)
+        .pipe(Effect.mapError((cause) => fail("unavailable", cause)));
+      if (Option.isNone(runtime)) return yield* fail("unavailable");
+      if (runtime.value.updateGoal === undefined) return yield* fail("unsupported");
+      // Bounded so a provider that never answers cannot hold the thread lock.
+      yield* runtime.value.updateGoal({ providerThread, action: input.action }).pipe(
+        Effect.timeout("15 seconds"),
+        Effect.mapError((cause) => fail("update-failed", cause)),
+      );
+    },
+    (effect, input) => effect.pipe((effect) => threadDispatch.withLock(input.threadId, effect)),
+  );
+
   const stopDelegatedTasks: ThreadManagementServiceShape["stopDelegatedTasks"] = Effect.fn(
     "ThreadManagementService.stopDelegatedTasks",
   )(function* (input) {
@@ -1186,6 +1230,7 @@ const make = Effect.gen(function* () {
     interruptThread,
     stopDelegatedTasks,
     stopWorkflow,
+    updateGoal,
     getThreadEventSequence: orchestrator.getThreadEventSequence,
     recoverDelegatedTask: orchestrator.recoverDelegatedTask,
     delegatedTaskResultPending: orchestrator.delegatedTaskResultPending,

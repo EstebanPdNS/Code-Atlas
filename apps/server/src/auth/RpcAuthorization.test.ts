@@ -18,6 +18,7 @@ import {
   AuthTerminalOperateScope,
   WS_METHODS,
   WsRpcGroup,
+  THREAD_GOAL_WS_METHODS,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -39,6 +40,13 @@ describe("RPC authorization scopes", () => {
 
   it("requires operate access to stop a workflow", () => {
     expect(requiredScopeForRpcMethod(ORCHESTRATION_V2_WS_METHODS.stopWorkflow)).toBe(
+      AuthOrchestrationOperateScope,
+    );
+  });
+
+  // Code Atlas: goal controls change what the agent works on.
+  it("requires operate access to pause, resume, edit or clear a goal", () => {
+    expect(requiredScopeForRpcMethod(THREAD_GOAL_WS_METHODS.updateGoal)).toBe(
       AuthOrchestrationOperateScope,
     );
   });

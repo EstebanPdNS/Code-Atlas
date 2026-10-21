@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
 import * as ServerConfig from "../config.ts";
+import * as ProjectTurnActivity from "../orchestration-v2/ProjectTurnActivity.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
 import { detailFromCause, firstNonEmptyLine } from "@t3tools/source-control-core/server/discovery";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
@@ -94,7 +95,10 @@ export class SourceControlDiscovery extends Context.Service<
   SourceControlDiscovery,
   {
     readonly discover: Effect.Effect<SourceControlDiscoveryResult>;
-    /** Code Atlas: `discover`, plus `activityCwd`'s commits this week when it names a repository. */
+    /**
+     * Code Atlas: `discover`, plus `activityCwd`'s commits this week when it
+     * names a repository, and its project's turn diffs this week.
+     */
     readonly discoverFor: (
       input: SourceControlDiscoveryInput,
     ) => Effect.Effect<SourceControlDiscoveryResult>;
@@ -106,6 +110,7 @@ export const make = Effect.gen(function* () {
   const config = yield* ServerConfig.ServerConfig;
   const process = yield* VcsProcess.VcsProcess;
   const sourceControlProviders = yield* SourceControlProviderRegistry.SourceControlProviderRegistry;
+  const turnActivity = yield* ProjectTurnActivity.ProjectTurnActivity;
 
   const probe = <Kind extends VcsDriverKind>(
     input: DiscoveryProbe & { readonly kind: Kind },
@@ -230,12 +235,15 @@ export const make = Effect.gen(function* () {
     discoverFor: (input) =>
       input.activityCwd === undefined
         ? discover
-        : Effect.all([discover, weeklyActivity(input.activityCwd)], {
-            concurrency: "unbounded",
-          }).pipe(
-            Effect.map(([result, activity]) =>
-              Option.isSome(activity) ? { ...result, weeklyActivity: activity.value } : result,
-            ),
+        : Effect.all(
+            [discover, weeklyActivity(input.activityCwd), turnActivity.weekly(input.activityCwd)],
+            { concurrency: "unbounded" },
+          ).pipe(
+            Effect.map(([result, activity, turns]) => ({
+              ...result,
+              ...(Option.isSome(activity) ? { weeklyActivity: activity.value } : {}),
+              ...(Option.isSome(turns) ? { turnActivity: turns.value } : {}),
+            })),
           ),
   });
 });

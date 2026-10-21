@@ -54,6 +54,8 @@ import {
   OrchestrationV2SearchThreadError,
   OrchestrationGetTurnDiffError,
   ORCHESTRATION_V2_WS_METHODS,
+  // Code Atlas: goal controls.
+  THREAD_GOAL_WS_METHODS,
   ORCHESTRATION_PROTOCOL_QUERY_PARAM,
   ORCHESTRATION_PROTOCOL_VERSION,
   OrchestrationV2DispatchCommandError,
@@ -156,6 +158,8 @@ import {
 } from "./orchestration-v2/WireProjection.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as ThreadSearch from "./orchestration-v2/ThreadSearch.ts";
+// Code Atlas: the new-thread terminal's weekly lines.
+import * as ProjectTurnActivity from "./orchestration-v2/ProjectTurnActivity.ts";
 import * as OrchestrationEventStore from "./persistence/OrchestrationEventStore.ts";
 import { userFacingDispatchErrorMessage } from "./orchestration-v2/UserFacingErrors.ts";
 import * as ProviderRegistry from "./provider/ProviderRegistry.ts";
@@ -1856,6 +1860,8 @@ export const layerWsRpc = (
             ),
           ),
         [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: (input) => threadManagement.stopWorkflow(input),
+        // Code Atlas: goal controls.
+        [THREAD_GOAL_WS_METHODS.updateGoal]: (input) => threadManagement.updateGoal(input),
         [ORCHESTRATION_V2_WS_METHODS.getWorkflowScript]: (input) =>
           readWorkflowScript({ scriptPath: input.scriptPath }),
         [ORCHESTRATION_V2_WS_METHODS.getTurnItem]: (input) =>
@@ -3243,6 +3249,7 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
+                  Layer.provide(ProjectTurnActivity.layer),
                   Layer.provide(
                     SourceControlProviderRegistry.layer.pipe(
                       Layer.provide(SourceControlBuiltInDrivers.layer),

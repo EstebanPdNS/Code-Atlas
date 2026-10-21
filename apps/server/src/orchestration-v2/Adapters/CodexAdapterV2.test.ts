@@ -9547,6 +9547,149 @@ describe("CodexAdapterV2 post-settle continuation", () => {
       ),
     );
 
+    // Code Atlas: goal card controls.
+    it("edits a goal like the Codex TUI, reactivating only a finished one", () => {
+      const goal = (status: "active" | "paused" | "complete" | "budget_limited") => ({
+        objective,
+        status,
+      });
+      assert.deepEqual(
+        CodexAdapterV2.codexGoalUpdate({ type: "edit", objective: "New" }, goal("paused")),
+        { objective: "New" },
+      );
+      assert.deepEqual(
+        CodexAdapterV2.codexGoalUpdate({ type: "edit", objective: "New" }, goal("complete")),
+        { objective: "New", status: "active" },
+      );
+      assert.deepEqual(
+        CodexAdapterV2.codexGoalUpdate({ type: "edit", objective: "New" }, goal("budget_limited")),
+        { objective: "New", status: "active" },
+      );
+      assert.deepEqual(
+        CodexAdapterV2.codexGoalUpdate(
+          { type: "edit", objective: "New", status: "paused" },
+          goal("complete"),
+        ),
+        { objective: "New", status: "paused" },
+      );
+      assert.deepEqual(CodexAdapterV2.codexGoalUpdate({ type: "pause" }, goal("active")), {
+        status: "paused",
+      });
+      assert.deepEqual(CodexAdapterV2.codexGoalUpdate({ type: "resume" }, goal("paused")), {
+        status: "active",
+      });
+    });
+
+    it.effect("pauses a running goal so its run ends with the current turn", () =>
+      Effect.gen(function* () {
+        const transcript = makeCodexReplayTranscript({
+          scenario: "goal-card-pause",
+          entries: [
+            ...sessionStart,
+            ...request(3, "thread/goal/get", { threadId: nativeThreadId }, { goal: null }),
+            ...request(
+              4,
+              "thread/goal/set",
+              { threadId: nativeThreadId, objective, status: "paused" },
+              { goal: codexGoal("paused", 0) },
+            ),
+            ...withReplayRequestId(
+              codexReplayPreamble({
+                nativeThreadId,
+                nativeTurnId: "goal-turn-1",
+                prompt: objective,
+              }).slice(5),
+              5,
+            ),
+            ...request(
+              6,
+              "thread/goal/set",
+              { threadId: nativeThreadId, status: "active" },
+              { goal: codexGoal("active", 0) },
+            ),
+            notification("goal active", "thread/goal/updated", {
+              threadId: nativeThreadId,
+              turnId: "goal-turn-1",
+              goal: codexGoal("active", 0),
+            }),
+            ...request(
+              7,
+              "thread/goal/set",
+              { threadId: nativeThreadId, status: "paused" },
+              { goal: codexGoal("paused", 40) },
+            ),
+            notification("goal paused", "thread/goal/updated", {
+              threadId: nativeThreadId,
+              turnId: "goal-turn-1",
+              goal: codexGoal("paused", 40),
+            }),
+            notification("first turn done", "turn/completed", {
+              threadId: nativeThreadId,
+              turn: makeCodexReplayTurn({ id: "goal-turn-1", status: "completed" }),
+            }),
+          ],
+        });
+        const harness = yield* makeCodexReplayHarness(transcript);
+        yield* harness.runtime.startTurn(yield* goalTurnInput(harness, `/goal ${objective}`));
+        yield* harness.runtime.updateGoal!({
+          providerThread: harness.providerThread,
+          action: { type: "pause" },
+        });
+        yield* harness.firstTerminal;
+
+        assert.deepEqual(
+          harness.terminalEvents().map((event) => event.status),
+          ["completed"],
+        );
+        assert.equal(providerGoals(harness.events).at(-1), "paused");
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+
+    it.effect("edits the objective in place, keeping the goal's status and usage", () =>
+      Effect.gen(function* () {
+        const edited = "Ship the feature with docs";
+        const transcript = makeCodexReplayTranscript({
+          scenario: "goal-card-edit",
+          entries: [
+            ...sessionStart,
+            ...request(
+              3,
+              "thread/goal/set",
+              { threadId: nativeThreadId, objective: edited },
+              { goal: { ...codexGoal("paused", 40), objective: edited } },
+            ),
+          ],
+        });
+        const updated = yield* Deferred.make<OrchestrationV2ProviderThread>();
+        const harness = yield* makeCodexReplayHarness(transcript, (event) =>
+          event.type === "provider_thread.updated" && event.providerThread.goal != null
+            ? Deferred.succeed(updated, event.providerThread)
+            : Effect.void,
+        );
+        yield* harness.runtime.updateGoal!({
+          providerThread: harness.providerThread,
+          action: { type: "edit", objective: edited },
+        });
+
+        const providerThread = yield* Deferred.await(updated);
+        assert.deepInclude(providerThread.goal, {
+          objective: edited,
+          status: "paused",
+          tokensUsed: 40,
+        });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    );
+
     it.effect("settles a run held for the next goal turn when Stop arrives in between", () =>
       Effect.gen(function* () {
         const prompt = "Keep going";

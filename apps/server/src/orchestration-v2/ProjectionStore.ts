@@ -41,6 +41,7 @@ import type {
   RunAttemptId,
 } from "@t3tools/contracts";
 import {
+  keepContextBreakdown,
   OrchestrationV2AppThreadJson as OrchestrationV2AppThreadJsonSchema,
   OrchestrationV2CheckpointJson as OrchestrationV2CheckpointJsonSchema,
   OrchestrationV2CheckpointScopeJson as OrchestrationV2CheckpointScopeJsonSchema,
@@ -685,33 +686,12 @@ export function upsertProviderTurn(
   next: OrchestrationV2ProviderTurn,
 ): Array<OrchestrationV2ProviderTurn> {
   const current = turns.find((turn) => turn.id === next.id);
-  const tokenUsage = mergeProviderTurnTokenUsage(current?.tokenUsage, next.tokenUsage);
+  // Code Atlas: usage without a breakdown keeps the turn's last one.
+  const tokenUsage = keepContextBreakdown(current?.tokenUsage, next.tokenUsage);
   return upsertById(turns, {
     ...next,
     ...(tokenUsage === undefined ? {} : { tokenUsage }),
   });
-}
-
-/**
- * Code Atlas: a provider sends its context breakdown only when it changes, so
- * an update without one keeps the turn's last breakdown. An explicit empty list
- * clears it.
- */
-function mergeProviderTurnTokenUsage(
-  current: OrchestrationV2ProviderTurn["tokenUsage"],
-  next: OrchestrationV2ProviderTurn["tokenUsage"],
-): OrchestrationV2ProviderTurn["tokenUsage"] {
-  if (next === undefined) return current;
-  if (next.contextCategories !== undefined || current?.contextCategories === undefined) {
-    return next;
-  }
-  return {
-    ...next,
-    contextCategories: current.contextCategories,
-    ...(current.contextMemoryFiles === undefined
-      ? {}
-      : { contextMemoryFiles: current.contextMemoryFiles }),
-  };
 }
 
 /** A stale run snapshot must not erase fields that other events recorded on the run. */

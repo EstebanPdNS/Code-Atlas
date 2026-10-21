@@ -5353,6 +5353,12 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         memoryFiles: [{ path: "/workspace/CLAUDE.md", type: "Project", tokens: 40 }],
         mcpTools: [],
         agents: [],
+        skills: {
+          totalSkills: 1,
+          includedSkills: 1,
+          tokens: 30,
+          skillFrontmatter: [{ name: "release-notes", source: "project", tokens: 30 }],
+        },
         autoCompactThreshold: 160_000,
         isAutoCompactEnabled: true,
         apiUsage: null,
@@ -5421,6 +5427,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       assert.deepEqual(turnTwo.usage.contextMemoryFiles, [
         { path: "/workspace/CLAUDE.md", tokens: 40 },
       ]);
+      assert.deepEqual(turnTwo.usage.contextSkills, [{ name: "release-notes", tokens: 30 }]);
+      assert.equal(turnTwo.usage.contextBreakdownTotalTokens, 900);
       // Compaction makes the breakdown stale, so the next update clears it.
       yield* harness.offerAndWait(
         claudeSdkFrame({

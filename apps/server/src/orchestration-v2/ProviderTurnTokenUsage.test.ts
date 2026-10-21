@@ -59,6 +59,9 @@ describe("provider turn token usage projection", () => {
         ...usage,
         contextCategories: [{ name: "Messages", tokens: 10, kind: "used" }],
         contextMemoryFiles: [{ path: "/w/CLAUDE.md", tokens: 4 }],
+        contextSkills: [{ name: "notes", tokens: 3 }],
+        contextBreakdownTotalTokens: 10,
+        contextEstimated: true,
       },
     } satisfies OrchestrationV2ProviderTurn;
 
@@ -69,6 +72,9 @@ describe("provider turn token usage projection", () => {
     assert.equal(kept?.usedTokens, 20);
     assert.deepEqual(kept?.contextCategories, withBreakdown.tokenUsage.contextCategories);
     assert.deepEqual(kept?.contextMemoryFiles, withBreakdown.tokenUsage.contextMemoryFiles);
+    assert.deepEqual(kept?.contextSkills, withBreakdown.tokenUsage.contextSkills);
+    assert.equal(kept?.contextBreakdownTotalTokens, 10);
+    assert.isTrue(kept?.contextEstimated);
 
     const cleared = upsertProviderTurn([withBreakdown], {
       ...withBreakdown,
@@ -76,5 +82,8 @@ describe("provider turn token usage projection", () => {
     })[0]?.tokenUsage;
     assert.deepEqual(cleared?.contextCategories, []);
     assert.isUndefined(cleared?.contextMemoryFiles);
+    assert.isUndefined(cleared?.contextSkills);
+    assert.isUndefined(cleared?.contextBreakdownTotalTokens);
+    assert.isUndefined(cleared?.contextEstimated);
   });
 });

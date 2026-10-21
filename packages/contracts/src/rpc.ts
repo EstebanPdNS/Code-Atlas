@@ -4,6 +4,12 @@ import {
   OrchestrationV2SearchThreadResult,
 } from "./orchestrationV2.ts";
 import { OrchestrationDispatchCommandError } from "./orchestrationDispatch.ts";
+// Code Atlas: goal controls.
+import {
+  OrchestrationV2UpdateGoalError,
+  OrchestrationV2UpdateGoalInput,
+  THREAD_GOAL_WS_METHODS,
+} from "./threadGoal.ts";
 import {
   McpAppCallToolInput,
   McpAppCallToolResult,
@@ -1757,6 +1763,13 @@ const WsOrchestrationV2StopWorkflowRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.st
   error: Schema.Union([OrchestrationV2StopWorkflowError, EnvironmentAuthorizationError]),
 });
 
+// Code Atlas: Codex-style goal controls (pause, resume, edit, clear).
+const WsOrchestrationV2UpdateGoalRpc = Rpc.make(THREAD_GOAL_WS_METHODS.updateGoal, {
+  payload: OrchestrationV2UpdateGoalInput,
+  success: Schema.Void,
+  error: Schema.Union([OrchestrationV2UpdateGoalError, EnvironmentAuthorizationError]),
+});
+
 const WsOrchestrationV2GetWorkflowScriptRpc = Rpc.make(
   ORCHESTRATION_V2_WS_METHODS.getWorkflowScript,
   {
@@ -2143,6 +2156,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2DispatchCommandRpc,
   WsOrchestrationV2GetWorkflowScriptRpc,
   WsOrchestrationV2StopWorkflowRpc,
+  WsOrchestrationV2UpdateGoalRpc,
   WsOrchestrationV2GetTurnItemRpc,
   WsOrchestrationV2GetTurnDiffRpc,
   WsOrchestrationV2GetFullThreadDiffRpc,

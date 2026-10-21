@@ -1,6 +1,7 @@
 import type {
   OrchestrationV2ContextCategory,
   OrchestrationV2ContextMemoryFile,
+  OrchestrationV2ContextSkill,
   OrchestrationV2ProviderTurn,
   OrchestrationV2ProviderTurnTokenUsage,
   OrchestrationV2ProviderThread,
@@ -25,6 +26,12 @@ export type ContextWindowSnapshot = NullableContextWindowUsage & {
   readonly contextCategories?: ReadonlyArray<OrchestrationV2ContextCategory>;
   /** Code Atlas: the memory files (CLAUDE.md, AGENTS.md...) in that breakdown. */
   readonly contextMemoryFiles?: ReadonlyArray<OrchestrationV2ContextMemoryFile>;
+  /** Code Atlas: the skills in that breakdown. */
+  readonly contextSkills?: ReadonlyArray<OrchestrationV2ContextSkill>;
+  /** Code Atlas: the used tokens the breakdown accounts for, when it was taken. */
+  readonly contextBreakdownTotalTokens?: number;
+  /** Code Atlas: the breakdown is Code Atlas's estimate (Codex), not the provider's count. */
+  readonly contextEstimated?: boolean;
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
@@ -104,6 +111,13 @@ export function deriveLatestContextWindowSnapshot(
       ...(liveUsage.contextMemoryFiles === undefined
         ? {}
         : { contextMemoryFiles: liveUsage.contextMemoryFiles }),
+      ...(liveUsage.contextSkills === undefined ? {} : { contextSkills: liveUsage.contextSkills }),
+      ...(liveUsage.contextBreakdownTotalTokens === undefined
+        ? {}
+        : { contextBreakdownTotalTokens: liveUsage.contextBreakdownTotalTokens }),
+      ...(liveUsage.contextEstimated === undefined
+        ? {}
+        : { contextEstimated: liveUsage.contextEstimated }),
       updatedAt: liveUsage.updatedAt,
     };
   }

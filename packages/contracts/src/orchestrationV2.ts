@@ -178,6 +178,13 @@ export const OrchestrationV2ContextMemoryFile = Schema.Struct({
 });
 export type OrchestrationV2ContextMemoryFile = typeof OrchestrationV2ContextMemoryFile.Type;
 
+/** Code Atlas: a skill listed in the provider's context (its name and description). */
+export const OrchestrationV2ContextSkill = Schema.Struct({
+  name: Schema.String,
+  tokens: NonNegativeInt,
+});
+export type OrchestrationV2ContextSkill = typeof OrchestrationV2ContextSkill.Type;
+
 export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   usedTokens: NonNegativeInt,
   maxTokens: Schema.optional(Schema.NullOr(NonNegativeInt)),
@@ -190,10 +197,45 @@ export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   promptCacheExpiresAt: Schema.optional(Schema.String),
   contextCategories: Schema.optional(Schema.Array(OrchestrationV2ContextCategory)),
   contextMemoryFiles: Schema.optional(Schema.Array(OrchestrationV2ContextMemoryFile)),
+  contextSkills: Schema.optional(Schema.Array(OrchestrationV2ContextSkill)),
+  /** Code Atlas: the used tokens the breakdown accounts for, when it was taken. */
+  contextBreakdownTotalTokens: Schema.optional(NonNegativeInt),
+  /** Code Atlas: the breakdown is Code Atlas's estimate, not the provider's count. */
+  contextEstimated: Schema.optional(Schema.Boolean),
   updatedAt: Schema.String,
 });
 export type OrchestrationV2ProviderTurnTokenUsage =
   typeof OrchestrationV2ProviderTurnTokenUsage.Type;
+
+/**
+ * Code Atlas: a provider sends its context breakdown only when it changes, so
+ * usage without categories keeps the last breakdown's fields. An explicit
+ * empty list clears them.
+ */
+export function keepContextBreakdown(
+  current: OrchestrationV2ProviderTurnTokenUsage | undefined,
+  next: OrchestrationV2ProviderTurnTokenUsage | undefined,
+): OrchestrationV2ProviderTurnTokenUsage | undefined {
+  if (next === undefined) return current;
+  if (next.contextCategories !== undefined || current?.contextCategories === undefined) {
+    return next;
+  }
+  const {
+    contextCategories,
+    contextMemoryFiles,
+    contextSkills,
+    contextBreakdownTotalTokens,
+    contextEstimated,
+  } = current;
+  return {
+    ...next,
+    contextCategories,
+    ...(contextMemoryFiles === undefined ? {} : { contextMemoryFiles }),
+    ...(contextSkills === undefined ? {} : { contextSkills }),
+    ...(contextBreakdownTotalTokens === undefined ? {} : { contextBreakdownTotalTokens }),
+    ...(contextEstimated === undefined ? {} : { contextEstimated }),
+  };
+}
 
 export const OrchestrationV2ContextTransfer = Schema.Struct({
   id: ContextTransferId,

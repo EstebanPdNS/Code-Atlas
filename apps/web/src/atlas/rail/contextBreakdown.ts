@@ -1,4 +1,4 @@
-import type { ContextWindowSnapshot } from "~/lib/contextWindow";
+import { formatContextWindowTokens, type ContextWindowSnapshot } from "~/lib/contextWindow";
 
 // Fixed colors for the breakdown, in the order rows appear (Claude's /context: messages,
 // system tools, system prompt, then smaller rows); the reserve and free space stay neutral.
@@ -21,12 +21,20 @@ const CLAUDE_CATEGORY_COLORS: Readonly<Record<string, string>> = {
   "Memory files": "#e0679a",
   "MCP tools": "#9b7be0",
   "Custom agents": "#3fb7b0",
+  // Codex's estimated rows borrow the closest Claude color.
+  "System prompt & tools": "#3fb37f",
+  "Code Atlas instructions": "#9b7be0",
 };
+
+/** Claude's /context row for what the conversation added since its breakdown. */
+export const SINCE_LAST_UPDATE = "Since last update";
 
 export interface ContextRow {
   readonly name: string;
   readonly tokens: number;
   readonly kind: "used" | "free" | "buffer" | "deferred";
+  /** Code Atlas's estimate rather than the provider's count. */
+  readonly estimated?: boolean;
 }
 
 export interface TonedContextRow extends ContextRow {
@@ -38,6 +46,8 @@ export interface TonedContextRow extends ContextRow {
 type ContextBreakdownInput = Pick<
   ContextWindowSnapshot,
   | "contextCategories"
+  | "contextBreakdownTotalTokens"
+  | "contextEstimated"
   | "cachedInputTokens"
   | "inputTokens"
   | "outputTokens"
@@ -49,11 +59,31 @@ type ContextBreakdownInput = Pick<
 export function contextRows(contextWindow: ContextBreakdownInput, maxTokens: number): ContextRow[] {
   if (contextWindow.contextCategories && contextWindow.contextCategories.length > 0) {
     // Like Claude Code's /context: what fills the window first, deferred tools last.
-    return contextWindow.contextCategories
+    const rows: ContextRow[] = contextWindow.contextCategories
       .filter((row) => row.tokens > 0 || row.kind === "free")
+      .map((row) =>
+        contextWindow.contextEstimated === true && row.kind === "used"
+          ? { ...row, estimated: true }
+          : row,
+      )
       .toSorted(
         (left, right) => Number(left.kind === "deferred") - Number(right.kind === "deferred"),
       );
+    // Usage keeps arriving between breakdowns; what it added is its own row,
+    // after the used rows.
+    const sinceLastUpdate =
+      contextWindow.contextBreakdownTotalTokens === undefined
+        ? 0
+        : Math.round(contextWindow.usedTokens - contextWindow.contextBreakdownTotalTokens);
+    if (sinceLastUpdate > 0) {
+      const lastUsed = rows.findLastIndex((row) => row.kind === "used");
+      rows.splice(lastUsed + 1, 0, {
+        name: SINCE_LAST_UPDATE,
+        tokens: sinceLastUpdate,
+        kind: "used",
+      });
+    }
+    return rows;
   }
   const cached = contextWindow.cachedInputTokens ?? 0;
   const input = Math.max(0, (contextWindow.inputTokens ?? 0) - cached);
@@ -73,6 +103,7 @@ function contextRowTone(row: ContextRow, usedIndex: number): string {
   if (row.kind === "free") return "bg-foreground/10";
   if (row.kind === "buffer") return "bg-muted-foreground/30";
   if (row.kind === "deferred") return "bg-muted-foreground/20";
+  if (row.name === SINCE_LAST_UPDATE) return "bg-muted-foreground/60";
   if (CLAUDE_CATEGORY_COLORS[row.name] !== undefined) return "";
   return CONTEXT_ROW_TONES[Math.min(usedIndex, CONTEXT_ROW_TONES.length - 1)]!;
 }
@@ -88,4 +119,9 @@ export function withContextTones(rows: readonly ContextRow[]): TonedContextRow[]
 
 export function formatContextShare(tokens: number, maxTokens: number): string {
   return `${((tokens / maxTokens) * 100).toFixed(1)}%`;
+}
+
+/** A row's tokens, with "≈" when Code Atlas estimated them. */
+export function formatContextRowTokens(row: Pick<ContextRow, "tokens" | "estimated">): string {
+  return `${row.estimated === true ? "≈" : ""}${formatContextWindowTokens(row.tokens)}`;
 }
