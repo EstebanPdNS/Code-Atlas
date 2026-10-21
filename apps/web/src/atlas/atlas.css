@@ -580,6 +580,8 @@ span[data-atlas-hero-heading] {
    glyph scales with it and sits on the text's optical center (its x-height). */
 [data-atlas-brand-row] {
   container-type: inline-size;
+  /* The lockup sits centred, with the same space on both sides of the sidebar. */
+  justify-content: center;
 }
 
 [data-atlas-wordmark="lg"] {
