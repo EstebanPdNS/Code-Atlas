@@ -12,13 +12,13 @@ import { Schema } from "effect";
 import { useEffect, useLayoutEffect, useRef, useState, type Ref } from "react";
 import { createPortal } from "react-dom";
 
-import { APP_VERSION } from "~/branding";
 import { Button } from "~/components/ui/button";
 import { getLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
 
 import auroraUrl from "./aurora.mp3";
 import { atlasProviderFill } from "../brand/providerColors";
+import { CODE_ATLAS_VERSION } from "../brand/version";
 import {
   ATLAS_SOUND_STORAGE_KEY,
   publishAtlasTerminalMeta,
@@ -233,12 +233,16 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
             </div>
           </div>
           <div data-atlas-reveal data-atlas-info>
+            <span aria-hidden data-atlas-corner="tl" />
+            <span aria-hidden data-atlas-corner="tr" />
+            <span aria-hidden data-atlas-corner="bl" />
+            <span aria-hidden data-atlas-corner="br" />
             <AtlasInfoCell icon={<FolderIcon />} label="Project">
               <p className="truncate font-semibold text-foreground">
                 {meta.projectName ?? "No project"}
               </p>
               <AtlasInfoHeading icon={<BotIcon />} label="Agents" />
-              <p className="truncate text-muted-foreground">
+              <p className="text-muted-foreground">
                 {meta.agents.length > 0 ? meta.agents.join(" · ") : "Claude Code · Codex"}
               </p>
             </AtlasInfoCell>
@@ -333,7 +337,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
               task below
             </span>
             <span aria-hidden data-atlas-rule-line data-dashed />
-            <span className="tabular-nums">v{APP_VERSION}</span>
+            <span className="tabular-nums">v{CODE_ATLAS_VERSION}</span>
           </p>
           <p aria-hidden className="mt-2">
             <span className="text-primary">C:/code_atlas/</span>

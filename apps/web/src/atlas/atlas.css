@@ -495,9 +495,10 @@ span[data-atlas-hero-heading] {
   display: grid;
   /* Usage carries a label, a bar and a percentage, so it gets the widest column. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  position: relative;
   margin-top: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border));
+  border-radius: 0.375rem;
   font-size: 0.8125rem;
   line-height: 1.5;
 }
@@ -510,8 +511,14 @@ span[data-atlas-hero-heading] {
   padding: 0.75rem 1rem;
 }
 
+/* Each section is its own cell: a clearly visible dashed divider between them. */
 [data-atlas-info-cell] + [data-atlas-info-cell] {
-  border-left: 1px dashed var(--border);
+  border-left: 1px dashed color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+/* Values sit under their label text, past the icon. */
+[data-atlas-info-cell] > p:not([data-atlas-info-heading]) {
+  padding-inline-start: 1.5rem;
 }
 
 [data-atlas-info-heading] {
@@ -536,8 +543,8 @@ span[data-atlas-hero-heading] {
 }
 
 [data-atlas-info-icon] > svg {
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 1rem;
+  height: 1rem;
 }
 
 [data-atlas-status] {
@@ -550,15 +557,15 @@ span[data-atlas-hero-heading] {
   animation: atlas-rise-in 420ms var(--atlas-ease-out) both;
 }
 
-[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-child(2) {
+[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-of-type(2) {
   animation-delay: 60ms;
 }
 
-[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-child(3) {
+[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-of-type(3) {
   animation-delay: 120ms;
 }
 
-[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-child(4) {
+[data-atlas-chrome="on"] [data-atlas-info-cell]:nth-of-type(4) {
   animation-delay: 180ms;
 }
 
@@ -585,12 +592,12 @@ span[data-atlas-hero-heading] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  [data-atlas-info-cell]:nth-child(3) {
+  [data-atlas-info-cell]:nth-of-type(3) {
     border-left: none;
   }
 
-  [data-atlas-info-cell]:nth-child(n + 3) {
-    border-top: 1px dashed var(--border);
+  [data-atlas-info-cell]:nth-of-type(n + 3) {
+    border-top: 1px dashed color-mix(in srgb, var(--primary) 45%, transparent);
   }
 }
 
@@ -854,6 +861,18 @@ span[data-atlas-hero-heading] {
 
 [data-atlas-status-line] {
   padding-inline-start: 2%;
+}
+
+/* The goal card sits in the same lane, under the plan card when there is
+   one; on its own it fades the conversation out the same way. */
+[data-atlas-goal] {
+  padding-top: 1rem;
+  background: linear-gradient(to bottom, transparent, var(--background) 1rem);
+}
+
+[data-atlas-claude-progress] + [data-atlas-goal] {
+  padding-top: 0;
+  background: none;
 }
 
 /* Plan card: folded, only the steps being worked on stay open; the others
