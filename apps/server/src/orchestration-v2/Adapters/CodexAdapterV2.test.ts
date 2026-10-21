@@ -1640,6 +1640,7 @@ function makeCodexTestTurnInput(input: {
   readonly now: DateTime.Utc;
   readonly attemptId: RunAttemptId;
   readonly text: string;
+  readonly runtimePolicy?: ProviderAdapter.ProviderAdapterV2TurnInput["runtimePolicy"];
 }): ProviderAdapter.ProviderAdapterV2TurnInput {
   return {
     appThread: makeCodexTestAppThread(input),
@@ -1658,7 +1659,7 @@ function makeCodexTestTurnInput(input: {
       attachments: [],
     },
     modelSelection: CODEX_TEST_MODEL_SELECTION,
-    runtimePolicy: CODEX_TEST_RUNTIME_POLICY,
+    runtimePolicy: input.runtimePolicy ?? CODEX_TEST_RUNTIME_POLICY,
   };
 }
 
@@ -1685,6 +1686,8 @@ function codexReplayPreamble(input: {
   readonly nativeTurnId: string;
   readonly prompt: string;
   readonly sentPrompt?: string;
+  /** The approval and sandbox settings turn/start carries; Full access by default. */
+  readonly turnPolicy?: Record<string, unknown>;
 }): Array<CodexReplay.CodexAppServerReplayEntry> {
   return [
     {
@@ -1778,9 +1781,11 @@ function codexReplayPreamble(input: {
           input: [{ type: "text", text: input.sentPrompt ?? input.prompt }],
           cwd: "/workspace",
           model: "gpt-5.4",
-          approvalPolicy: "never",
-          approvalsReviewer: "user",
-          sandboxPolicy: { type: "dangerFullAccess" },
+          ...(input.turnPolicy ?? {
+            approvalPolicy: "never",
+            approvalsReviewer: "user",
+            sandboxPolicy: { type: "dangerFullAccess" },
+          }),
           summary: "detailed",
         },
       },
@@ -10206,10 +10211,24 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     ) =>
       Effect.gen(function* () {
         const pending = yield* Queue.unbounded<OrchestrationV2RuntimeRequest>();
+        // Full access answers approvals itself, so these approval paths run under
+        // auto-accept-edits, where Codex asks the user.
         const harness = yield* makeCodexReplayHarness(
           makeCodexReplayTranscript({
             scenario,
-            entries: [...codexReplayPreamble({ nativeThreadId, nativeTurnId, prompt }), ...entries],
+            entries: [
+              ...codexReplayPreamble({
+                nativeThreadId,
+                nativeTurnId,
+                prompt,
+                turnPolicy: {
+                  approvalPolicy: "on-request",
+                  approvalsReviewer: "user",
+                  sandboxPolicy: { type: "workspaceWrite" },
+                },
+              }),
+              ...entries,
+            ],
           }),
           (event) =>
             event.type === "runtime_request.updated" && event.runtimeRequest.status === "pending"
@@ -10223,6 +10242,7 @@ describe("CodexAdapterV2 post-settle continuation", () => {
             now: yield* DateTime.now,
             attemptId: RunAttemptId.make(`${scenario}-attempt`),
             text: prompt,
+            runtimePolicy: { ...CODEX_TEST_RUNTIME_POLICY, runtimeMode: "auto-accept-edits" },
           }),
         );
         return {
