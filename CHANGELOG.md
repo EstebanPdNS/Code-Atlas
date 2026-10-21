@@ -2,14 +2,14 @@
 
 ## v1.2
 
-- Plan first, on by default: Claude Code and Codex start every request with a task list and work through it step by step (Settings → General → Plan first).
-- Pause a running task, then resume it where it left off or stop it.
-- While dictating, the return button stops and sends; the microphone stops and inserts the text.
-- The Context card lists Claude Code's own breakdown (messages, system tools, system prompt, skills, memory files, free space) or input, cache and output, with the tokens left until auto-compact.
-- Usage lists Codex first and opens the usage statistics; the Tokens view shows the current session and weekly limits before the breakdown.
-- While an agent uses another app through Codex computer use, its window glows orange (macOS).
-- The status line sits further in and the conversation fades out above it; microphone dots only shrink at the edge.
-- Sidebar rows read "N threads" and their counts slide aside for the row buttons on hover.
+- Plan first, on by default: Claude Code and Codex keep a task list for every request and check off each step (Settings → General → Plan first).
+- Pause a running task, then stop or resume it.
+- While dictating, the return button stops and sends.
+- Detailed Context card, like Claude Code's.
+- Usage lists Codex first, uses each agent's colors and opens the statistics; the Tokens view shows the limits.
+- An app window an agent uses through computer use glows orange.
+- Smoother microphone dots, wider conversation margins, and the launch intro no longer cuts off the project name.
+- Sidebar rows read "N threads".
 
 ## v1.1
 
