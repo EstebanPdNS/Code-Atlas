@@ -19,6 +19,30 @@ export const DEFAULT_SANS_FONT_STACK =
 export const DEFAULT_CODE_FONT_STACK =
   '"SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
 
+/**
+ * Code Atlas typefaces offered in Settings → Appearance. "Claude style" uses
+ * the macOS system font, the closest available match to Claude's own
+ * interface face (which is proprietary and can't be bundled).
+ */
+export const ATLAS_TYPEFACES = {
+  atlas: { label: "Code Atlas · monospace", sans: "", composer: "" },
+  claude: { label: "Claude style · system", sans: "system-ui", composer: "system-ui" },
+} as const;
+
+export type AtlasTypeface = keyof typeof ATLAS_TYPEFACES | "custom";
+
+export function resolveAtlasTypeface(input: {
+  readonly sans: string;
+  readonly composer: string;
+}): AtlasTypeface {
+  for (const [key, preset] of Object.entries(ATLAS_TYPEFACES)) {
+    if (input.sans.trim() === preset.sans && input.composer.trim() === preset.composer) {
+      return key as keyof typeof ATLAS_TYPEFACES;
+    }
+  }
+  return "custom";
+}
+
 export const TYPOGRAPHY_ADVANCED_STORAGE_KEY = "t3code:typography-advanced";
 
 export function resolveTerminalFontPreference(input: {

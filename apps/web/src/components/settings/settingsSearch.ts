@@ -263,6 +263,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance-interface",
   },
   {
+    id: "interface-typeface",
+    title: "Typeface",
+    to: "/settings/appearance",
+    searchTerms: ["font typography monospace claude system sans code atlas style"],
+  },
+  {
     id: "interface-font",
     title: "Interface font",
     to: "/settings/appearance",

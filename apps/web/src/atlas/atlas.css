@@ -411,6 +411,12 @@ span[data-atlas-hero-heading] {
   border-top: 1px solid var(--border);
 }
 
+/* The Code Atlas terminal is a terminal: it stays monospace whatever
+   typeface Settings → Appearance picks for the interface. */
+[data-atlas-terminal] {
+  font-family: var(--atlas-font-console);
+}
+
 [data-atlas-ascii] {
   margin: 0;
   font-family: var(--atlas-font-console);

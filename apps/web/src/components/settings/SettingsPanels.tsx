@@ -130,6 +130,8 @@ import {
   resolveTerminalFontPreference,
   resolveTerminalFontSizePreference,
   TYPOGRAPHY_ADVANCED_STORAGE_KEY,
+  ATLAS_TYPEFACES,
+  resolveAtlasTypeface,
 } from "../../appearanceFonts";
 import { CodeFontPreview, PromptFontPreview, TerminalFontPreview } from "./SettingsFontPreviews";
 import { discoverInstalledFonts, FontFamilyPicker, useFontEnumeration } from "./FontFamilyPicker";
@@ -1722,9 +1724,55 @@ function WordWrapRow() {
   );
 }
 
+/** Code Atlas: one-click typefaces; the font rows below stay for custom choices. */
+function InterfaceTypefaceRow() {
+  const settings = useScopedSettings();
+  const updateSettings = useUpdateScopedSettings();
+  const typeface = resolveAtlasTypeface({
+    sans: settings.fontFamilySans,
+    composer: settings.fontFamilyComposer,
+  });
+  const label = typeface === "custom" ? "Custom" : ATLAS_TYPEFACES[typeface].label;
+  return (
+    <SettingsRow
+      {...searchableSetting("interface-typeface")}
+      description="The font of the interface and the prompt. The Code Atlas terminal and code always stay monospace."
+      control={
+        <div className="w-full sm:w-56">
+          <Select
+            value={typeface}
+            onValueChange={(value) => {
+              if (value === "atlas" || value === "claude") {
+                updateSettings({
+                  fontFamilySans: ATLAS_TYPEFACES[value].sans,
+                  fontFamilyComposer: ATLAS_TYPEFACES[value].composer,
+                });
+              }
+            }}
+          >
+            <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Typeface">
+              <SelectValue>{label}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup align="end" alignItemWithTrigger={false}>
+              <SelectItem value="atlas">{ATLAS_TYPEFACES.atlas.label} (default)</SelectItem>
+              <SelectItem value="claude">{ATLAS_TYPEFACES.claude.label}</SelectItem>
+              {typeface === "custom" ? (
+                <SelectItem value="custom" disabled>
+                  Custom (set below)
+                </SelectItem>
+              ) : null}
+            </SelectPopup>
+          </Select>
+        </div>
+      }
+    />
+  );
+}
+
 function FontSettingsGroup() {
   return (
     <>
+      <InterfaceTypefaceRow />
       <InterfaceFontRow />
       <PromptFontRow />
       <CodeFontRow />
@@ -1738,6 +1786,7 @@ function SimpleFontRows() {
   const settings = useScopedSettings();
   return (
     <>
+      <InterfaceTypefaceRow />
       <InterfaceFontRow preview={<PromptFontPreview />} />
       <CodeFontRow
         title="Monospace font"
