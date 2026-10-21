@@ -8,7 +8,7 @@ import { getLocalStorageItem, useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
 
 import auroraUrl from "./aurora.mp3";
-import { atlasProviderFill } from "./providerColors";
+import { atlasProviderFill } from "../brand/providerColors";
 import {
   ATLAS_SOUND_STORAGE_KEY,
   publishAtlasTerminalMeta,

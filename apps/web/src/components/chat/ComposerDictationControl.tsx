@@ -5,7 +5,7 @@ import {
   readPreferredInputDeviceId,
   useInputDevices,
   writePreferredInputDeviceId,
-} from "~/atlas/dictationInputDevice";
+} from "~/atlas/dictation/dictationInputDevice";
 
 import type { ComposerDictation } from "~/dictation/useComposerDictation";
 import { Button } from "../ui/button";

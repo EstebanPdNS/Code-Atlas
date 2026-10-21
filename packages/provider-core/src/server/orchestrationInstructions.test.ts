@@ -57,9 +57,9 @@ describe("T3 orchestration provider instructions", () => {
       state: { interactionMode: "default", hasT3Mcp: true },
     });
 
-    assert.include(injected, "T3 Code interaction mode: Default");
-    assert.include(injected, "T3 Code collaborative browser");
-    assert.include(injected, "T3 Code orchestration");
+    assert.include(injected, "Code Atlas interaction mode: Default");
+    assert.include(injected, "Code Atlas in-app browser");
+    assert.include(injected, "Code Atlas orchestration");
     assert.include(injected, "<user_request>\nInspect the repository.\n</user_request>");
   });
 
@@ -77,14 +77,14 @@ describe("T3 orchestration provider instructions", () => {
         state: { ...defaultState, interactionMode: "plan" },
         previousState: defaultState,
       }),
-      "T3 Code interaction mode: Plan",
+      "Code Atlas interaction mode: Plan",
     );
     const withoutMcp = t3AcpPromptWithInstructions({
       prompt,
       state: { interactionMode: "default", hasT3Mcp: false },
     });
-    assert.include(withoutMcp, "T3 Code interaction mode: Default");
-    assert.notInclude(withoutMcp, "T3 Code collaborative browser");
-    assert.notInclude(withoutMcp, "T3 Code orchestration");
+    assert.include(withoutMcp, "Code Atlas interaction mode: Default");
+    assert.notInclude(withoutMcp, "Code Atlas in-app browser");
+    assert.notInclude(withoutMcp, "Code Atlas orchestration");
   });
 });

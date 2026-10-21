@@ -8,7 +8,8 @@ import type {
 import { presentPendingBackgroundWork } from "@t3tools/client-runtime/state/thread-execution";
 import { formatResetsIn, limitsNotice, providersWithLimits } from "@t3tools/shared/usageLimits";
 import { useNavigate } from "@tanstack/react-router";
-import { SquareTerminalIcon, WorkflowIcon } from "lucide-react";
+import { ChevronRightIcon, SquareTerminalIcon, WorkflowIcon } from "lucide-react";
+import { useState } from "react";
 
 import { ThreadDetailsSection } from "~/components/chat/ThreadDetailsSection";
 import {
@@ -17,6 +18,7 @@ import {
 } from "~/components/usage/usagePagePreferences";
 import { useNowMinute } from "~/hooks/useNowMinute";
 import { formatContextWindowTokens, type ContextWindowSnapshot } from "~/lib/contextWindow";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { formatProviderDriverKindLabel } from "~/providerModels";
 import { useEnvironmentProviders } from "~/state/environments";
@@ -24,8 +26,8 @@ import { useEnvironmentQuery } from "~/state/query";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useKnownTerminalSessions } from "~/state/terminalSessions";
 
-import type { AtlasGitHubAccount, AtlasTerminalMeta } from "./atlasIntro";
-import { atlasProviderFill } from "./providerColors";
+import type { AtlasGitHubAccount, AtlasTerminalMeta } from "../intro/atlasIntro";
+import { atlasProviderFill } from "../brand/providerColors";
 
 const AGENT_DRIVERS = new Set(["claudeAgent", "codex"]);
 const NO_PROVIDERS: readonly ServerProvider[] = [];
@@ -153,7 +155,12 @@ interface ContextRow {
 /** The provider's own categories, or what every provider reports: input, cache, output. */
 function contextRows(contextWindow: ContextWindowSnapshot, maxTokens: number): ContextRow[] {
   if (contextWindow.contextCategories && contextWindow.contextCategories.length > 0) {
-    return contextWindow.contextCategories.filter((row) => row.tokens > 0 || row.kind === "free");
+    // Like Claude Code's /context: what fills the window first, deferred tools last.
+    return contextWindow.contextCategories
+      .filter((row) => row.tokens > 0 || row.kind === "free")
+      .toSorted(
+        (left, right) => Number(left.kind === "deferred") - Number(right.kind === "deferred"),
+      );
   }
   const cached = contextWindow.cachedInputTokens ?? 0;
   const input = Math.max(0, (contextWindow.inputTokens ?? 0) - cached);
@@ -169,16 +176,73 @@ function contextRows(contextWindow: ContextWindowSnapshot, maxTokens: number): C
   ];
 }
 
+// Claude Code's own /context colors for its categories.
+const CLAUDE_CATEGORY_COLORS: Readonly<Record<string, string>> = {
+  Messages: "#5b8def",
+  "System tools": "#d97757",
+  "System prompt": "#3fb37f",
+  Skills: "#d6a33a",
+  "Memory files": "#e0679a",
+  "MCP tools": "#9b7be0",
+  "Custom agents": "#3fb7b0",
+};
+
 function contextRowTone(row: ContextRow, usedIndex: number): string {
   if (row.kind === "free") return "bg-foreground/10";
   if (row.kind === "buffer") return "bg-muted-foreground/30";
   if (row.kind === "deferred") return "bg-muted-foreground/20";
+  if (CLAUDE_CATEGORY_COLORS[row.name] !== undefined) return "";
   return CONTEXT_ROW_TONES[Math.min(usedIndex, CONTEXT_ROW_TONES.length - 1)]!;
 }
 
 function withContextTones(rows: readonly ContextRow[]) {
   const usedRows = rows.filter((row) => row.kind === "used");
-  return rows.map((row) => ({ ...row, tone: contextRowTone(row, usedRows.indexOf(row)) }));
+  return rows.map((row) => ({
+    ...row,
+    tone: contextRowTone(row, usedRows.indexOf(row)),
+    color: row.kind === "used" ? (CLAUDE_CATEGORY_COLORS[row.name] ?? null) : null,
+  }));
+}
+
+/** "Memory files 2 ›": the loaded CLAUDE.md / AGENTS.md files, unfolded on click. */
+function ContextMemoryFiles(props: {
+  readonly files: NonNullable<ContextWindowSnapshot["contextMemoryFiles"]>;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2 text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-center gap-1.5 rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      >
+        <ChevronRightIcon
+          aria-hidden
+          data-atlas-disclosure
+          data-open={open ? "" : undefined}
+          className="size-3.5"
+        />
+        <span className="flex-1 text-left">Memory files</span>
+        <span className="tabular-nums">{props.files.length}</span>
+      </button>
+      {open ? (
+        <ul className="mt-1.5 grid gap-1 ps-5">
+          {props.files.map((file) => (
+            <li key={file.path} className="flex items-center gap-2 text-muted-foreground">
+              <Tooltip>
+                <TooltipTrigger render={<span className="min-w-0 flex-1 truncate" />}>
+                  {file.path.split("/").slice(-2).join("/")}
+                </TooltipTrigger>
+                <TooltipPopup>{file.path}</TooltipPopup>
+              </Tooltip>
+              <span className="tabular-nums">{formatContextWindowTokens(file.tokens)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function formatShare(tokens: number, maxTokens: number): string {
@@ -230,11 +294,14 @@ export function AtlasContextSection({
             <span
               key={row.name}
               className={cn("h-full", row.tone)}
-              style={{ width: `${Math.min(100, (row.tokens / maxTokens) * 100)}%` }}
+              style={{
+                width: `${Math.min(100, (row.tokens / maxTokens) * 100)}%`,
+                ...(row.color === null ? {} : { background: row.color }),
+              }}
             />
           ))}
         </div>
-        <dl className="mt-3 grid gap-1.5 text-xs">
+        <dl className="mt-3 grid grid-cols-1 gap-1.5 text-xs">
           {rows.map((row) => (
             <div
               key={row.name}
@@ -243,7 +310,11 @@ export function AtlasContextSection({
                 row.kind === "deferred" && "mt-1 text-muted-foreground",
               )}
             >
-              <span aria-hidden className={cn("size-2.5 shrink-0 rounded-xs", row.tone)} />
+              <span
+                aria-hidden
+                className={cn("size-2.5 shrink-0 rounded-xs", row.tone)}
+                style={row.color === null ? undefined : { background: row.color }}
+              />
               <dt className="min-w-0 flex-1 truncate text-muted-foreground">{row.name}</dt>
               <dd className="w-14 text-right text-muted-foreground tabular-nums">
                 {formatContextWindowTokens(row.tokens)}
@@ -254,6 +325,9 @@ export function AtlasContextSection({
             </div>
           ))}
         </dl>
+        {contextWindow.contextMemoryFiles && contextWindow.contextMemoryFiles.length > 0 ? (
+          <ContextMemoryFiles files={contextWindow.contextMemoryFiles} />
+        ) : null}
         {untilCompact !== null ? (
           <p className="mt-3 text-xs text-muted-foreground tabular-nums">
             {formatContextWindowTokens(untilCompact)} until auto-compact

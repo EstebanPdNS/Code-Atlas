@@ -407,11 +407,11 @@ import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { createUpwardScrollDetector, isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
-import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/AtlasTerminal";
-import { AtlasClaudeProgress } from "~/atlas/AtlasClaudeProgress";
-import { atlasActivityLabel } from "~/atlas/claudeProgress";
-import { computerUseApp, useAgentControlOverlay } from "~/atlas/agentControlOverlay";
-import { useAtlasTerminalSummary } from "~/atlas/AtlasRailSections";
+import { AtlasTerminal, AtlasTerminalMetaPublisher } from "~/atlas/intro/AtlasTerminal";
+import { AtlasClaudeProgress } from "~/atlas/progress/AtlasClaudeProgress";
+import { atlasActivityLabel } from "~/atlas/progress/claudeProgress";
+import { computerUseApp, useAgentControlOverlay } from "~/atlas/desktop/agentControlOverlay";
+import { useAtlasTerminalSummary } from "~/atlas/rail/AtlasRailSections";
 import { ExpandedImageDialogHost, openExpandedImagePreview } from "./chat/ExpandedImageDialog";
 import {
   BranchRestoreConfirmHost,
@@ -8436,6 +8436,7 @@ export default function ChatView(props: ChatViewProps) {
                   ) : null}
                   <div
                     ref={draftHeroComposerAnchorRef}
+                    data-atlas-composer-anchor={isDraftHeroState ? undefined : ""}
                     className="relative z-10"
                     style={
                       forceExpandedMobileComposer

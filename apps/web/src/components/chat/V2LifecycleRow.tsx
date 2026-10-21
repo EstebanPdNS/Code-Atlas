@@ -52,10 +52,17 @@ import { formatShortTimestamp } from "../../timestampFormat";
 import { getTriggerDisplayModelName } from "./providerIconUtils";
 import { ProviderInstanceIcon, providerTextColor } from "./ProviderInstanceIcon";
 import { cn } from "~/lib/utils";
+import { AgentFaceIcon } from "~/atlas/agents/agentFaces";
+import {
+  agentPersona,
+  agentPersonaHeadline,
+  atlasSubagentOrder,
+} from "~/atlas/agents/agentPersona";
+import { formatModelSlugName } from "@t3tools/shared/model";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { subagentResumedSince } from "./V2LifecycleRow.logic";
 import { Button, InlineButton } from "../ui/button";
-import { T3Wordmark } from "../T3Wordmark";
+import { CodeAtlasGlyph } from "~/atlas/brand/CodeAtlasMark";
 
 const LIFECYCLE_TYPES = new Set<OrchestrationV2TurnItem["type"]>([
   "run_interrupt_request",
@@ -176,7 +183,7 @@ export function V2LifecycleRow(props: {
     return (
       <WorkLogRow
         data-v2-item-type={item.type}
-        icon={<T3Wordmark className="size-4 text-icon-muted" aria-hidden />}
+        icon={<CodeAtlasGlyph className="size-4" />}
         label={<>Created thread{item.title ? ` · ${item.title}` : ""}</>}
         trailing={
           <InlineButton
@@ -419,6 +426,12 @@ function SubagentTimelineLink(props: {
     environmentThreadDetails.threadAtom(props.parentRef),
     (thread) => thread?.projection.subagents.find((agent) => agent.id === props.subagentId) ?? null,
   );
+  // Code Atlas: the thread's agents, oldest first, so each gets its own name.
+  const siblingIds = useAtomValue(environmentThreadDetails.threadAtom(props.parentRef), (thread) =>
+    atlasSubagentOrder(thread?.projection.subagents ?? []),
+  );
+  const persona = agentPersona(props.subagentId, siblingIds.split("\n"));
+  const modelLabel = agent?.model ? formatModelSlugName(agent.model) : null;
   const threadId = props.threadId;
   const liveStatus = agent?.status ?? props.status;
   const status = props.event ? props.event.status : liveStatus;
@@ -437,15 +450,23 @@ function SubagentTimelineLink(props: {
   };
   const content = (
     <>
-      <EnvironmentSubagentAvatar
-        environmentId={props.parentRef.environmentId}
-        providerInstanceId={props.providerInstanceId}
-        driver={props.driver}
-        status={status ?? undefined}
-      />
+      <span aria-hidden className="relative inline-flex shrink-0">
+        <AgentFaceIcon persona={persona} className="size-6" />
+        {status ? (
+          <span
+            className={cn(
+              "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background",
+              subagentStatusVisual(status).dotClass,
+            )}
+          />
+        ) : null}
+      </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          <span className="min-w-0 truncate text-xs font-medium text-foreground">
+          <span className="min-w-0 truncate text-xs text-foreground">
+            <span className="font-medium">
+              {agentPersonaHeadline(persona.name, status ?? liveStatus)}
+            </span>{" "}
             {props.title}
           </span>
           {detail !== null && (props.event !== undefined || status !== "completed") ? (
@@ -466,11 +487,16 @@ function SubagentTimelineLink(props: {
           )}
         >
           {detail === null ? (
-            statusLabel
-          ) : detail.includes("/") && !detail.includes(" ") ? (
-            <MiddleTruncate value={detail} showTitle={false} className="flex" />
+            (modelLabel ?? statusLabel)
           ) : (
-            <span className="block truncate">{detail}</span>
+            <span className="flex min-w-0 gap-1">
+              {modelLabel ? <span className="shrink-0">{modelLabel} ·</span> : null}
+              {detail.includes("/") && !detail.includes(" ") ? (
+                <MiddleTruncate value={detail} showTitle={false} className="flex min-w-0" />
+              ) : (
+                <span className="min-w-0 truncate">{detail}</span>
+              )}
+            </span>
           )}
         </span>
       </span>
@@ -500,7 +526,7 @@ function SubagentTimelineLink(props: {
             <button
               type="button"
               data-v2-item-type="subagent"
-              aria-label={`Open ${props.title}`}
+              aria-label={`Open ${persona.name}: ${props.title}`}
               aria-description={statusLabel}
               onClick={() => props.onOpenThread(threadId)}
               className={cn(

@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 
-import { ATLAS_SOUND_STORAGE_KEY, replayAtlasIntro } from "./atlasIntro";
+import { ATLAS_SOUND_STORAGE_KEY, replayAtlasIntro } from "../intro/atlasIntro";
 
 export const ATLAS_BACKGROUND_TASKS_CARD_KEY = "codeatlas:show-background-tasks-card";
 

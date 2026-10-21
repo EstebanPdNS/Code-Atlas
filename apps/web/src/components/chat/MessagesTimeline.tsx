@@ -1,5 +1,5 @@
 import { useRenderedAppearance } from "../../hooks/useTheme";
-import { AtlasEmptyThreadTerminal } from "~/atlas/AtlasTerminal";
+import { AtlasEmptyThreadTerminal } from "~/atlas/intro/AtlasTerminal";
 import type { Root, RootContent } from "mdast";
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { shallow } from "zustand/vanilla/shallow";
@@ -119,7 +119,7 @@ import {
 } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
-import { T3Wordmark } from "../T3Wordmark";
+import { CodeAtlasGlyph } from "~/atlas/brand/CodeAtlasMark";
 import { ThreadContextChip } from "../ThreadContextChip";
 import {
   ArrowRightIcon,
@@ -2324,7 +2324,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           className="me-1 text-2xs text-muted-foreground/70"
           data-user-message-attribution="t3code"
         >
-          Sent by T3 Code
+          Sent by Code Atlas
         </p>
       ) : userMessage.attribution === "agent" ? (
         <p className="me-1 text-2xs text-muted-foreground/70" data-user-message-attribution="agent">
@@ -2675,7 +2675,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>T3 Code</MessageAuthorHeading>
+        <MessageAuthorHeading>Code Atlas</MessageAuthorHeading>
         <div data-thread-find-text="true">
           <AssistantCitationSource
             messageId={row.message.id}
@@ -5061,7 +5061,7 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
     case "device":
       return <SmartphoneIcon className={className} aria-hidden />;
     case "t3-code":
-      return <T3Wordmark className={className} aria-hidden />;
+      return <CodeAtlasGlyph className={className} />;
     case "check":
       return <CheckIcon className={className} aria-hidden />;
     case "circle-alert":

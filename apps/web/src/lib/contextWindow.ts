@@ -1,5 +1,6 @@
 import type {
   OrchestrationV2ContextCategory,
+  OrchestrationV2ContextMemoryFile,
   OrchestrationV2ProviderTurn,
   OrchestrationV2ProviderTurnTokenUsage,
   OrchestrationV2ProviderThread,
@@ -22,6 +23,8 @@ type NullableContextWindowUsage = {
 export type ContextWindowSnapshot = NullableContextWindowUsage & {
   /** Code Atlas: the provider's own breakdown (Claude's /context), when it reported one. */
   readonly contextCategories?: ReadonlyArray<OrchestrationV2ContextCategory>;
+  /** Code Atlas: the memory files (CLAUDE.md, AGENTS.md...) in that breakdown. */
+  readonly contextMemoryFiles?: ReadonlyArray<OrchestrationV2ContextMemoryFile>;
   readonly remainingTokens: number | null;
   readonly usedPercentage: number | null;
   readonly remainingPercentage: number | null;
@@ -98,6 +101,9 @@ export function deriveLatestContextWindowSnapshot(
       ...(liveUsage.contextCategories === undefined
         ? {}
         : { contextCategories: liveUsage.contextCategories }),
+      ...(liveUsage.contextMemoryFiles === undefined
+        ? {}
+        : { contextMemoryFiles: liveUsage.contextMemoryFiles }),
       updatedAt: liveUsage.updatedAt,
     };
   }

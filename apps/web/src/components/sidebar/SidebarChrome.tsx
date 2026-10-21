@@ -6,7 +6,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
-import { CodeAtlasWordmark } from "~/atlas/CodeAtlasMark";
+import { CodeAtlasWordmark } from "~/atlas/brand/CodeAtlasMark";
 import {
   resolveEnvironmentIdentificationPillLabel,
   resolveSidebarStageBackdropVariant,
@@ -110,7 +110,7 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
       aria-label="Go to threads"
       data-atlas-brand-row
       className={cn(
-        "relative z-10 mx-2 mt-2 mb-1 flex h-9 w-fit min-w-0 shrink-0 items-center rounded-md px-2 outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset",
+        "relative z-10 mx-2 mt-2 mb-1 flex h-9 min-w-0 shrink-0 items-center self-stretch rounded-md px-2 outline-hidden ring-ring focus-visible:ring-2 focus-visible:ring-inset",
         onBackdrop ? "text-white" : "text-foreground",
       )}
       to="/"

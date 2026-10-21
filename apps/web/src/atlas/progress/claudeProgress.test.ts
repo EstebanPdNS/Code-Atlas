@@ -2,7 +2,12 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { TimelineEntry, WorkLogEntry } from "~/session-logic";
 
-import { atlasActivityLabel, formatAtlasElapsed, formatAtlasTokens } from "./claudeProgress";
+import {
+  atlasActivityLabel,
+  atlasPlanFocus,
+  formatAtlasElapsed,
+  formatAtlasTokens,
+} from "./claudeProgress";
 
 const work = (entry: Partial<WorkLogEntry>): TimelineEntry => ({
   id: "w",
@@ -49,5 +54,34 @@ describe("status line formatting", () => {
     expect(formatAtlasTokens(950)).toBe("950 tokens");
     expect(formatAtlasTokens(37_012)).toBe("37.0k tokens");
     expect(formatAtlasTokens(1_234_567)).toBe("1.2M tokens");
+  });
+});
+
+describe("atlasPlanFocus", () => {
+  const plan = (statuses: string) =>
+    [...statuses].map((c) => ({
+      status:
+        c === "x"
+          ? ("completed" as const)
+          : c === ">"
+            ? ("inProgress" as const)
+            : ("pending" as const),
+    }));
+
+  it("shows the step in progress and the next ones", () => {
+    expect(atlasPlanFocus(plan("xx>...."))).toEqual([2, 3, 4]);
+  });
+
+  it("keeps every step in progress first", () => {
+    expect(atlasPlanFocus(plan("x>>>>."))).toEqual([1, 2, 3]);
+  });
+
+  it("starts from the first pending step before work begins", () => {
+    expect(atlasPlanFocus(plan("...."), 2)).toEqual([0, 1]);
+  });
+
+  it("shows the last step of a finished plan", () => {
+    expect(atlasPlanFocus(plan("xxx"))).toEqual([2]);
+    expect(atlasPlanFocus([])).toEqual([]);
   });
 });

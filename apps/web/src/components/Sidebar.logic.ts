@@ -894,7 +894,8 @@ export function shouldRecedeSidebarThread(input: {
   isSelected: boolean;
 }): boolean {
   if (input.isActive || input.isSelected || input.status === "input") return false;
-  if (input.status === "working" || input.status === "waiting") return true;
+  // Code Atlas: a running thread keeps its color; only stopped threads recede.
+  if (input.status === "working" || input.status === "waiting") return false;
   if (input.status === "ready" || input.status === "approval") {
     return !input.isUnread && !input.isWoke;
   }

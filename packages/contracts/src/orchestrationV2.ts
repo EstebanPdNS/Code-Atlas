@@ -171,6 +171,13 @@ export const OrchestrationV2ContextCategory = Schema.Struct({
 });
 export type OrchestrationV2ContextCategory = typeof OrchestrationV2ContextCategory.Type;
 
+/** Code Atlas: a memory file (CLAUDE.md, AGENTS.md...) loaded into the provider's context. */
+export const OrchestrationV2ContextMemoryFile = Schema.Struct({
+  path: Schema.String,
+  tokens: NonNegativeInt,
+});
+export type OrchestrationV2ContextMemoryFile = typeof OrchestrationV2ContextMemoryFile.Type;
+
 export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   usedTokens: NonNegativeInt,
   maxTokens: Schema.optional(Schema.NullOr(NonNegativeInt)),
@@ -182,6 +189,7 @@ export const OrchestrationV2ProviderTurnTokenUsage = Schema.Struct({
   autoCompactThreshold: Schema.optional(PositiveInt),
   promptCacheExpiresAt: Schema.optional(Schema.String),
   contextCategories: Schema.optional(Schema.Array(OrchestrationV2ContextCategory)),
+  contextMemoryFiles: Schema.optional(Schema.Array(OrchestrationV2ContextMemoryFile)),
   updatedAt: Schema.String,
 });
 export type OrchestrationV2ProviderTurnTokenUsage =
