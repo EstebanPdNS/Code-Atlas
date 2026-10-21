@@ -186,7 +186,7 @@ export function threadReadTargetId(entry: Pick<WorkLogEntry, "structuredPayload"
   return typeof threadId === "string" && threadId.trim().length > 0 ? threadId.trim() : null;
 }
 
-const THREAD_READ_OBJECT = " a T3 thread";
+const THREAD_READ_OBJECTS = [" a Code Atlas thread", " a T3 thread"] as const;
 
 export function threadReadTargetTitle(
   shell: Pick<ThreadShell, "title" | "archivedAt" | "deletedAt"> | null,
@@ -196,9 +196,8 @@ export function threadReadTargetTitle(
 }
 
 export function threadReadLabelPrefix(label: string) {
-  return label.endsWith(THREAD_READ_OBJECT)
-    ? `${label.slice(0, -THREAD_READ_OBJECT.length)} thread`
-    : null;
+  const object = THREAD_READ_OBJECTS.find((suffix) => label.endsWith(suffix));
+  return object ? `${label.slice(0, -object.length)} thread` : null;
 }
 
 export function workEntryReadOutput(

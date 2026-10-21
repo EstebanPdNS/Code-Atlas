@@ -117,7 +117,7 @@ export function DictationSettingsSection() {
         settingKeys={["dictation"]}
         description={
           outdated
-            ? "Update T3 Code on this machine to use dictation."
+            ? "Update Code Atlas on this machine to use dictation."
             : unsupported
               ? "This environment's platform has no supported speech model."
               : "Transcribe dictation on this environment with a local speech model. Audio is not sent to any other service."
