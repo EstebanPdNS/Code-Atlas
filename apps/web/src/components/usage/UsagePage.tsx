@@ -112,6 +112,7 @@ import {
 // Code Atlas: Cost and Tokens tabs only, provider colors, and tokens per subscription dollar.
 import { USAGE_TABS, withoutLimitsTab } from "../../atlas/usage/usageTabs";
 import { UsageTokenEfficiency } from "../../atlas/usage/UsageTokenEfficiency";
+import { UsageTokenTypes } from "../../atlas/usage/UsageTokenTypes";
 import { usageProviderFill } from "../../atlas/usage/usageProviderPaint";
 
 function isUsageMetric(value: string | null | undefined): value is UsageMetric {
@@ -878,13 +879,17 @@ function UsageOverview({
         </div>
       </section>
 
+      {/* Code Atlas: the limits right after Totals. */}
+      {metric === "tokens" ? <UsageTokenLimits /> : null}
+
       {merged.totalTokens > 0 ? (
         <section
           className={cn("grid gap-x-12 gap-y-8 lg:grid-cols-2", figureClass(loadingPartial))}
         >
           {metric === "tokens" ? (
             <>
-              <UsageShareBar
+              {/* Code Atlas: a row per token type, as tall as the efficiency card beside it. */}
+              <UsageTokenTypes
                 label="Tokens by type"
                 segments={tokenTypeSegments(merged)}
                 format={formatTokens}
@@ -911,8 +916,6 @@ function UsageOverview({
           )}
         </section>
       ) : null}
-
-      {metric === "tokens" ? <UsageTokenLimits /> : null}
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
