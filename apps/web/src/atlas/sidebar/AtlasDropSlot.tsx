@@ -1,21 +1,22 @@
 import { useDndContext } from "@dnd-kit/core";
 import { useLayoutEffect, useRef } from "react";
 
-import { resolvePinnedDropSlot, type PinnedRowBox } from "./pinnedReorder";
+import { resolveAtlasDropSlot, type AtlasRowBox } from "./atlasSorting";
 
 /**
- * The slot a dragged pinned thread will land in, outlined while the other
- * pinned rows shift around it. Only this marker reads the drag context, so a
- * new target re-renders it alone, not the sidebar.
+ * The slot a dragged row will land in, outlined while the other rows of its
+ * list shift around it. It sits in the list (positioned) beside the rows whose
+ * sortable ids are `ids`. Only this marker reads the drag context, so a new
+ * target re-renders it alone, not the sidebar.
  */
-export function PinnedDropSlot(props: {
-  readonly pinnedKeys: readonly string[];
+export function AtlasDropSlot(props: {
+  readonly ids: readonly string[];
   readonly enabled: boolean;
 }) {
-  const { pinnedKeys, enabled } = props;
+  const { ids, enabled } = props;
   const { active, over } = useDndContext();
-  const activeIndex = active === null ? -1 : pinnedKeys.indexOf(String(active.id));
-  const overIndex = over === null ? -1 : pinnedKeys.indexOf(String(over.id));
+  const activeIndex = active === null ? -1 : ids.indexOf(String(active.id));
+  const overIndex = over === null ? -1 : ids.indexOf(String(over.id));
   const showing = enabled && activeIndex !== -1 && overIndex !== -1;
   const slotRef = useRef<HTMLLIElement>(null);
 
@@ -25,7 +26,7 @@ export function PinnedDropSlot(props: {
     const node = slotRef.current;
     const list = node?.parentElement;
     if (!node || !list) return;
-    const slot = showing ? measurePinnedSlot(list, pinnedKeys, activeIndex, overIndex) : null;
+    const slot = showing ? measureSlot(list, ids, activeIndex, overIndex) : null;
     if (slot === null) {
       node.style.display = "none";
       return;
@@ -33,7 +34,7 @@ export function PinnedDropSlot(props: {
     node.style.height = `${slot.height}px`;
     node.style.transform = `translateY(${slot.top}px)`;
     node.style.display = "";
-  }, [showing, pinnedKeys, activeIndex, overIndex]);
+  }, [showing, ids, activeIndex, overIndex]);
 
   return (
     <li
@@ -44,18 +45,21 @@ export function PinnedDropSlot(props: {
   );
 }
 
-function measurePinnedSlot(
+function measureSlot(
   list: HTMLElement,
-  pinnedKeys: readonly string[],
+  ids: readonly string[],
   activeIndex: number,
   overIndex: number,
-): PinnedRowBox | null {
+): AtlasRowBox | null {
   // offsetTop ignores the transforms dnd-kit applies: these are resting boxes.
-  const rows: PinnedRowBox[] = [];
-  for (const key of pinnedKeys) {
-    const row = list.querySelector<HTMLElement>(`[data-thread-item="${CSS.escape(key)}"]`);
+  const rows: AtlasRowBox[] = [];
+  for (const id of ids) {
+    const escaped = CSS.escape(id);
+    const row = list.querySelector<HTMLElement>(
+      `:scope > [data-thread-item="${escaped}"], :scope > [data-atlas-sortable="${escaped}"]`,
+    );
     if (row === null) return null;
     rows.push({ top: row.offsetTop, height: row.offsetHeight });
   }
-  return resolvePinnedDropSlot(rows, activeIndex, overIndex);
+  return resolveAtlasDropSlot(rows, activeIndex, overIndex);
 }
