@@ -46,11 +46,13 @@ import { usePublishRunningAgents } from "~/atlas/desktop/runningAgents";
 
 import {
   compareAttentionReasons,
+  isAtlasThreadRunning,
   resolveAtlasAttentionReason,
   resolveAtlasThreadPlacement,
   type AtlasAttentionReason,
 } from "./atlasThreadSections";
 import { GroupIcon, GroupSettingsDialog } from "./GroupSettingsDialog";
+import { PinnedDropSlot } from "./PinnedDropSlot";
 import {
   resolveProjectFolders,
   useProjectFoldersStore,
@@ -67,6 +69,8 @@ export interface AtlasSidebarSectionsProps {
   readonly settledThreads: readonly EnvironmentThreadShell[];
   readonly projects: readonly SidebarProjectSnapshot[];
   readonly snoozeNow: string;
+  /** Outline where a dragged pinned thread will land (off while it drags out as chat context). */
+  readonly pinnedDropPreview: boolean;
   readonly renderThreadRow: (thread: EnvironmentThreadShell, section: AtlasRowSection) => ReactNode;
   readonly onNewThreadInProject: (project: SidebarProjectSnapshot) => void;
   readonly onProjectSettings: (
@@ -136,6 +140,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
     settledThreads,
     projects,
     snoozeNow,
+    pinnedDropPreview,
     renderThreadRow,
   } = props;
   const lastVisitedById = useUiStateStore((state) => state.threadLastVisitedAtById);
@@ -197,6 +202,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
     const placement = resolveAtlasThreadPlacement({
       pinned: false,
       status,
+      running: isAtlasThreadRunning(thread),
       isUnread,
       isWoke,
       snoozed: false,
@@ -495,7 +501,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
 
   // Pinned threads keep their row in Pinned, so count their running agents too.
   usePublishRunningAgents(
-    [...working, ...pinnedThreads].map((thread) => ({
+    [...working, ...pinnedThreads.filter(isAtlasThreadRunning)].map((thread) => ({
       environmentId: thread.environmentId,
       status: resolveSidebarThreadStatus(thread),
     })),
@@ -516,6 +522,7 @@ export function AtlasSidebarSections(props: AtlasSidebarSectionsProps) {
           collapsed={store.collapsedSections.pinned === true}
           onToggle={() => store.toggleSection("pinned")}
         >
+          <PinnedDropSlot pinnedKeys={pinnedThreads.map(threadKeyOf)} enabled={pinnedDropPreview} />
           {pinnedThreads.map((thread) => renderThreadRow(thread, "pinned"))}
         </AtlasSection>
       ) : null}
@@ -696,7 +703,7 @@ function AtlasSection(props: {
         />
       </button>
       {!props.collapsed ? (
-        <ul role="presentation" className="mt-px flex flex-col gap-px">
+        <ul role="presentation" className="relative mt-px flex flex-col gap-px">
           {props.children}
         </ul>
       ) : null}

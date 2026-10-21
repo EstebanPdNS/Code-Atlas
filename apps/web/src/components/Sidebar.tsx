@@ -144,6 +144,8 @@ import { useAcknowledgeThreadWoke, useThreadActions } from "../hooks/useThreadAc
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { AtlasActivityDots } from "~/atlas/brand/ActivityDots";
 import { AtlasSidebarSections } from "~/atlas/sidebar/AtlasSidebarSections";
+import { isAtlasThreadRunning } from "~/atlas/sidebar/atlasThreadSections";
+import { createAtlasPinnedSortingStrategy } from "~/atlas/sidebar/pinnedReorder";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import { useTerminalFocus } from "../hooks/useTerminalFocus";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
@@ -1679,6 +1681,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
 
   const isUnread = hasUnseenCompletion({ ...thread, lastVisitedAt });
   const status = resolveSidebarThreadStatus(thread);
+  // Code Atlas: an agent running now, not a session parked at idle.
+  const atlasRunning = CODE_ATLAS_SIDEBAR && isAtlasThreadRunning(thread);
   const lastVisitedDate = lastVisitedAt === undefined ? null : parseTimestampDate(lastVisitedAt);
   const wokeAtDate = props.wokeAt === null ? null : parseTimestampDate(props.wokeAt);
   const isWoke =
@@ -2005,6 +2009,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         aria-hidden
         className={cn(
           "min-w-0 flex-1 text-sm transition-opacity motion-reduce:transition-none",
+          // Code Atlas: hug the text so the working dots follow it.
+          atlasRunning && "max-w-fit",
           shouldRecede ? "font-normal" : "font-medium",
           variant === "card"
             ? cn(
@@ -2025,7 +2031,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       isWoke ||
                       status === "input" ||
                       // Code Atlas: a running thread reads in full color.
-                      (CODE_ATLAS_SIDEBAR && (status === "working" || status === "waiting"))
+                      atlasRunning
                     ? "text-foreground"
                     : isUnread
                       ? "text-muted-foreground"
@@ -2085,11 +2091,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   ) : null;
   const showPin =
     props.isPinned && (!sortable?.isDragging || (props.dragOverPinned && props.dropVerb === null));
-  // Code Atlas: a pinned thread whose agent is running shows the working dots by its pin.
-  const pinWorkingDots =
-    CODE_ATLAS_SIDEBAR && (status === "working" || status === "waiting") ? (
-      <AtlasActivityDots className="me-1" />
-    ) : null;
+  // Code Atlas: a thread whose agent is running shows the working dots after its title.
+  const atlasWorkingDots = atlasRunning ? (
+    <AtlasActivityDots className="ms-1.5 shrink-0 self-center" />
+  ) : null;
   const pinIndicator = showPin ? (
     props.pinningSupported && canOperateThread && !sortable?.isDragging ? (
       <Tooltip>
@@ -2145,7 +2150,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 aria-current={accessibility.current}
                 data-testid="sidebar-row-slim"
                 aria-busy={isRegeneratingTitle || undefined}
-                className={cn(rowSurfaceClassName, "flex h-9 items-center gap-2.5 px-2.5")}
+                className={cn(
+                  rowSurfaceClassName,
+                  "flex h-9 items-center px-2.5",
+                  // Code Atlas: one even gap through the pin, PR and time cluster;
+                  // the favicon and draft margins keep the title where it was.
+                  CODE_ATLAS_SIDEBAR ? "gap-1.5" : "gap-2.5",
+                )}
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
                 onKeyDown={handleKeyDown}
@@ -2157,27 +2168,35 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             <span
               className={cn(
                 "flex shrink-0 items-center transition-opacity",
+                CODE_ATLAS_SIDEBAR && "me-1",
                 (!props.isActive || variantAction === "unsettle") &&
                   // Code Atlas: only stopped threads go gray; a running one keeps its color.
-                  !(CODE_ATLAS_SIDEBAR && (status === "working" || status === "waiting")) &&
+                  !atlasRunning &&
                   "opacity-40 grayscale group-focus-within/sidebar-row:opacity-100 group-focus-within/sidebar-row:grayscale-0 group-hover/sidebar-row:opacity-100 group-hover/sidebar-row:grayscale-0",
               )}
             >
               {props.project ? <ProjectFavicon project={props.project} className="size-4" /> : null}
             </span>
-            {draftIndicator}
-            {title}
-            {CODE_ATLAS_SIDEBAR && (pinWorkingDots !== null || pinIndicator !== null) ? (
+            {CODE_ATLAS_SIDEBAR && draftIndicator !== null ? (
+              <span className="me-1 flex shrink-0">{draftIndicator}</span>
+            ) : (
+              draftIndicator
+            )}
+            {atlasWorkingDots !== null ? (
+              <span className="flex min-w-0 flex-1 items-center">
+                {title}
+                {atlasWorkingDots}
+              </span>
+            ) : (
+              title
+            )}
+            {CODE_ATLAS_SIDEBAR && pinIndicator !== null ? (
               // The row's hover buttons take this space, like the time beside it.
               <span className="flex shrink-0 items-center transition-opacity group-any-hover/sidebar-row:opacity-0">
-                {pinWorkingDots}
                 {pinIndicator}
               </span>
             ) : (
-              <>
-                {pinWorkingDots}
-                {pinIndicator}
-              </>
+              pinIndicator
             )}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
@@ -2337,7 +2356,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ) : null}
               {/* Left of the status slot, the pin would slide when hover swaps the
                 label for the wider row controls. */}
-              {pinWorkingDots}
               {pinIndicator}
               {props.projectDisplayName ? (
                 <span
@@ -2493,6 +2511,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </div>
             <div className="mt-1 flex min-w-0">
               {title}
+              {atlasWorkingDots}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
                   Regenerating title
@@ -3696,6 +3715,9 @@ export default function Sidebar() {
     routeThreadKey: routeRowThreadKey,
     snoozedThreadCount: snoozedThreads.length,
   });
+  // Code Atlas: only Pinned reorders by drag, and its rows shift with dnd-kit's
+  // own list strategy (see pinnedReorder).
+  const atlasSortingStrategy = createAtlasPinnedSortingStrategy(sidebarListItems, !isContextDrag);
   const draggedThreadKey = dragState?.activeKey;
   const draggedFromSection = dragState?.activeSection;
   const dragActivationY = dragState?.activationY;
@@ -4828,7 +4850,10 @@ export default function Sidebar() {
                 onDragEnd={handleThreadDragEnd}
               >
                 <SidebarDragLifecycle onUnmount={cancelThreadDrag} />
-                <SortableContext items={sortableIds} strategy={sidebarSortingStrategy}>
+                <SortableContext
+                  items={sortableIds}
+                  strategy={CODE_ATLAS_SIDEBAR ? atlasSortingStrategy : sidebarSortingStrategy}
+                >
                   <ul
                     ref={attachListMotionRef}
                     // VoiceOver treats an exposed list as an interaction boundary,
@@ -4980,6 +5005,7 @@ export default function Sidebar() {
                             settledThreads={settledThreads}
                             projects={projectGroups}
                             snoozeNow={snoozeNow}
+                            pinnedDropPreview={!isContextDrag}
                             renderThreadRow={(thread, section) =>
                               renderThreadRow(thread, section, "slim")
                             }
