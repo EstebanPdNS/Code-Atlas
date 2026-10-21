@@ -664,7 +664,7 @@ export const make = Effect.gen(function* () {
         void runPromise(electronApp.quit);
       },
       // Code Atlas: with quit confirmation off, Cmd+Q still asks while agents
-      // work. The renderer publishes the count (see atlas/runningAgents.ts).
+      // work. The renderer publishes the count (apps/web/src/atlas/desktop/runningAgents.ts).
       confirmDirectQuit: async () => {
         if (window.isDestroyed()) return true;
         const running: unknown = await window.webContents

@@ -5,6 +5,7 @@ import {
   connectionDiagnosisText,
   connectionRoutes,
   hasRelayRoute,
+  isLocalHostEntry,
   presentConnectionDiagnosis,
 } from "@t3tools/client-runtime/connection";
 import * as Option from "effect/Option";
@@ -35,8 +36,12 @@ export function useConnectionDiagnosis(environment: EnvironmentPresentation) {
   const routes = connectionRoutes(environment.entry);
   const relayOnly = routes.length === 1 && hasRelayRoute(environment.entry);
   const phase = environment.connection.phase;
+  // A host on this machine reconnects on its own and never reports a failure.
   const diagnosis =
-    environment.entry.enabled && phase !== "connected" && phase !== "unsupported"
+    environment.entry.enabled &&
+    phase !== "connected" &&
+    phase !== "unsupported" &&
+    !isLocalHostEntry(environment.entry)
       ? presentConnectionDiagnosis({
           hostLabel: environment.label,
           state,

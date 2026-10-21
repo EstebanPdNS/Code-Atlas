@@ -1,4 +1,4 @@
-import { PlayIcon, SquareIcon } from "lucide-react";
+import { PlayIcon } from "lucide-react";
 import type { PointerEvent } from "react";
 
 import { Button } from "~/components/ui/button";
@@ -6,9 +6,20 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
 const keepComposerFocus = (event: PointerEvent) => event.preventDefault();
 
+/** Claude Code's stop glyph: a ring around a small rounded square. */
+export function StopCircleGlyph(props: { readonly className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={props.className} fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="5.75" y="5.75" width="4.5" height="4.5" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 /**
- * Code Atlas: a paused task (an interrupted run that can continue) offers
- * Stop and Resume before the microphone and send buttons.
+ * Code Atlas: a paused task (an interrupted run that can continue) keeps the
+ * stop glyph the user pressed and offers Resume beside it. Typing a new
+ * message and sending it starts a new action instead, as in Codex.
  */
 export function AtlasPausedControls(props: {
   readonly disabled: boolean;
@@ -31,7 +42,7 @@ export function AtlasPausedControls(props: {
             />
           }
         >
-          <SquareIcon className="fill-current" />
+          <StopCircleGlyph className="size-4" />
         </TooltipTrigger>
         <TooltipPopup>Stop the task</TooltipPopup>
       </Tooltip>
@@ -46,6 +57,7 @@ export function AtlasPausedControls(props: {
               onPointerDown={keepComposerFocus}
               onClick={props.onResume}
               aria-label="Resume task"
+              data-atlas-pop-in
             />
           }
         >

@@ -1,18 +1,19 @@
 /*
- * Code Atlas visual language.
+ * Code Atlas visual language, loaded after index.css (see main.tsx).
  *
- * Loaded after index.css (see main.tsx) and scoped to the default theme only:
- * any theme the user picks in Settings -> Appearance sets data-theme-id and
- * keeps full control. Warm graphite surfaces, card panels and the Code Atlas
- * orange (#ffad66 dark / #a84200 light) replace the upstream neutral-blue
- * defaults. Keeping every override here keeps upstream rebases conflict-free.
+ * Only the color tokens and the window chrome are scoped to the default
+ * theme: a theme picked in Settings -> Appearance sets data-theme-id and keeps
+ * its own colors. Layout, component and motion rules apply under every theme.
+ * Keeping every override in this file keeps upstream rebases conflict-free.
+ *
+ * Sections: tokens, theme overrides, layout, intro and terminal, sidebar,
+ * progress, agents, rail, then motion (keyframes and reduced motion).
  */
 
+/* ========== Tokens ========== */
+/* Shared by every theme: brand glyph and ASCII art colors, motion curves and
+   the console typeface. */
 :root {
-  --atlas-orange: #ffad66;
-  --atlas-orange-strong: #f79443;
-  --atlas-orange-deep: #df721f;
-  --atlas-orange-ink: #a84200;
   --atlas-glyph-0: #ffd7b0;
   --atlas-glyph-1: #ffad66;
   --atlas-glyph-2: #f79443;
@@ -30,19 +31,35 @@
   --font-sans: var(--atlas-font-console);
 }
 
-html.dark {
-  --atlas-ascii-0: #ffe0c5;
-  --atlas-ascii-1: #ffad66;
-  --atlas-ascii-2: #d98442;
-}
-
+/* The light ASCII art needs darker inks to read on paper. */
 html:not(.dark) {
   --atlas-ascii-0: #9e4000;
   --atlas-ascii-1: #a84200;
   --atlas-ascii-2: #713207;
 }
 
-/* ---------- Light: paper and clay ---------- */
+/* Dev builds paint a stage artwork behind the sidebar header; keep it on brand. */
+:root {
+  --stage-art-top: #ffc99b;
+  --stage-art-mid: #f09a55;
+  --stage-art-bottom: #b65c20;
+  --stage-art-highlight: #ffe0c5;
+  --stage-art-secondary: #ffad66;
+  --stage-art-tertiary: #d98442;
+  --stage-art-line: #ffe0c5;
+}
+
+html.dark {
+  --stage-art-top: #d98442;
+  --stage-art-mid: #914411;
+  --stage-art-bottom: #4a2408;
+}
+
+/* ========== Theme overrides (default theme only) ========== */
+/* Warm graphite surfaces, card panels and the Code Atlas orange (#ffad66 dark /
+   #a84200 light) replace the upstream neutral-blue defaults. */
+
+/* Light: paper and clay. */
 html:not(.dark):not([data-theme-id]) {
   --radius: 0.75rem;
   --background: #faf9f5;
@@ -96,7 +113,7 @@ html:not(.dark):not([data-theme-id]) [data-app-sidebar] {
   --sidebar-stage-fade: #f5f4ee;
 }
 
-/* ---------- Dark: warm graphite ---------- */
+/* Dark: warm graphite. */
 html.dark:not([data-theme-id]) {
   --radius: 0.75rem;
   --background: #262624;
@@ -164,40 +181,180 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   --sidebar-stage-fade: #1f1e1d;
 }
 
-/* Code Atlas activity spinner: three dots that orbit in sequence. Only runs
-   while an agent is actually working, then stops (no idle repaint). */
-@keyframes atlas-dot-orbit {
-  0%,
-  100% {
-    opacity: 0.25;
-    transform: scale(0.8);
+/* Window chrome. Like Codex: one title bar across the window (traffic lights,
+   sidebar and navigation controls, the thread breadcrumb), the sidebar on the
+   same chrome surface below it, and the conversation as an inset subwindow. */
+html:not([data-theme-id]) {
+  --atlas-chrome: #f1efe8;
+}
+
+html.dark:not([data-theme-id]) {
+  --atlas-chrome: #1c1b19;
+}
+
+html:not([data-theme-id]) [data-slot="sidebar-wrapper"],
+html:not([data-theme-id]) [data-slot="sidebar-inset"],
+html:not([data-theme-id]) [data-slot="sidebar-inset"] > div,
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
+  background: var(--atlas-chrome);
+}
+
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
+  border-right: 0;
+}
+
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"] {
+  border-right-color: transparent;
+}
+
+/* No ruled lines: the title bar, sidebar and subwindow separate by surface
+   tone alone, so the window never reads as a grid. */
+html:not([data-theme-id]) [data-atlas-topbar],
+html:not([data-theme-id]) [data-chat-column] > header {
+  background: var(--atlas-chrome);
+  border-bottom: 0;
+}
+
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"],
+html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
+  border: 0;
+  box-shadow: none;
+}
+
+html:not([data-theme-id]) [data-chat-column] > header + div {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--background);
+  overflow: hidden;
+}
+
+/* ========== Layout ========== */
+/* Where the chat, composer and new-thread terminal sit in the window. */
+
+/* New-thread layout with the terminal: the terminal's top lines up with the
+   details cards (2rem from the canvas top), the composer's spacer keeps it 2rem from the bottom,
+   and the headline is centred in the space between them. */
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
+  align-items: stretch;
+  padding-top: 2rem;
+  padding-bottom: 0;
+}
+
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) .chat-composer-lane {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) [data-chat-composer-stack] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+[data-atlas-hero-head]:has([data-atlas-terminal]) {
+  position: static;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+[data-atlas-hero-head]:has([data-atlas-terminal]) [data-atlas-hero-column] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+[data-atlas-hero-head] [data-atlas-hero-terminal] {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+[data-atlas-hero-head] [data-atlas-hero-column] > :last-child {
+  margin-top: 1.25rem;
+}
+
+/* "What should we build in <project>?": the gap after "in" is one monospace
+   space, the same as the space typed before it. Stacked, gap-2 still applies. */
+[data-atlas-hero-heading] {
+  column-gap: 1ch;
+}
+
+/* "What should we build in <project>?" at 80% of its former 1.5rem. */
+h1[data-atlas-hero-heading],
+span[data-atlas-hero-heading] {
+  font-size: 1.2rem;
+  line-height: 1.6rem;
+}
+
+@media (min-width: 1024px) {
+  [data-inline="true"] > h1[data-atlas-hero-heading] > span:last-child {
+    font-size: 1.2rem;
   }
-  40% {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
-[data-atlas-activity] > span {
-  animation: atlas-dot-orbit 1.2s ease-in-out infinite;
+/* Beside the details rail the chat fills the free lane (see fillBesideDetailsCard).
+   The aria-hidden width probe keeps the reading width it measures. */
+[data-chat-canvas][data-atlas-lane-fill] > :not([aria-hidden]) {
+  --chat-content-max-width: var(--atlas-lane-width);
 }
 
-[data-atlas-activity] > span:nth-child(2) {
-  animation-delay: 0.2s;
+/* The filled lane's side gap matches the 2rem clearance before the details rail. */
+[data-chat-canvas][data-atlas-lane-fill] .chat-composer-lane {
+  padding-inline-start: calc(env(safe-area-inset-left) + 2rem + var(--chat-lane-inset-start, 0px));
+  padding-inline-end: calc(env(safe-area-inset-right) + 2rem + var(--chat-lane-inset-end, 0px));
 }
 
-[data-atlas-activity] > span:nth-child(3) {
-  animation-delay: 0.4s;
+[data-chat-canvas][data-atlas-lane-fill] .messages-timeline-scroll {
+  padding-inline-start: calc(
+    2rem + var(--chat-lane-inset-start, 0px) - var(--chat-timeline-gutter, 0px)
+  );
+  padding-inline-end: calc(
+    2rem + var(--chat-lane-inset-end, 0px) - var(--chat-timeline-gutter, 0px)
+  );
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-activity] > span {
-    animation: none;
-    opacity: 1;
-  }
+/* A shorter empty composer: about two lines before the controls instead of
+   three. It still grows with the text up to its max height. */
+.composer-tiptap {
+  min-height: 2.75rem;
 }
 
-/* ---------- Code Atlas terminal (new-thread screen) ---------- */
+/* The conversation never shows through below the composer: from the
+   composer's middle down to the window edge the lane is solid background. */
+[data-atlas-composer-anchor]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset-inline: -2rem;
+  top: 50%;
+  bottom: -2rem;
+  background: var(--background);
+  pointer-events: none;
+}
+
+/* Composer controls: model, effort, access. */
+[data-chat-composer-footer] [data-chat-composer-controls] button {
+  font-size: 0.8rem;
+}
+
+[data-chat-composer-footer] [data-chat-composer-controls] button svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* Dictation trace: exactly 17 bars wide (3px bars, 3px gaps); the extra bar
+   past the right edge is clipped while the row slides. */
+[data-atlas-waveform] {
+  width: calc(17 * 0.375rem - 0.1875rem);
+}
+
+/* ========== Intro and terminal ========== */
+/* The handbook terminal on new threads and the launch intro that flies into it. */
 [data-atlas-terminal] {
   container-type: inline-size;
 }
@@ -231,10 +388,10 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   animation: atlas-caret 0.8s step-end infinite;
 }
 
-@keyframes atlas-caret {
-  50% {
-    opacity: 0;
-  }
+/* After the caret rule: the idle caret blinks three times, then rests. */
+[data-atlas-caret-idle] {
+  margin-left: 0;
+  animation-iteration-count: 3;
 }
 
 /* Like the handbook: the map and the wordmark fill the terminal's width.
@@ -252,11 +409,6 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   margin-top: 1rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
-}
-
-[data-atlas-caret-idle] {
-  margin-left: 0;
-  animation-iteration-count: 3;
 }
 
 [data-atlas-ascii] {
@@ -281,7 +433,8 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   color: var(--atlas-ascii-2);
 }
 
-[data-atlas-row][data-hidden] {
+/* Rows the intro has not loaded yet keep their space. */
+[data-atlas-art-row][data-hidden] {
   visibility: hidden;
 }
 
@@ -357,75 +510,7 @@ html.dark:not([data-theme-id]) [data-app-sidebar] {
   background: #ffe0c5;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-caret] {
-    animation: none;
-  }
-}
-
-/* Dev builds paint a stage artwork behind the sidebar header; keep it on brand. */
-:root {
-  --stage-art-top: #ffc99b;
-  --stage-art-mid: #f09a55;
-  --stage-art-bottom: #b65c20;
-  --stage-art-highlight: #ffe0c5;
-  --stage-art-secondary: #ffad66;
-  --stage-art-tertiary: #d98442;
-  --stage-art-line: #ffe0c5;
-}
-
-html.dark {
-  --stage-art-top: #d98442;
-  --stage-art-mid: #914411;
-  --stage-art-bottom: #4a2408;
-}
-
-/* New-thread layout with the terminal: the terminal's top lines up with the
-   details cards (2rem from the canvas top), the composer's spacer keeps it 2rem from the bottom,
-   and the headline is centred in the space between them. */
-[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
-  align-items: stretch;
-  padding-top: 2rem;
-  padding-bottom: 0;
-}
-
-[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) .chat-composer-lane {
-  display: flex;
-  flex-direction: column;
-}
-
-[data-chat-composer-overlay="true"]:has([data-atlas-terminal]) [data-chat-composer-stack] {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-height: 0;
-}
-
-[data-atlas-hero-head]:has([data-atlas-terminal]) {
-  position: static;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-[data-atlas-hero-head]:has([data-atlas-terminal]) [data-atlas-hero-column] {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-
-[data-atlas-hero-head] [data-atlas-hero-terminal] {
-  flex: 1;
-  min-height: 0;
-  margin-bottom: 0;
-}
-
-[data-atlas-hero-head] [data-atlas-hero-column] > :last-child {
-  margin-top: 1.25rem;
-}
-
+/* Short windows drop the project data, then the whole terminal. */
 @media (max-height: 680px) {
   [data-atlas-terminal] [data-atlas-info] {
     display: none;
@@ -438,97 +523,9 @@ html.dark {
   }
 }
 
-/* ---------- Thread details as stacked cards (Claude Code style) ---------- */
-/* The floating details card becomes a column of separate cards: Environment,
-   Version control, Context, Usage and Background tasks. Only in the inline
-   (right-side) presentation; the narrow-window popover keeps one surface. */
-[data-thread-details-panel="inline"] [data-thread-details-card] {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
-}
-
-[data-thread-details-panel="inline"] [data-thread-details-card] section {
-  margin-bottom: 0.625rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--card);
-}
-
-[data-thread-details-panel="inline"] [data-thread-details-card] section:last-child {
-  margin-bottom: 0;
-}
-
-[data-thread-details-card] section h3 {
-  color: var(--foreground);
-  font-size: 0.8125rem;
-}
-
-/* ---------- Window structure: title bar, sidebar, subwindows ---------- */
-/* Like Codex: one title bar across the window (traffic lights, sidebar and
-   navigation controls, the thread breadcrumb), the sidebar on the same chrome
-   surface below it, and the conversation as an inset rounded subwindow. */
-html:not([data-theme-id]) {
-  --atlas-chrome: #f1efe8;
-}
-
-html.dark:not([data-theme-id]) {
-  --atlas-chrome: #1c1b19;
-}
-
-html:not([data-theme-id]) [data-slot="sidebar-wrapper"],
-html:not([data-theme-id]) [data-slot="sidebar-inset"],
-html:not([data-theme-id]) [data-slot="sidebar-inset"] > div,
-html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
-  background: var(--atlas-chrome);
-}
-
-html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
-  border-right: 0;
-}
-
-html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"] {
-  border-right-color: transparent;
-}
-
-/* No ruled lines: the title bar, sidebar and subwindow separate by surface
-   tone alone, so the window never reads as a grid. */
-html:not([data-theme-id]) [data-atlas-topbar],
-html:not([data-theme-id]) [data-chat-column] > header {
-  background: var(--atlas-chrome);
-  border-bottom: 0;
-}
-
-html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-container"],
-html:not([data-theme-id]) [data-app-sidebar] [data-slot="sidebar-inner"] {
-  border: 0;
-  box-shadow: none;
-}
-
-html:not([data-theme-id]) [data-chat-column] > header + div {
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  background: var(--background);
-  overflow: hidden;
-}
-
-/* ---------- Composer controls: model, effort, access ---------- */
-[data-chat-composer-footer] [data-chat-composer-controls] button {
-  font-size: 0.8rem;
-}
-
-[data-chat-composer-footer] [data-chat-composer-controls] button svg {
-  width: 0.875rem;
-  height: 0.875rem;
-}
-
-/* ---------- Terminal that fills its slot (new and empty threads) ---------- */
-/* The window grows down to the space it is given and the logo scales with
-   both its width and its height, so tall windows get a bigger logo. */
+/* A terminal that fills its slot (new and empty threads): the window grows
+   down to the space it is given and the logo scales with both its width and
+   its height, so tall windows get a bigger logo. */
 [data-atlas-fill] > [data-atlas-terminal] {
   display: flex;
   flex-direction: column;
@@ -562,44 +559,8 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
   );
 }
 
-/* Beside the details rail the chat fills the free lane (see fillBesideDetailsCard).
-   The aria-hidden width probe keeps the reading width it measures. */
-[data-chat-canvas][data-atlas-lane-fill] > :not([aria-hidden]) {
-  --chat-content-max-width: var(--atlas-lane-width);
-}
-
-/* The filled lane's side gap matches the 2rem clearance before the details rail. */
-[data-chat-canvas][data-atlas-lane-fill] .chat-composer-lane {
-  padding-inline-start: calc(env(safe-area-inset-left) + 2rem + var(--chat-lane-inset-start, 0px));
-  padding-inline-end: calc(env(safe-area-inset-right) + 2rem + var(--chat-lane-inset-end, 0px));
-}
-
-[data-chat-canvas][data-atlas-lane-fill] .messages-timeline-scroll {
-  padding-inline-start: calc(
-    2rem + var(--chat-lane-inset-start, 0px) - var(--chat-timeline-gutter, 0px)
-  );
-  padding-inline-end: calc(
-    2rem + var(--chat-lane-inset-end, 0px) - var(--chat-timeline-gutter, 0px)
-  );
-}
-
-/* "What should we build in <project>?": the gap after "in" is one monospace
-   space, the same as the space typed before it. Stacked, gap-2 still applies. */
-[data-atlas-hero-heading] {
-  column-gap: 1ch;
-}
-
-/* A shorter empty composer: about two lines before the controls instead of
-   three. It still grows with the text up to its max height. */
-.composer-tiptap {
-  min-height: 2.75rem;
-}
-
-/* Dictation trace: exactly 17 bars wide (3px bars, 3px gaps); the extra bar
-   past the right edge is clipped while the row slides. */
-[data-atlas-waveform] {
-  width: calc(17 * 0.375rem - 0.1875rem);
-}
+/* ========== Sidebar ========== */
+/* The wordmark, project and group rows, and the working dots. */
 
 /* Sidebar wordmark: "code atlas." spans nearly the whole sidebar header. A
    monospace space is a full character wide, so the gap between the words is
@@ -624,82 +585,8 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
   translate: 0 0.04em;
 }
 
-/* "What should we build in <project>?" at 80% of its former 1.5rem. */
-h1[data-atlas-hero-heading],
-span[data-atlas-hero-heading] {
-  font-size: 1.2rem;
-  line-height: 1.6rem;
-}
-
-@media (min-width: 1024px) {
-  [data-inline="true"] > h1[data-atlas-hero-heading] > span:last-child {
-    font-size: 1.2rem;
-  }
-}
-
-/* Claude Code progress style: three orange dots that take turns, like the
-   Claude app's working indicator. Opacity only, so it stays on the compositor. */
-[data-atlas-status-dots] > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 9999px;
-  background: var(--primary);
-  animation: atlas-status-dot 1.2s ease-in-out infinite;
-}
-
-[data-atlas-status-dots] > span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-[data-atlas-status-dots] > span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes atlas-status-dot {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  40% {
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-status-dots] > span {
-    animation: none;
-    opacity: 0.7;
-  }
-}
-
-/* Claude Code progress style: the status line sits 2% in from the composer
-   edge, and the conversation fades out over a short band above the plan card
-   instead of scrolling visibly behind it. */
-[data-atlas-claude-progress] {
-  padding-top: 1rem;
-  background: linear-gradient(to bottom, transparent, var(--background) 1rem);
-}
-
-/* The conversation never shows through below the composer: from the
-   composer's middle down to the window edge the lane is solid background. */
-[data-atlas-composer-anchor]::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset-inline: -2rem;
-  top: 50%;
-  bottom: -2rem;
-  background: var(--background);
-  pointer-events: none;
-}
-
-[data-atlas-status-line] {
-  padding-inline-start: 2%;
-}
-
-/* Sidebar project and group rows: the count sits flush right; on hover it
-   slides left to make room for the row's buttons, which fade in over the
-   space it left. */
+/* Project and group rows: the count sits flush right; on hover it slides left
+   to make room for the row's buttons, which fade in over the space it left. */
 [data-atlas-row="project"] {
   --atlas-row-actions-width: 2.75rem;
 }
@@ -728,11 +615,53 @@ span[data-atlas-hero-heading] {
   transform: translateX(calc(-1 * var(--atlas-row-actions-width)));
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-row-count],
-  [data-atlas-row-actions] {
-    transition: none;
-  }
+/* Activity dots (sidebar and rail): they take turns growing in, only while an
+   agent is actually working (no idle repaint). */
+[data-atlas-activity] > span {
+  animation: atlas-dot-pulse 1.2s ease-in-out infinite;
+}
+
+[data-atlas-activity] > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+[data-atlas-activity] > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* ========== Progress ========== */
+/* The Claude Code progress style above the composer: status line, plan card
+   and the paused-task controls. */
+
+/* Three orange dots that take turns, like the Claude app's working indicator.
+   They only fade (rest scale 1), so they stay on the compositor. */
+[data-atlas-status-dots] > span {
+  --atlas-dot-rest-scale: 1;
+  width: 5px;
+  height: 5px;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: atlas-dot-pulse 1.2s ease-in-out infinite;
+}
+
+[data-atlas-status-dots] > span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+[data-atlas-status-dots] > span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* The status line sits 2% in from the composer edge, and the conversation
+   fades out over a short band above the plan card instead of scrolling
+   visibly behind it. */
+[data-atlas-claude-progress] {
+  padding-top: 1rem;
+  background: linear-gradient(to bottom, transparent, var(--background) 1rem);
+}
+
+[data-atlas-status-line] {
+  padding-inline-start: 2%;
 }
 
 /* Plan card: folded, only the steps being worked on stay open; the others
@@ -759,6 +688,14 @@ span[data-atlas-hero-heading] {
   opacity: 1;
 }
 
+/* A step the agent adds slides into the plan card. */
+@starting-style {
+  [data-atlas-plan-step][data-shown] {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+
 [data-atlas-plan-chevron] {
   transition: rotate 200ms var(--atlas-ease-out);
 }
@@ -769,25 +706,58 @@ span[data-atlas-hero-heading] {
 
 /* A step that completes: its check pops in once. */
 [data-atlas-plan-check] {
-  animation: atlas-plan-check 320ms var(--atlas-ease-spring);
+  animation: atlas-pop-in 320ms var(--atlas-ease-spring);
+  --atlas-pop-from: 0.4;
 }
 
-@keyframes atlas-plan-check {
-  from {
-    scale: 0.4;
-    opacity: 0;
-  }
+/* Resume appears beside the pressed stop button with a small pop. */
+[data-atlas-pop-in] {
+  animation: atlas-pop-in 260ms var(--atlas-ease-spring);
+  --atlas-pop-from: 0.6;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-plan-step],
-  [data-atlas-plan-chevron] {
-    transition: none;
-  }
+/* ========== Agents ========== */
+/* A new agent's face pops in once; every face tilts a little on hover. */
+[data-atlas-agent-face] {
+  transition: rotate 200ms var(--atlas-ease-out);
+}
 
-  [data-atlas-plan-check] {
-    animation: none;
-  }
+[data-atlas-agent-face][data-fresh] {
+  animation: atlas-pop-in 420ms var(--atlas-ease-spring);
+  --atlas-pop-from: 0.5;
+}
+
+[data-v2-item-type="subagent"]:hover [data-atlas-agent-face] {
+  rotate: -8deg;
+}
+
+/* ========== Rail ========== */
+/* Thread details as stacked cards (Claude Code style): Environment, Version
+   control, Context, Usage and Background tasks. Only in the inline
+   (right-side) presentation; the narrow-window popover keeps one surface. */
+[data-thread-details-panel="inline"] [data-thread-details-card] {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+[data-thread-details-panel="inline"] [data-thread-details-card] section {
+  margin-bottom: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--card);
+}
+
+[data-thread-details-panel="inline"] [data-thread-details-card] section:last-child {
+  margin-bottom: 0;
+}
+
+[data-thread-details-card] section h3 {
+  color: var(--foreground);
+  font-size: 0.8125rem;
 }
 
 /* Disclosure chevrons (Memory files) turn a quarter when their list opens. */
@@ -799,40 +769,61 @@ span[data-atlas-hero-heading] {
   rotate: 90deg;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-disclosure] {
-    transition: none;
-  }
-}
-
-/* A step the agent adds slides into the plan card. */
-@starting-style {
-  [data-atlas-plan-step][data-shown] {
-    grid-template-rows: 0fr;
+/* ========== Motion ========== */
+/* Every animation is a one-shot or runs only while work is live, and touches
+   only opacity and transforms. Reduced motion stops all of them. */
+@keyframes atlas-caret {
+  50% {
     opacity: 0;
   }
 }
 
-/* Agent faces pop in once when an agent appears, and tilt a little on hover. */
-[data-atlas-agent-face] {
-  animation: atlas-agent-face-in 420ms var(--atlas-ease-spring);
-  transition: rotate 200ms var(--atlas-ease-out);
+/* The working dots. Activity dots also grow from 0.8; the status dots set
+   --atlas-dot-rest-scale: 1 and only fade. */
+@keyframes atlas-dot-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(var(--atlas-dot-rest-scale, 0.8));
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
-[data-v2-item-type="subagent"]:hover [data-atlas-agent-face] {
-  rotate: -8deg;
-}
-
-@keyframes atlas-agent-face-in {
+/* Things that appear: plan checks, Resume and new agent faces. */
+@keyframes atlas-pop-in {
   from {
-    scale: 0.5;
+    scale: var(--atlas-pop-from, 0.6);
     opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-atlas-agent-face] {
+  [data-atlas-caret],
+  [data-atlas-plan-check],
+  [data-atlas-pop-in],
+  [data-atlas-agent-face][data-fresh] {
     animation: none;
+  }
+
+  [data-atlas-activity] > span {
+    animation: none;
+    opacity: 1;
+  }
+
+  [data-atlas-status-dots] > span {
+    animation: none;
+    opacity: 0.7;
+  }
+
+  [data-atlas-row-count],
+  [data-atlas-row-actions],
+  [data-atlas-plan-step],
+  [data-atlas-plan-chevron],
+  [data-atlas-disclosure],
+  [data-atlas-agent-face] {
     transition: none;
   }
 }

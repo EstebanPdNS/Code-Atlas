@@ -1427,6 +1427,29 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
 
       const replaced = yield* projectionStore.getThreadProjection(threadId);
       assert.deepEqual(replaced.providerTurns[0]?.tokenUsage, replacementUsage);
+
+      // Code Atlas: usage without a context breakdown keeps the stored one.
+      const contextCategories = [{ name: "Messages", tokens: 900, kind: "used" as const }];
+      for (const [index, tokenUsage] of [
+        { ...replacementUsage, contextCategories },
+        { ...replacementUsage, usedTokens: 19_000 },
+      ].entries()) {
+        yield* projectionStore.apply({
+          id: EventId.make(`event:provider-usage-reload:breakdown-${index}`),
+          type: "provider-turn.updated",
+          threadId,
+          nodeId,
+          driver,
+          occurredAt: now,
+          payload: { ...providerTurn, status: "completed", completedAt: now, tokenUsage },
+        });
+      }
+      const merged = yield* projectionStore.getThreadProjection(threadId);
+      assert.deepEqual(merged.providerTurns[0]?.tokenUsage, {
+        ...replacementUsage,
+        usedTokens: 19_000,
+        contextCategories,
+      });
     }),
   );
 

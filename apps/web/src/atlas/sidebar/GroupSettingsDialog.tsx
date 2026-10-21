@@ -78,7 +78,9 @@ export function GroupSettingsDialog(props: {
   const [imageError, setImageError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Enter reaches here as well as the Save button, which is disabled for a blank name.
   const save = () => {
+    if (name.trim().length === 0) return;
     props.onSave({ name, icon });
     props.onOpenChange(false);
   };

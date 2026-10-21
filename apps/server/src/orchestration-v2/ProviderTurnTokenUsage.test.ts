@@ -40,4 +40,41 @@ describe("provider turn token usage projection", () => {
     assert.deepEqual(projected[0]?.tokenUsage, running.tokenUsage);
     assert.equal(projected[0]?.status, "completed");
   });
+
+  // Code Atlas: Claude sends its context breakdown only when it changes.
+  it("keeps the context breakdown until an update replaces or clears it", () => {
+    const now = DateTime.makeUnsafe("2026-08-29T00:00:00.000Z");
+    const usage = { usedTokens: 10, maxTokens: 200_000, updatedAt: "2026-08-29T00:00:00.000Z" };
+    const withBreakdown = {
+      id: ProviderTurnId.make("provider-turn-breakdown"),
+      providerThreadId: ProviderThreadId.make("provider-thread-breakdown"),
+      nodeId: NodeId.make("node-breakdown"),
+      runAttemptId: null,
+      nativeTurnRef: null,
+      ordinal: 1,
+      status: "running",
+      startedAt: now,
+      completedAt: null,
+      tokenUsage: {
+        ...usage,
+        contextCategories: [{ name: "Messages", tokens: 10, kind: "used" }],
+        contextMemoryFiles: [{ path: "/w/CLAUDE.md", tokens: 4 }],
+      },
+    } satisfies OrchestrationV2ProviderTurn;
+
+    const kept = upsertProviderTurn([withBreakdown], {
+      ...withBreakdown,
+      tokenUsage: { ...usage, usedTokens: 20 },
+    })[0]?.tokenUsage;
+    assert.equal(kept?.usedTokens, 20);
+    assert.deepEqual(kept?.contextCategories, withBreakdown.tokenUsage.contextCategories);
+    assert.deepEqual(kept?.contextMemoryFiles, withBreakdown.tokenUsage.contextMemoryFiles);
+
+    const cleared = upsertProviderTurn([withBreakdown], {
+      ...withBreakdown,
+      tokenUsage: { ...usage, contextCategories: [] },
+    })[0]?.tokenUsage;
+    assert.deepEqual(cleared?.contextCategories, []);
+    assert.isUndefined(cleared?.contextMemoryFiles);
+  });
 });

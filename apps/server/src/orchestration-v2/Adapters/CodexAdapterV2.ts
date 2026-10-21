@@ -740,6 +740,8 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
     readonly omitServiceTier?: boolean;
     readonly appContext?: ProviderAdapter.ProviderAdapterV2TurnInput["appContext"];
     readonly planFirst?: boolean;
+    /** Code Atlas: Codex config's `model_reasoning_effort`, reported by thread/start. */
+    readonly configuredReasoningEffort?: string;
   }) {
     const runtimeModeDefaults = codexRuntimeModeTurnDefaults(input.runtimePolicy.runtimeMode);
     const approvalPolicy =
@@ -752,6 +754,9 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
         : yield* decodeTurnSandboxPolicy(input.runtimePolicy.sandboxPolicy);
     const selectedEffort =
       getModelSelectionStringOptionValue(input.modelSelection, "reasoningEffort") ??
+      // Code Atlas: a collaboration mode without an effort falls back to the
+      // model's catalog default, not the user's configured effort.
+      input.configuredReasoningEffort ??
       codexDefaultReasoningEffortOverride(input.modelSelection.model);
     const effort =
       selectedEffort === undefined ? undefined : yield* decodeTurnReasoningEffort(selectedEffort);
@@ -789,7 +794,7 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
             t3_plan_first: {
               kind: "application" as const,
               value: buildPlanFirstInstructions(
-                "with the update_plan tool and update it with the same tool as you progress",
+                "in a single update_plan call holding the whole plan, and keep it current with update_plan as you progress (one call both completes a step and starts the next)",
               ),
             },
           }
@@ -1388,7 +1393,11 @@ function codexThreadRuntimeParams(input: {
 }
 
 const decodeCodexResumeMetadata = Schema.decodeUnknownEffect(
-  Schema.Struct({ thread: Schema.Struct({ id: Schema.String, updatedAt: Schema.Number }) }),
+  Schema.Struct({
+    thread: Schema.Struct({ id: Schema.String, updatedAt: Schema.Number }),
+    // Code Atlas: the thread's configured effort, used as the turn fallback.
+    reasoningEffort: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
 );
 
 const CodexChildSelection = Schema.Struct({
@@ -1775,6 +1784,17 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             NonNullable<CodexTurnStartParamsWithCollaborationMode["additionalContext"]>
           >(),
         );
+        // Code Atlas: Codex config's reasoning effort per native thread, as
+        // thread/start and thread/resume report it.
+        const configuredEffortByThread = new Map<string, string>();
+        const rememberConfiguredEffort = (
+          nativeThreadId: string,
+          reasoningEffort: string | null | undefined,
+        ) =>
+          Effect.sync(() => {
+            if (reasoningEffort) configuredEffortByThread.set(nativeThreadId, reasoningEffort);
+            else configuredEffortByThread.delete(nativeThreadId);
+          });
         // Codex drops client developer messages during compaction but only
         // resends additionalContext when it changes.
         const restoreAdditionalContext = Effect.fn("CodexAdapterV2.restoreAdditionalContext")(
@@ -1926,8 +1946,16 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           context: ActiveCodexTurnContext,
         ): Set<ProviderRequestKind> => {
           const runtimeMode = context.input.runtimePolicy.runtimeMode;
-          // Code Atlas: Full access never asks; every approval kind is accepted.
-          if (runtimeMode === "full-access") return new Set(FULL_ACCESS_REQUEST_KINDS);
+          // Code Atlas: Full access never asks; every approval kind is accepted,
+          // unless an explicit approval policy or Plan mode (read-only) applies,
+          // as with Claude.
+          if (
+            runtimeMode === "full-access" &&
+            context.input.runtimePolicy.approvalPolicy === undefined &&
+            context.input.runtimePolicy.interactionMode !== "plan"
+          ) {
+            return new Set(FULL_ACCESS_REQUEST_KINDS);
+          }
           const allowed = sessionApprovals.get(nativeThreadId);
           if (allowed?.runtimeMode === runtimeMode) return allowed.kinds;
           if (allowed !== undefined) return new Set();
@@ -6364,6 +6392,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           ) {
             const threadId = yield* getNativeThreadId(turnInput.providerThread);
             const mcpSession = yield* mcpSessions.read(turnInput.threadId);
+            const configuredEffort = configuredEffortByThread.get(threadId);
             const turnStartParams = yield* buildCodexTurnStartParams({
               nativeThreadId: threadId,
               codexInput,
@@ -6375,6 +6404,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               omitServiceTier: adapterOptions.resolveRuntime !== undefined,
               ...(turnInput.appContext === undefined ? {} : { appContext: turnInput.appContext }),
               ...(turnInput.planFirst === undefined ? {} : { planFirst: turnInput.planFirst }),
+              ...(configuredEffort === undefined
+                ? {}
+                : { configuredReasoningEffort: configuredEffort }),
             });
             yield* Ref.update(pendingRootTurns, (current) => {
               const updated = new Map(current);
@@ -6659,6 +6691,9 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                   }),
                 ),
               ),
+              Effect.tap((response) =>
+                rememberConfiguredEffort(response.thread.id, response.reasoningEffort),
+              ),
               Effect.map((response): OrchestrationV2ProviderThread =>
                 providerThreadFromCodexThread({
                   appThreadId: threadInput.threadId,
@@ -6718,6 +6753,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 ),
                 Effect.flatMap(decodeCodexResumeMetadata),
               );
+              yield* rememberConfiguredEffort(response.thread.id, response.reasoningEffort);
               return {
                 ...threadInput.providerThread,
                 providerSessionId: input.providerSessionId,
@@ -7498,6 +7534,7 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 ),
               );
               let forkedThread = response.thread;
+              yield* rememberConfiguredEffort(response.thread.id, response.reasoningEffort);
               if (boundary.rollbackTurnCount > 0) {
                 const { historyMode } = yield* ensureInitialized.pipe(
                   Effect.andThen(readCodexThreadHistoryMetadata(client.raw, response.thread.id)),

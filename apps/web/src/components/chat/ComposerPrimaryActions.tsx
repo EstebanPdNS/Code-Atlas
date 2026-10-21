@@ -5,11 +5,11 @@ import {
   CornerDownLeftIcon,
   ChevronLeftIcon,
   Minimize2Icon,
-  PauseIcon,
   PlayIcon,
 } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
+import { StopCircleGlyph } from "~/atlas/progress/AtlasPausedControls";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
@@ -287,7 +287,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             />
           }
         >
-          <PauseIcon className="size-3.5 fill-current" aria-hidden="true" />
+          <StopCircleGlyph className="size-4" />
         </TooltipTrigger>
         <TooltipPopup>Pause</TooltipPopup>
       </Tooltip>

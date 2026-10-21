@@ -4,8 +4,6 @@
  * subagent's stable id, so the same agent keeps its name and face across
  * reloads, devices and views, with nothing stored.
  */
-import * as DateTime from "effect/DateTime";
-
 import { AGENT_FACE_COLORS, AGENT_FACE_NAMES, AGENT_SHAPE_NAMES } from "./agentFaces";
 
 export const AGENT_NAMES = [
@@ -64,8 +62,8 @@ function pick<T>(items: readonly T[], seed: number): T {
 
 /**
  * The persona for one agent. Pass the ids of its siblings (the thread's other
- * subagents, oldest first) so agents of one thread get different names: a
- * clash moves the later agent to the next free name.
+ * subagents, in atlasSubagentOrder) so agents of one thread get different
+ * names: a clash moves the agent later in that order to the next free name.
  */
 export function agentPersona(id: string, siblingIds: readonly string[] = []): AgentPersona {
   const taken = new Set<number>();
@@ -123,18 +121,14 @@ export function agentPersonaHeadline(
 }
 
 /**
- * A thread's subagent ids, oldest first, joined into one string: a stable
- * value for atom selectors, split back for agentPersona's siblings.
+ * A thread's subagent ids in id order, joined into one string: a stable value
+ * for atom selectors, split back for agentPersona's siblings. Ordering by id
+ * rather than start time means an agent's name never changes when its start
+ * time arrives.
  */
-export function atlasSubagentOrder(
-  subagents: ReadonlyArray<{ readonly id: string; readonly startedAt: DateTime.Utc | null }>,
-): string {
-  const startedAt = (agent: (typeof subagents)[number]) =>
-    agent.startedAt ? DateTime.toEpochMillis(agent.startedAt) : Number.MAX_SAFE_INTEGER;
+export function atlasSubagentOrder(subagents: ReadonlyArray<{ readonly id: string }>): string {
   return subagents
-    .toSorted(
-      (left, right) => startedAt(left) - startedAt(right) || left.id.localeCompare(right.id),
-    )
     .map((agent) => agent.id)
+    .toSorted((left, right) => (left < right ? -1 : left > right ? 1 : 0))
     .join("\n");
 }

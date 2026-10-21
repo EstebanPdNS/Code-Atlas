@@ -131,7 +131,7 @@ export function resolveChatCanvasLayout({
     const chatBeside = (player: PreviewMiniPlayerFrame) => {
       const normalRight = normalLeft + normalWidth;
       if (player.x >= normalRight + GAP) return chat;
-      const width = Math.min(laneMaxWidth, player.x - GAP - padding);
+      const width = Math.min(laneMaxWidth, player.x - GAP - lanePadding);
       if (width < minChatWidth) return null;
       const left = Math.min(normalLeft, player.x - GAP - width);
       return {

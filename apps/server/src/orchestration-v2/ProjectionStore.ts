@@ -685,12 +685,33 @@ export function upsertProviderTurn(
   next: OrchestrationV2ProviderTurn,
 ): Array<OrchestrationV2ProviderTurn> {
   const current = turns.find((turn) => turn.id === next.id);
+  const tokenUsage = mergeProviderTurnTokenUsage(current?.tokenUsage, next.tokenUsage);
   return upsertById(turns, {
     ...next,
-    ...((next.tokenUsage ?? current?.tokenUsage) === undefined
-      ? {}
-      : { tokenUsage: next.tokenUsage ?? current?.tokenUsage }),
+    ...(tokenUsage === undefined ? {} : { tokenUsage }),
   });
+}
+
+/**
+ * Code Atlas: a provider sends its context breakdown only when it changes, so
+ * an update without one keeps the turn's last breakdown. An explicit empty list
+ * clears it.
+ */
+function mergeProviderTurnTokenUsage(
+  current: OrchestrationV2ProviderTurn["tokenUsage"],
+  next: OrchestrationV2ProviderTurn["tokenUsage"],
+): OrchestrationV2ProviderTurn["tokenUsage"] {
+  if (next === undefined) return current;
+  if (next.contextCategories !== undefined || current?.contextCategories === undefined) {
+    return next;
+  }
+  return {
+    ...next,
+    contextCategories: current.contextCategories,
+    ...(current.contextMemoryFiles === undefined
+      ? {}
+      : { contextMemoryFiles: current.contextMemoryFiles }),
+  };
 }
 
 /** A stale run snapshot must not erase fields that other events recorded on the run. */
@@ -2356,8 +2377,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               break;
             }
             case "provider-turn.updated": {
+              // Code Atlas: usage without a breakdown keeps the stored one.
               const existingRows =
-                event.payload.tokenUsage === undefined
+                event.payload.tokenUsage?.contextCategories === undefined
                   ? yield* sql<PayloadRow>`
                     SELECT payload_json
                     FROM orchestration_v2_projection_provider_turns

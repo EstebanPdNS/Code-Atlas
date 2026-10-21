@@ -265,13 +265,8 @@ export function withClaudeContextBreakdown<
   }>;
   readonly contextMemoryFiles?: ReadonlyArray<{ readonly path: string; readonly tokens: number }>;
 } {
-  const threshold =
-    breakdown.isAutoCompactEnabled && breakdown.autoCompactThreshold !== undefined
-      ? Math.round(breakdown.autoCompactThreshold)
-      : undefined;
   return {
-    ...usage,
-    ...(threshold !== undefined && threshold > 0 ? { autoCompactThreshold: threshold } : {}),
+    ...withClaudeAutoCompactThreshold(usage, breakdown),
     contextCategories: breakdown.categories
       .filter((category) => category.name.trim().length > 0)
       .map((category) => ({
@@ -287,6 +282,23 @@ export function withClaudeContextBreakdown<
         }
       : {}),
   };
+}
+
+/** Code Atlas: Claude's real auto-compact threshold, when auto-compact is on. */
+function withClaudeAutoCompactThreshold<Usage extends { readonly autoCompactThreshold?: number }>(
+  usage: Usage,
+  breakdown: Pick<
+    SDKControlGetContextUsageResponse,
+    "autoCompactThreshold" | "isAutoCompactEnabled"
+  >,
+): Usage {
+  const threshold =
+    breakdown.isAutoCompactEnabled && breakdown.autoCompactThreshold !== undefined
+      ? Math.round(breakdown.autoCompactThreshold)
+      : undefined;
+  return threshold !== undefined && threshold > 0
+    ? { ...usage, autoCompactThreshold: threshold }
+    : usage;
 }
 
 export function claudeProviderTurnTokenUsage(
@@ -1443,7 +1455,7 @@ export function makeClaudeQueryOptions(input: {
         ...(input.planFirst === true
           ? [
               buildPlanFirstInstructions(
-                "with the TaskCreate tool (one task per step) and track it with TaskUpdate (in_progress, then completed)",
+                "in one message of parallel TaskCreate calls (one task per step), and track it with TaskUpdate (in_progress, then completed), sending the TaskUpdate calls that complete one task and start the next together in one message",
               ),
             ]
           : []),
@@ -2234,7 +2246,14 @@ function requiresClaudeApproval(context: ActiveClaudeTurnContext): boolean {
   // ask rules, hooks, Claude's safety checks, subagent and MCP tools and the
   // bypass-disabled fallback are all approved here; Plan mode stays read-only.
   const runtime = context.input.runtimePolicy;
-  if (runtime.runtimeMode === "full-access" && runtime.interactionMode !== "plan") return false;
+  // An explicit approval policy (set only by tests and overrides) still wins.
+  if (
+    runtime.runtimeMode === "full-access" &&
+    runtime.interactionMode !== "plan" &&
+    runtime.approvalPolicy === undefined
+  ) {
+    return false;
+  }
   // CLI-forwarded requests need a person's decision even under bypass (ask rules,
   // safety checks, or settings fallback). Do not wait for queued init/status updates.
   const policy = context.queryPolicy;
@@ -2259,7 +2278,9 @@ export function claudeEffectiveQueryPolicyKey(
   mcpOverrides: {
     readonly allowedTools?: ReadonlyArray<string>;
     readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+    readonly browserTools?: boolean;
   },
+  planFirst?: boolean,
 ): string {
   return JSON.stringify({
     runtimePolicy: claudeRuntimeQueryPolicyKey({
@@ -2269,6 +2290,10 @@ export function claudeEffectiveQueryPolicyKey(
         : { allowedTools: mcpOverrides.allowedTools }),
     }),
     mcpServers: mcpOverrides.mcpServers,
+    // Code Atlas: both shape the launch system prompt (and plan first the
+    // task-tool env), so toggling them needs a new query.
+    ...(mcpOverrides.browserTools === undefined ? {} : { browserTools: mcpOverrides.browserTools }),
+    ...(planFirst === true ? { planFirst } : {}),
   });
 }
 
@@ -4046,11 +4071,26 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         const steeredTurns = yield* Ref.make(new Set<OrchestrationV2ProviderTurn["id"]>());
         const queryContext = yield* Ref.make<ClaudeLiveQueryContext | null>(null);
         // Code Atlas: Claude's latest /context breakdown for this session.
+        // `version` counts breakdown changes (including clears) so each turn
+        // sends the arrays once per change; `disabled` stops asking a CLI that
+        // timed out or failed once.
         const contextBreakdown: {
           latest: SDKControlGetContextUsageResponse | null;
+          version: number;
           refreshedAt: number;
           refreshing: boolean;
-        } = { latest: null, refreshedAt: 0, refreshing: false };
+          disabled: boolean;
+        } = { latest: null, version: 0, refreshedAt: 0, refreshing: false, disabled: false };
+        const contextBreakdownVersionSent = new WeakMap<ActiveClaudeTurnContext, number>();
+        const finalizedTurnContexts = new WeakSet<ActiveClaudeTurnContext>();
+        // Code Atlas: a compaction, another native thread or another model makes
+        // the breakdown stale; the next usage update clears the card's categories.
+        const clearContextBreakdown = () => {
+          if (contextBreakdown.latest === null) return;
+          contextBreakdown.latest = null;
+          contextBreakdown.version += 1;
+          contextBreakdown.refreshedAt = 0;
+        };
         // A worktree handoff changes the project settings even within one session.
         let bypassCache: { cwd: string | null; availability: ClaudeBypassAvailability } | null =
           null;
@@ -4324,13 +4364,22 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             context.streamUsage?.requestedAt,
           );
           if (tokenUsage.inputTokens <= 0) return;
-          // Code Atlas: every usage update carries Claude's latest breakdown, so
-          // the context card keeps its categories between refreshes.
+          // Code Atlas: a finalized turn must never read as running again.
+          if (finalizedTurnContexts.has(context)) return;
+          // Code Atlas: the categories ride only on the first update of a turn and
+          // after each change; projections keep them across the updates between.
           const latestBreakdown = breakdown ?? contextBreakdown.latest;
+          const sendCategories =
+            contextBreakdownVersionSent.get(context) !== contextBreakdown.version;
+          contextBreakdownVersionSent.set(context, contextBreakdown.version);
           const detailedUsage =
             latestBreakdown === null
-              ? tokenUsage
-              : withClaudeContextBreakdown(tokenUsage, latestBreakdown);
+              ? sendCategories
+                ? { ...tokenUsage, contextCategories: [] }
+                : tokenUsage
+              : sendCategories
+                ? withClaudeContextBreakdown(tokenUsage, latestBreakdown)
+                : withClaudeAutoCompactThreshold(tokenUsage, latestBreakdown);
           yield* emitProviderEvent({
             type: "provider_turn.updated",
             driver: CLAUDE_PROVIDER,
@@ -4355,8 +4404,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         });
 
         // Code Atlas: refresh the context card with Claude's own breakdown when a
-        // turn ends, and every so often while a long turn runs. Bounded so a slow
-        // CLI never holds up the turn.
+        // turn ends, and every so often while a long turn runs. Always forked and
+        // bounded, so a slow CLI never holds up a turn.
         const emitContextBreakdown = Effect.fnUntraced(function* (
           context: ActiveClaudeTurnContext,
         ) {
@@ -4365,30 +4414,41 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           if (usage == null || live === null || live.stopping) return;
           const getContextUsage = live.query.getContextUsage;
           if (getContextUsage === undefined) return;
+          const version = contextBreakdown.version;
           const breakdown = yield* getContextUsage.pipe(
             Effect.timeoutOption("2 seconds"),
             Effect.orElseSucceed(() => Option.none<SDKControlGetContextUsageResponse>()),
           );
-          if (Option.isNone(breakdown)) return;
+          if (Option.isNone(breakdown)) {
+            // A CLI that timed out or failed once is not asked again this session.
+            contextBreakdown.disabled = true;
+            return;
+          }
+          // A compaction or model switch while the request ran made it stale.
+          if (contextBreakdown.version !== version) return;
           contextBreakdown.latest = breakdown.value;
-          contextBreakdown.refreshedAt = yield* Clock.currentTimeMillis;
-          // A reply that lands after its turn ended must not mark it running again.
+          contextBreakdown.version += 1;
+          // A reply after its turn ended rides on the next turn's first update.
           if ((yield* Ref.get(activeTurn)) !== context) return;
           yield* emitContextUsage(context, usage, false, breakdown.value);
         });
 
-        // At most one in-turn refresh at a time, and one per interval.
-        const refreshContextBreakdownInTurn = Effect.fnUntraced(function* (
+        // At most one refresh at a time, and in a turn one per interval. The
+        // interval starts at the request so a failing CLI is not asked each message.
+        const refreshContextBreakdown = Effect.fnUntraced(function* (
           context: ActiveClaudeTurnContext,
+          turnEnded = false,
         ) {
           const now = yield* Clock.currentTimeMillis;
           if (
+            contextBreakdown.disabled ||
             contextBreakdown.refreshing ||
-            now - contextBreakdown.refreshedAt < CLAUDE_CONTEXT_BREAKDOWN_REFRESH_MS
+            (!turnEnded && now - contextBreakdown.refreshedAt < CLAUDE_CONTEXT_BREAKDOWN_REFRESH_MS)
           ) {
             return;
           }
           contextBreakdown.refreshing = true;
+          contextBreakdown.refreshedAt = now;
           yield* emitContextBreakdown(context).pipe(
             Effect.ensuring(
               Effect.sync(() => {
@@ -6659,6 +6719,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           readonly threadDisposition?: "reusable" | "broken";
           readonly result?: SDKResultMessage;
         }) {
+          finalizedTurnContexts.add(input.context);
           yield* reasoningDeltas.flushTurn(input.context.nativeTurnId);
           if (input.context.compaction?.status === "running") {
             yield* emitProviderEvent({
@@ -7805,6 +7866,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               (message.subtype === "status" && message.status === "compacting"))
           ) {
             if (message.subtype === "status" && context.compaction?.status === "running") return;
+            // Code Atlas: compaction rewrites the context the breakdown described.
+            if (message.subtype === "compact_boundary") clearContextBreakdown();
             const now = yield* DateTime.now;
             const nativeItemId = message.uuid;
             const compaction =
@@ -8000,7 +8063,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 // Remember the request so a compaction can mark its later snapshots stale.
                 context.streamUsage = { messageId: message.message.id, usage: snapshotUsage };
                 yield* emitContextUsage(context, snapshotUsage);
-                yield* refreshContextBreakdownInTurn(context);
+                yield* refreshContextBreakdown(context);
               } else if (
                 stream.usage !== null &&
                 claudeMessageInputTokens(stream.usage) <= 0 &&
@@ -8574,7 +8637,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               context.steeredSegmentUsage.push(message.usage);
               return;
             }
-            if (!interrupted) yield* emitContextBreakdown(context);
             yield* Ref.update(steeredTurns, (current) => {
               const next = new Set(current);
               next.delete(context.providerTurnId);
@@ -8643,6 +8705,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               result: message,
               ...(terminalFailure === null ? {} : { failure: terminalFailure }),
             });
+            // Code Atlas: off the turn's critical path; the reply rides on the
+            // next turn's first usage update.
+            if (!interrupted) yield* refreshContextBreakdown(context, true);
           }
         });
 
@@ -8997,8 +9062,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           ) {
             return {
               behavior: "deny",
+              // Code Atlas: Plan mode is read-only whatever the approval settings.
               message:
-                "This tool requires approval in Plan mode, but approvals are disabled for this thread.",
+                "Plan mode is read-only; this action isn't allowed until you leave Plan mode.",
               toolUseID: callbackOptions.toolUseID,
             } satisfies PermissionResult;
           }
@@ -9204,7 +9270,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               ? {}
               : { allowedTools: queryPolicy.allowedTools }),
           });
-          const queryPolicyKey = claudeEffectiveQueryPolicyKey(queryPolicy, mcpOverrides);
+          const queryPolicyKey = claudeEffectiveQueryPolicyKey(
+            queryPolicy,
+            mcpOverrides,
+            turnInput.planFirst,
+          );
           const compiledSelection = compileClaudeModelSelection(turnInput.modelSelection);
           const resumeSessionAt = yield* getNativeConversationHeadId(turnInput.providerThread);
           const existing = yield* Ref.get(queryContext);
@@ -9238,6 +9308,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 }),
               ),
             );
+            // Code Atlas: another model reports a different breakdown.
+            if (live.selection.apiModelId !== compiledSelection.apiModelId) clearContextBreakdown();
             live.selection = compiledSelection;
           }
           if (
@@ -9286,6 +9358,14 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             path,
           });
           const closedExistingNativeThreadId = existing !== null ? existing.nativeThreadId : null;
+          // Code Atlas: the breakdown describes the previous native thread and model.
+          if (
+            existing === null ||
+            existing.nativeThreadId !== nativeThreadId ||
+            existing.selection.apiModelId !== compiledSelection.apiModelId
+          ) {
+            clearContextBreakdown();
+          }
           if (existing !== null) {
             yield* existing.query.close.pipe(Effect.ignore);
             if (existing.nativeThreadId !== nativeThreadId) {

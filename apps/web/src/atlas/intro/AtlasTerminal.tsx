@@ -72,6 +72,20 @@ const MAP_ROW_KEYS = MAP_ROWS.map((_, index) => `map-${index}`);
 const PALETTE_KEYS = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
 const TOTAL_ROWS = MAP_ROWS.length;
 
+// Launch intro timing. The handbook's typing and row cadence felt slow inside
+// the app, so its random delays are divided by these speedups.
+const TYPE_SPEEDUP = 2.55;
+const ROW_SPEEDUP = 2.2;
+const INTRO_START_DELAY_MS = 1600;
+const LOGO_START_DELAY_MS = 180;
+const ZOOM_DURATION_MS = 1400;
+const BACKDROP_FADE_MS = 650;
+const OVERLAY_FADE_MS = 160;
+// A safety net: never leave the app covered.
+const INTRO_SAFETY_TIMEOUT_MS = 15_000;
+// Well below the macOS window buttons, which sit over the fullscreen intro.
+const INTRO_COMMAND_TOP_PX = 104;
+
 const countFormat = new Intl.NumberFormat("en-US");
 function formatCount(value: number): string {
   return countFormat.format(value);
@@ -142,7 +156,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
               {MAP_ROWS.map((segments, index) => (
                 <span
                   key={MAP_ROW_KEYS[index]}
-                  data-atlas-row
+                  data-atlas-art-row
                   data-hidden={index >= props.rows || undefined}
                 >
                   <span data-tone="0">{segments[0]}</span>
@@ -156,7 +170,7 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
               {TITLE_ROWS.map((row, index) => (
                 <span
                   key={row.key}
-                  data-atlas-row
+                  data-atlas-art-row
                   data-tone={row.tone}
                   data-hidden={index >= props.rows || undefined}
                 >
@@ -274,9 +288,9 @@ export function AtlasTerminalMetaPublisher({ meta }: { readonly meta: AtlasTermi
 }
 
 /**
- * The landed terminal above the new-thread composer. It publishes the
- * project, agents and usage the launch intro shows, and hides while the
- * intro's camera flies into its slot.
+ * The landed terminal above the new-thread composer. It hides while the
+ * intro's camera flies into its slot; AtlasTerminalMetaPublisher keeps the
+ * meta the intro shows current.
  */
 export function AtlasTerminal({ meta }: { readonly meta: AtlasTerminalMeta }) {
   const status = useAtlasIntroStatus();
@@ -285,9 +299,6 @@ export function AtlasTerminal({ meta }: { readonly meta: AtlasTerminalMeta }) {
     true,
     Schema.Boolean,
   );
-  useEffect(() => {
-    publishAtlasTerminalMeta(meta);
-  }, [meta]);
   const command = slugifyAtlasCommand(meta.projectName);
   return (
     <AtlasTerminalFrame
@@ -348,18 +359,19 @@ function findLandedTerminal(): Element | null {
 export function AtlasLaunchIntro() {
   const status = useAtlasIntroStatus();
   const meta = useAtlasTerminalMeta();
+  // Decided before the first render, so a skipped intro never mounts its scene.
+  const [introSkipped] = useState(
+    () =>
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+      typeof Element.prototype.animate !== "function",
+  );
   useEffect(() => {
     if (status !== "pending") return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion || typeof Element.prototype.animate !== "function") {
-      setAtlasIntroStatus("done");
-      return;
-    }
-    setAtlasIntroStatus("playing");
-  }, [status]);
+    setAtlasIntroStatus(introSkipped ? "done" : "playing");
+  }, [status, introSkipped]);
   // Mount while still "pending" too, so the first painted frame is already the
   // fullscreen terminal rather than the app flashing in underneath it.
-  if (status === "done") return null;
+  if (status === "done" || introSkipped) return null;
   return createPortal(<AtlasLaunchIntroScene meta={meta} />, document.body);
 }
 
@@ -386,6 +398,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
   const commandRef = useRef<HTMLParagraphElement>(null);
   const artRef = useRef<HTMLDivElement>(null);
   const startTransform = useRef("none");
+  const skipRef = useRef(() => setAtlasIntroStatus("done"));
 
   // Frame the command in the top-left corner and the logo across the window.
   useLayoutEffect(() => {
@@ -403,8 +416,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
     const artBottom = artRect.bottom - cameraRect.top;
     const viewportWidth = window.innerWidth;
     const edge = Math.min(40, Math.max(18, viewportWidth * 0.035));
-    // Well below the macOS window buttons, which sit over the fullscreen intro.
-    const top = 104;
+    const top = INTRO_COMMAND_TOP_PX;
     // Like the handbook: the logo spans most of the window width, limited only
     // by the window height.
     const scale = Math.max(
@@ -449,20 +461,20 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       }
       animations.push(
         backdrop.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: 650,
+          duration: BACKDROP_FADE_MS,
           easing: "ease",
           fill: "forwards",
         }),
       );
       later(() => {
         const fade = overlay.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: 160,
+          duration: OVERLAY_FADE_MS,
           easing: "linear",
           fill: "forwards",
         });
         animations.push(fade);
         fade.finished.then(finish, finish);
-      }, 650);
+      }, BACKDROP_FADE_MS);
     };
     const zoomOut = () => {
       setPhase("zoom");
@@ -488,7 +500,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
             height: `${landed.height}px`,
           },
         ],
-        { duration: 1400, easing: "cubic-bezier(.4,0,.15,1)", fill: "forwards" },
+        { duration: ZOOM_DURATION_MS, easing: "cubic-bezier(.4,0,.15,1)", fill: "forwards" },
       );
       animations.push(zoom);
       zoom.finished.then(
@@ -510,7 +522,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
         zoomStarted = true;
         zoomOut();
       }
-      if (revealed < TOTAL_ROWS) later(loadRows, randomBetween(300, 600) / 2.2);
+      if (revealed < TOTAL_ROWS) later(loadRows, randomBetween(300, 600) / ROW_SPEEDUP);
     };
     const startLogo = () => {
       setPhase("logo");
@@ -525,18 +537,23 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
     const typeNext = () => {
       position += 1;
       setTyped(position);
-      if (position < command.length) later(typeNext, randomBetween(45, 140) / 2.55);
-      else later(startLogo, 180);
+      if (position < command.length) later(typeNext, randomBetween(45, 140) / TYPE_SPEEDUP);
+      else later(startLogo, LOGO_START_DELAY_MS);
     };
-    later(typeNext, 1600);
-    // A safety net: never leave the app covered.
-    later(finish, 15_000);
-    const skip = (event: KeyboardEvent) => {
-      if (event.key === "Escape") finish();
+    later(typeNext, INTRO_START_DELAY_MS);
+    later(finish, INTRO_SAFETY_TIMEOUT_MS);
+    // Escape and a click both skip: the app appears and Aurora stops with it.
+    const skip = () => {
+      audio?.pause();
+      finish();
     };
-    window.addEventListener("keydown", skip);
+    skipRef.current = skip;
+    const skipOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") skip();
+    };
+    window.addEventListener("keydown", skipOnEscape);
     return () => {
-      window.removeEventListener("keydown", skip);
+      window.removeEventListener("keydown", skipOnEscape);
       for (const timer of timers) window.clearTimeout(timer);
       for (const animation of animations) animation.cancel();
       // Aurora keeps playing into the app unless the intro was skipped early.
@@ -549,7 +566,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       ref={overlayRef}
       data-atlas-intro-overlay
       role="presentation"
-      onClick={() => setAtlasIntroStatus("done")}
+      onClick={() => skipRef.current()}
       className="fixed inset-0 z-100 overflow-hidden"
     >
       <div ref={backdropRef} data-atlas-intro-backdrop className="absolute inset-0 bg-card" />

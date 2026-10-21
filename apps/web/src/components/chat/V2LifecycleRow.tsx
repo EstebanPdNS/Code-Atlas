@@ -451,7 +451,11 @@ function SubagentTimelineLink(props: {
   const content = (
     <>
       <span aria-hidden className="relative inline-flex shrink-0">
-        <AgentFaceIcon persona={persona} className="size-6" />
+        <AgentFaceIcon
+          persona={persona}
+          fresh={status === "pending" || status === "running"}
+          className="size-6"
+        />
         {status ? (
           <span
             className={cn(

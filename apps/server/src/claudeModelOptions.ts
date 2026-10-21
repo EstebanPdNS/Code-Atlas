@@ -34,7 +34,17 @@ export function compileClaudeModelSelection(
     descriptors.some((descriptor) => descriptor.type === "boolean" && descriptor.id === id);
   const rawEffort = getModelSelectionStringOptionValue(selection, "effort");
   const resolvedEffort = resolveClaudeCatalogEffort(catalog, selection.model, rawEffort);
-  const effort = normalizeClaudeCatalogEffort(catalog, resolvedEffort, selection.model);
+  const promptEffort = resolvePromptInjectedEffort(capabilities, rawEffort) ?? undefined;
+  // Code Atlas: a prompt-injected effort (ultrathink) also sets the SDK effort
+  // its effortMap names, instead of running at the model's default.
+  const promptMappedEffort =
+    promptEffort === undefined
+      ? undefined
+      : normalizeClaudeCatalogEffort(catalog, promptEffort, selection.model);
+  const effort =
+    promptMappedEffort !== undefined && promptMappedEffort !== promptEffort
+      ? promptMappedEffort
+      : normalizeClaudeCatalogEffort(catalog, resolvedEffort, selection.model);
   const fastMode = supportsBoolean("fastMode")
     ? (getModelSelectionBooleanOptionValue(selection, "fastMode") ?? false)
     : undefined;
@@ -47,7 +57,6 @@ export function compileClaudeModelSelection(
     ...(isClaudeCatalogUltracodeEffort(resolvedEffort) ? { ultracode: true } : {}),
   };
   const apiModelId = resolveClaudeCatalogApiModelId(catalog, selection);
-  const promptEffort = resolvePromptInjectedEffort(capabilities, rawEffort) ?? undefined;
   return {
     apiModelId,
     effort,

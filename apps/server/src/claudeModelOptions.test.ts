@@ -49,6 +49,26 @@ describe("compileClaudeModelSelection", () => {
     ).toMatchObject({ effort: "high", promptEffort: "ultrathink" });
   });
 
+  // Code Atlas: Ultrathink runs at the model's top SDK effort.
+  it("runs prompt-injected Ultrathink at Max effort", () => {
+    expect(
+      compileClaudeModelSelection(
+        selection("claude-opus-5-5", [{ id: "effort", value: "ultrathink" }]),
+      ),
+    ).toMatchObject({ effort: "max", promptEffort: "ultrathink" });
+  });
+
+  // Code Atlas: new chats on the top Claude models get High, explicit picks stay.
+  it("defaults the top Claude models to High effort and keeps explicit picks", () => {
+    for (const model of ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5-5"]) {
+      expect(compileClaudeModelSelection(selection(model, [])).effort).toBe("high");
+    }
+    expect(
+      compileClaudeModelSelection(selection("claude-opus-5-5", [{ id: "effort", value: "low" }]))
+        .effort,
+    ).toBe("low");
+  });
+
   it("keeps explicit effort for models missing from the local catalog", () => {
     expect(
       compileClaudeModelSelection(

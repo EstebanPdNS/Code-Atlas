@@ -24,10 +24,11 @@ const keepComposerFocus = (event: PointerEvent) => event.preventDefault();
 
 /**
  * Dictation in the composer footer. Idle it is a mic button that starts
- * dictation, or opens Dictation settings when no environment can transcribe.
- * Starting grows the same control in place: the button stays put and becomes
- * stop, while cancel, the waveform, and the timer unfold to its left inside a
- * pill. Ending folds them back. The unfold is a one-shot grid transition; the
+ * dictation, or opens Dictation settings when no environment can transcribe;
+ * its context menu (right-click, Shift+F10 or the context-menu key) picks the
+ * microphone. Starting grows the control in place: the mic stays put and stops
+ * and inserts, ⏎ beside it sends (or inserts), and the waveform unfolds to the
+ * left. Ending folds it back. The unfold is a one-shot grid transition; the
  * only per-frame work is the waveform while the microphone is live.
  */
 export function ComposerDictationControl(props: {
@@ -93,6 +94,13 @@ export function ComposerDictationControl(props: {
           onContextMenu={(event) => {
             event.preventDefault();
             setPickerOpen(true);
+          }}
+          // macOS has no context-menu key and its browsers send no contextmenu for Shift+F10.
+          onKeyDown={(event) => {
+            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+              event.preventDefault();
+              setPickerOpen(true);
+            }
           }}
         >
           <Tooltip>

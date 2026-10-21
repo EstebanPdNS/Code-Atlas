@@ -41,12 +41,11 @@ const EMPTY_META: AtlasTerminalMeta = {
   github: [],
 };
 
-function metaKey(value: AtlasTerminalMeta): string {
-  return JSON.stringify(value);
-}
-
 let status: AtlasIntroStatus = "pending";
 let meta: AtlasTerminalMeta = EMPTY_META;
+// ChatView publishes on every render with a fresh object; compare by content,
+// serialising only the incoming value.
+let metaKey = JSON.stringify(EMPTY_META);
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -70,10 +69,14 @@ export function replayAtlasIntro() {
   setAtlasIntroStatus("pending");
 }
 
-export function publishAtlasTerminalMeta(next: AtlasTerminalMeta) {
-  if (metaKey(meta) === metaKey(next)) return;
+/** Returns whether the meta changed (and listeners were notified). */
+export function publishAtlasTerminalMeta(next: AtlasTerminalMeta): boolean {
+  const nextKey = JSON.stringify(next);
+  if (nextKey === metaKey) return false;
   meta = next;
+  metaKey = nextKey;
   emit();
+  return true;
 }
 
 export function useAtlasIntroStatus(): AtlasIntroStatus {
@@ -90,6 +93,8 @@ export function slugifyAtlasCommand(name: string | null): string {
   const slug = (name ?? "workspace")
     .toLowerCase()
     .normalize("NFKD")
+    // Drop the accents NFKD split off, so "Ñandú" reads "nandu" rather than "n-andu".
+    .replace(/\p{M}/gu, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return `atlas --open ${slug.length > 0 ? slug : "workspace"}`;

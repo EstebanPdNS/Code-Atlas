@@ -173,6 +173,57 @@ describe("applyOrchestrationV2ProjectionEvent", () => {
     expect(next?.providerTurns[0]?.tokenUsage).toEqual(running.tokenUsage);
   });
 
+  // Code Atlas: Claude sends its context breakdown only when it changes.
+  it("keeps a provider turn's context breakdown until an update replaces it", () => {
+    const running = {
+      id: ProviderTurnId.make("provider-turn-breakdown"),
+      providerThreadId: ProviderThreadId.make("provider-thread-breakdown"),
+      nodeId: NodeId.make("provider-node-breakdown"),
+      runAttemptId: null,
+      nativeTurnRef: null,
+      ordinal: 1,
+      status: "running" as const,
+      startedAt: now,
+      completedAt: null,
+      tokenUsage: { usedTokens: 10, maxTokens: 200_000, updatedAt: "2026-08-29T00:00:00.000Z" },
+    };
+    const withBreakdown = {
+      ...running,
+      tokenUsage: {
+        ...running.tokenUsage!,
+        contextCategories: [{ name: "Messages", tokens: 10, kind: "used" as const }],
+        contextMemoryFiles: [{ path: "/w/CLAUDE.md", tokens: 4 }],
+      },
+    };
+    const update = (tokenUsage: typeof withBreakdown.tokenUsage | typeof running.tokenUsage) =>
+      ({
+        id: "event-provider-turn-usage",
+        type: "provider-turn.updated",
+        threadId,
+        driver: "claudeAgent",
+        occurredAt: now,
+        payload: { ...running, tokenUsage },
+      }) as OrchestrationV2DomainEvent;
+    const projection = { ...emptyProjection, providerTurns: [withBreakdown] };
+
+    const kept = applyOrchestrationV2ProjectionEvent(
+      projection,
+      update({ ...running.tokenUsage!, usedTokens: 20 }),
+    );
+    expect(kept?.providerTurns[0]?.tokenUsage).toMatchObject({
+      usedTokens: 20,
+      contextCategories: withBreakdown.tokenUsage.contextCategories,
+      contextMemoryFiles: withBreakdown.tokenUsage.contextMemoryFiles,
+    });
+
+    const cleared = applyOrchestrationV2ProjectionEvent(
+      projection,
+      update({ ...running.tokenUsage!, contextCategories: [] }),
+    );
+    expect(cleared?.providerTurns[0]?.tokenUsage?.contextCategories).toEqual([]);
+    expect(cleared?.providerTurns[0]?.tokenUsage?.contextMemoryFiles).toBeUndefined();
+  });
+
   it("applies thread lifecycle payloads instead of leaving stale metadata", () => {
     const archivedAt = DateTime.makeUnsafe("2026-06-20T01:00:00.000Z");
     const event = {

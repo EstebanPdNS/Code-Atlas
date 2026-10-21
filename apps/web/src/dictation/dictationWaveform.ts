@@ -147,6 +147,9 @@ export function driveScrollingWaveform(
   };
 
   const draw = (now: number) => {
+    // A hidden tab pauses animation frames; resume from now instead of replaying
+    // every missed step in one frame.
+    if (now - lastStep > 10 * SCROLL_STEP_MS) lastStep = now - SCROLL_STEP_MS;
     while (now - lastStep >= SCROLL_STEP_MS) {
       sample();
       lastStep += SCROLL_STEP_MS;

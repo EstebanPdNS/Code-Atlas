@@ -162,6 +162,24 @@ describe("chat canvas layout", () => {
     expect(layout(false)).toEqual({ left: 196, width: 736, insetStart: 0, insetEnd: 128 });
     expect(layout(true)).toEqual({ left: 32, width: 900, insetStart: 0, insetEnd: 292 });
   });
+  it("keeps the filled lane's left gap when a preview narrows the chat", () => {
+    const result = resolveChatCanvasLayout({
+      container: { width: 1256, height: 848 },
+      maxChatWidth: 736,
+      detailsCard: { left: 964, right: 1244, bottom: 700 },
+      fillBesideDetailsCard: true,
+      preview: {
+        ...preview,
+        width: 240,
+        source: { width: 240, height: 365 },
+        position: { x: 700, y: 12 },
+        lastInteraction: "drag",
+      },
+    });
+    const frame = result.frame!;
+    expect(result.chat.left).toBe(32);
+    expect(frame.x - (result.chat.left + result.chat.width)).toBe(12);
+  });
   it("keeps a dragged or resized preview below the open find bar", () => {
     const findBar = { left: 1292, right: 1572, bottom: 48 };
     const layout = (lastInteraction: "drag" | "resize") =>

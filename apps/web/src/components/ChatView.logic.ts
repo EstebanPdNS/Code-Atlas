@@ -72,6 +72,9 @@ export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 
 export const ENVIRONMENT_RECONNECT_WARNING_GRACE_MS = 2_000;
+// A host on this machine reconnects within seconds of a restart or wake, so a
+// short drop shows nothing at all.
+export const LOCAL_ENVIRONMENT_RECONNECT_WARNING_GRACE_MS = 10_000;
 
 export function agentControlledBrowserCloseConfirmation(
   surfaces: readonly RightPanelSurface[],
@@ -444,8 +447,16 @@ export function resolveDraftPromotionNavigationTarget(input: {
   return runStarted || startupStopped || messagePersisted ? input.serverThreadRef : null;
 }
 
-export function scheduleEnvironmentReconnectWarning(showWarning: () => void): () => void {
-  const timeoutId = globalThis.setTimeout(showWarning, ENVIRONMENT_RECONNECT_WARNING_GRACE_MS);
+export function scheduleEnvironmentReconnectWarning(
+  showWarning: () => void,
+  options?: { readonly localHost?: boolean },
+): () => void {
+  const timeoutId = globalThis.setTimeout(
+    showWarning,
+    options?.localHost === true
+      ? LOCAL_ENVIRONMENT_RECONNECT_WARNING_GRACE_MS
+      : ENVIRONMENT_RECONNECT_WARNING_GRACE_MS,
+  );
   return () => globalThis.clearTimeout(timeoutId);
 }
 

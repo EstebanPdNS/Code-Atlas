@@ -27,7 +27,7 @@ const ultrafast = process.env.FAKE_ULTRAFAST_ENTITLED === "1" && originator !== 
 const model = (tiers) => ({
   id: "gpt-6.1-sol", model: "gpt-6.1-sol", displayName: "GPT-6.1 Sol", description: "",
   hidden: false, isDefault: true, defaultReasoningEffort: "high",
-  supportedReasoningEfforts: [{ reasoningEffort: "high", description: "" }],
+  supportedReasoningEfforts: [{ reasoningEffort: "high", description: "" }, { reasoningEffort: "xhigh", description: "" }],
   serviceTiers: tiers.map((id) => ({ id, name: id === "priority" ? "Fast" : id, description: "" })),
 });
 setTimeout(() => {
@@ -49,7 +49,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
     const tier = process.env.FAKE_SERVICE_TIER;
     if (tier === "hang") return;
     if (tier === "error") write({ id, error: { code: -32601, message: "unsupported" } });
-    else write({ id, result: { config: tier === "missing" ? {} : { service_tier: tier }, origins: {}, layers: null } });
+    else write({ id, result: { config: { ...(tier === "missing" ? {} : { service_tier: tier }), ...(process.env.FAKE_REASONING_EFFORT ? { model_reasoning_effort: process.env.FAKE_REASONING_EFFORT } : {}) }, origins: {}, layers: null } });
   } else if (method === "model/list") {
     write({ id, result: { data: JSON.parse(fs.readFileSync(cachePath, "utf8")).models, nextCursor: null } });
   } else {
@@ -63,6 +63,7 @@ const decodeCodexSettings = Schema.decodeSync(CodexSettings);
 const probeCatalog = Effect.fn("probeCatalog")(function* (
   ultrafastEntitled: boolean,
   serviceTier = "error",
+  reasoningEffort?: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -84,7 +85,10 @@ const probeCatalog = Effect.fn("probeCatalog")(function* (
           hidden: false,
           isDefault: true,
           defaultReasoningEffort: "high",
-          supportedReasoningEfforts: [{ reasoningEffort: "high", description: "" }],
+          supportedReasoningEfforts: [
+            { reasoningEffort: "high", description: "" },
+            { reasoningEffort: "xhigh", description: "" },
+          ],
           serviceTiers: (ultrafastEntitled ? ["priority"] : ["priority", "ultrafast"]).map(
             (id) => ({ id, name: id === "priority" ? "Fast" : id, description: "" }),
           ),
@@ -101,6 +105,7 @@ const probeCatalog = Effect.fn("probeCatalog")(function* (
       ...environment,
       FAKE_ULTRAFAST_ENTITLED: ultrafastEntitled ? "1" : "0",
       FAKE_SERVICE_TIER: serviceTier,
+      ...(reasoningEffort ? { FAKE_REASONING_EFFORT: reasoningEffort } : {}),
     },
   );
   const configRequest = yield* fs.readFileString(path.join(dir, "config-request.json"));
@@ -154,6 +159,25 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("Codex catalog disco
           );
         }
         assert.equal(provider.models.find((model) => model.isDefault)?.slug, "gpt-6.1-sol");
+      }
+    }).pipe(Effect.scoped),
+  );
+
+  // Code Atlas: Codex config's model_reasoning_effort is the effective default.
+  it.effect("displays the configured reasoning effort as each model's default", () =>
+    Effect.gen(function* () {
+      const provider = yield* probeCatalog(false, "missing", "xhigh");
+      for (const model of provider.models) {
+        const effort = model.capabilities?.optionDescriptors?.find(
+          (descriptor) => descriptor.id === "reasoningEffort",
+        );
+        assert.equal(effort?.type, "select");
+        if (effort?.type !== "select") return;
+        assert.equal(effort.currentValue, "xhigh");
+        assert.deepStrictEqual(
+          effort.options.filter((option) => option.isDefault).map((option) => option.id),
+          ["xhigh"],
+        );
       }
     }).pipe(Effect.scoped),
   );

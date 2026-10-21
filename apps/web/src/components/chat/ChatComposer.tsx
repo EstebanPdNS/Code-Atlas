@@ -2556,6 +2556,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const pasteAsTextShortcutUntilRef = useRef(0);
+  // Submission is declared before the attachment helpers this folding uses.
+  const foldOversizedPromptRef = useRef<(draft: string) => boolean>(() => false);
   const pastedTextFileNamesRef = useRef<{ targetKey: string; names: Set<string> }>({
     targetKey: "",
     names: new Set(),
@@ -4130,6 +4132,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       prompt: promptRef.current,
       submissionTarget: activePendingProgress ? "pending-user-input" : "provider-turn",
       event,
+      foldOversizedPrompt: (draft) => foldOversizedPromptRef.current(draft),
       onSend: (sendEvent) => {
         providerInputRejectedRef.current = false;
         onSend(
@@ -5501,6 +5504,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       readonly source?: ChatFileAttachment["source"];
       readonly selection?: { start: number; end: number };
       readonly skipImageInlineChip?: boolean;
+      /** False when the caller explains the attachment itself. */
+      readonly announcePaste?: boolean;
     },
   ): Promise<boolean> => {
     if (!activeThreadId || files.length === 0 || isRevertingCheckpointRef.current) return false;
@@ -5616,7 +5621,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           options?.selection,
         );
       }
-      if (options?.source?._tag === "pasted-text" && storedFiles.length > 0) {
+      if (
+        options?.source?._tag === "pasted-text" &&
+        options.announcePaste !== false &&
+        storedFiles.length > 0
+      ) {
         const attached = storedFiles[0]!;
         toastManager.add({
           type: "info",
@@ -5752,6 +5761,46 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       if (confirmed) removeComposerImageFromDraft(imageId);
     });
   };
+
+  // A draft over the character limit moves into a text attachment, as a large
+  // paste does, instead of being refused. The user sends again once its chip shows.
+  const foldOversizedPrompt = (draft: string): boolean => {
+    if (
+      isLiteralPendingAnswer ||
+      !activeThreadId ||
+      isRevertingCheckpointRef.current ||
+      questionAttachmentTarget ||
+      fileStagingLimit === null ||
+      countReservedAttachments() >= PROVIDER_SEND_TURN_MAX_ATTACHMENTS
+    ) {
+      return false;
+    }
+    const text = stripInlineContextReferences(draft).trim();
+    if (pastedTextFileNamesRef.current.targetKey !== attachmentTargetKey) {
+      pastedTextFileNamesRef.current = { targetKey: attachmentTargetKey, names: new Set() };
+    }
+    const reservedNames = pastedTextFileNamesRef.current.names;
+    for (const file of composerFilesRef.current) reservedNames.add(file.name);
+    const fileName = nextPastedTextFileName([...reservedNames]);
+    const file = new File([text], fileName, { type: "text/plain;charset=utf-8" });
+    if (file.size > fileStagingLimit) return false;
+    reservedNames.add(fileName);
+    void addComposerAttachments([file], {
+      source: { _tag: "pasted-text" },
+      selection: { start: 0, end: draft.length },
+      announcePaste: false,
+    });
+    toastManager.add({
+      type: "info",
+      title: `Long message attached as ${fileName}`,
+      description: `It was over the ${PROVIDER_SEND_TURN_MAX_INPUT_CHARS.toLocaleString("en-US")}-character limit, so it is sent as a text file. Send again to send it.`,
+      data: { hideCopyButton: true },
+    });
+    return true;
+  };
+  useEffect(() => {
+    foldOversizedPromptRef.current = foldOversizedPrompt;
+  });
 
   const foldPastedText = (
     plainText: string,
@@ -7421,8 +7470,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     />
                   ) : null}
                   {/* Code Atlas: Claude Code's order, ⏎ then the mic; while dictating
-                      they are the only two controls. */}
-                  {dictation.active ? null : (
+                      they are the only two controls. A paused task with nothing typed
+                      shows stop and resume in the send slot; typing brings ⏎ back to
+                      send a new message, which starts a new action. */}
+                  {dictation.active ||
+                  (showResumeAction &&
+                    onDismissResume !== undefined &&
+                    !composerSendState.hasSendableContent) ? null : (
                     <ComposerFooterPrimaryActions
                       compact={isComposerResting || isComposerPrimaryActionsCompact}
                       canOperateThread={canOperateThread}

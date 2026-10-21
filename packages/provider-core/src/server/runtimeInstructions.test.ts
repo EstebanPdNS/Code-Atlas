@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { buildRuntimeInstructions } from "./runtimeInstructions.ts";
+import { buildPlanFirstInstructions, buildRuntimeInstructions } from "./runtimeInstructions.ts";
 
 describe("buildRuntimeInstructions", () => {
   it("requires explicit registration of every PR and stack layer", () => {
@@ -33,5 +33,15 @@ describe("buildRuntimeInstructions", () => {
     const instructions = buildRuntimeInstructions({ harness: "Cursor", model });
     expect(instructions).toContain("through the Cursor harness.");
     expect(instructions).not.toContain("reasoning effort");
+  });
+});
+
+// Code Atlas: every task-list update costs a model round trip.
+describe("buildPlanFirstInstructions", () => {
+  it("batches list updates and skips the list for pure questions", () => {
+    const instructions = buildPlanFirstInstructions("with the plan tool");
+    expect(instructions).toContain("write the whole list with the plan tool");
+    expect(instructions).toContain("mark the next one in progress in the same update");
+    expect(instructions).toContain("without taking any action needs no list");
   });
 });

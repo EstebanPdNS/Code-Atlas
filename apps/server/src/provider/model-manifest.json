@@ -156,12 +156,12 @@
                   },
                   {
                     "id": "medium",
-                    "label": "Medium",
-                    "isDefault": true
+                    "label": "Medium"
                   },
                   {
                     "id": "high",
-                    "label": "High"
+                    "label": "High",
+                    "isDefault": true
                   },
                   {
                     "id": "xhigh",
@@ -189,7 +189,7 @@
             "claudeCode": {
               "effortMap": {
                 "ultracode": "xhigh",
-                "ultrathink": null
+                "ultrathink": "max"
               },
               "fixedContextWindowTokens": 1000000
             }
@@ -204,8 +204,8 @@
                 "type": "select",
                 "options": [
                   { "id": "low", "label": "Low" },
-                  { "id": "medium", "label": "Medium", "isDefault": true },
-                  { "id": "high", "label": "High" },
+                  { "id": "medium", "label": "Medium" },
+                  { "id": "high", "label": "High", "isDefault": true },
                   { "id": "xhigh", "label": "Extra High" },
                   { "id": "max", "label": "Max" },
                   {
@@ -222,7 +222,7 @@
           },
           "adapter": {
             "claudeCode": {
-              "effortMap": { "ultracode": "xhigh", "ultrathink": null },
+              "effortMap": { "ultracode": "xhigh", "ultrathink": "max" },
               "fixedContextWindowTokens": 1000000
             }
           }
@@ -279,7 +279,7 @@
             "claudeCode": {
               "effortMap": {
                 "ultracode": "xhigh",
-                "ultrathink": null
+                "ultrathink": "max"
               },
               "fixedContextWindowTokens": 1000000
             }
@@ -337,7 +337,7 @@
             "claudeCode": {
               "effortMap": {
                 "ultracode": "xhigh",
-                "ultrathink": null
+                "ultrathink": "max"
               },
               "fixedContextWindowTokens": 1000000
             }
@@ -390,7 +390,7 @@
             "claudeCode": {
               "effortMap": {
                 "xhigh": "max",
-                "ultrathink": null
+                "ultrathink": "max"
               },
               "fixedContextWindowTokens": 1000000
             }
@@ -454,7 +454,7 @@
           "adapter": {
             "claudeCode": {
               "effortMap": {
-                "ultrathink": null
+                "ultrathink": "max"
               },
               "modelSuffixes": {
                 "contextWindow": {
@@ -547,7 +547,7 @@
           "adapter": {
             "claudeCode": {
               "effortMap": {
-                "ultrathink": null
+                "ultrathink": "max"
               },
               "fixedContextWindowTokens": 1000000
             }
@@ -607,7 +607,7 @@
             "claudeCode": {
               "effortMap": {
                 "max": "high",
-                "ultrathink": null
+                "ultrathink": "high"
               },
               "modelSuffixes": {
                 "contextWindow": {
@@ -642,7 +642,7 @@
           },
           "adapter": {
             "claudeCode": {
-              "effortMap": { "ultrathink": null },
+              "effortMap": { "ultrathink": "max" },
               "fixedContextWindowTokens": 1000000
             }
           }
