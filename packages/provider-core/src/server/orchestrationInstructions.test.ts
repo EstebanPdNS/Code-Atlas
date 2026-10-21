@@ -26,6 +26,14 @@ describe("T3 orchestration provider instructions", () => {
     assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "bindToCurrentThread=false");
   });
 
+  // Code Atlas: visual answers are occasional, on request or for a visual conclusion.
+  it("asks for visual answers on request or for visual conclusions, not by default", () => {
+    assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "when the user asks for a visual answer");
+    assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "options or models compared");
+    assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "code changes stay text");
+    assert.include(T3_CODE_ORCHESTRATION_INSTRUCTIONS, "metric tiles side by side");
+  });
+
   it("injects prompt fallback only for an MCP-enabled first run", () => {
     const prompt = "Inspect the repository.";
     const injected = t3OrchestrationPromptForFirstRun({
