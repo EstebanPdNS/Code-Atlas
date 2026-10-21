@@ -779,7 +779,9 @@ export const buildCodexTurnStartParams = Effect.fn("CodexAdapterV2.buildCodexTur
         ? {
             t3_plan_first: {
               kind: "application" as const,
-              value: buildPlanFirstInstructions("update_plan"),
+              value: buildPlanFirstInstructions(
+                "with the update_plan tool and update it with the same tool as you progress",
+              ),
             },
           }
         : undefined;

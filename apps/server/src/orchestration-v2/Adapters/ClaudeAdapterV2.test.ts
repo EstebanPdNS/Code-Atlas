@@ -237,6 +237,32 @@ function makeClaudeTestTurnInput(input: {
 }
 
 describe("ClaudeAdapterV2 runtime query policy", () => {
+  it("turns on Claude's task tools and asks for a task list when plan first is on", () => {
+    const base = {
+      modelSelection: CLAUDE_TEST_MODEL_SELECTION,
+      nativeThreadId: "plan-first-thread",
+      resume: false,
+      cwd: "/workspace",
+      environment: { PATH: "/usr/bin" },
+    };
+    const on = ClaudeAdapterV2.makeClaudeQueryOptions({ ...base, planFirst: true });
+    assert.include(on.env, {
+      PATH: "/usr/bin",
+      CLAUDE_CODE_ENABLE_TASKS: "1",
+      CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+    });
+    const append =
+      on.systemPrompt !== undefined &&
+      !Array.isArray(on.systemPrompt) &&
+      typeof on.systemPrompt === "object" &&
+      on.systemPrompt.type === "preset"
+        ? on.systemPrompt.append
+        : "";
+    assert.include(append ?? "", "TaskCreate");
+    const off = ClaudeAdapterV2.makeClaudeQueryOptions(base);
+    assert.notProperty(off.env ?? {}, "CLAUDE_CODE_ENABLE_TODO_TOOLS");
+  });
+
   it.each([false, true])("requests thinking summaries with resume=%s", (resume) => {
     const options = ClaudeAdapterV2.makeClaudeQueryOptions({
       modelSelection: CLAUDE_TEST_MODEL_SELECTION,

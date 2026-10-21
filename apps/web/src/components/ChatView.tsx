@@ -8430,7 +8430,8 @@ export default function ChatView(props: ChatViewProps) {
                       startedAt={activeWorkStartedAt}
                       tokens={activeThreadLiveTokenUsage?.usedTokens ?? null}
                       activity={atlasActivityLabel(timelineEntries)}
-                      steps={activeComposerTaskSteps}
+                      // The latest run's plan stays visible, all checked, after it finishes.
+                      steps={activeComposerTaskSteps ?? activePlan?.steps ?? null}
                     />
                   ) : null}
                   <div

@@ -1309,7 +1309,7 @@ export function makeClaudeQueryOptions(input: {
   readonly supportedDialogKinds?: ClaudeQueryOptions["supportedDialogKinds"];
   readonly allowDangerouslySkipPermissions?: boolean;
   readonly appendSystemPromptFileText?: string;
-  /** Code Atlas: TodoWrite task list for every request; fixed while the query process lives. */
+  /** Code Atlas: a Task tools list for every request; fixed while the query process lives. */
   readonly planFirst?: boolean;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection);
@@ -1397,7 +1397,19 @@ export function makeClaudeQueryOptions(input: {
     ...(input.settings?.binaryPath
       ? { pathToClaudeCodeExecutable: input.settings.binaryPath }
       : {}),
-    ...(input.environment === undefined ? {} : { env: input.environment }),
+    ...(input.planFirst === true
+      ? {
+          // Code Atlas: Claude only offers its task-list tools (TaskCreate,
+          // TaskUpdate) to SDK sessions when these are set; plan first needs them.
+          env: {
+            ...(input.environment ?? process.env),
+            CLAUDE_CODE_ENABLE_TASKS: "1",
+            CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+          },
+        }
+      : input.environment === undefined
+        ? {}
+        : { env: input.environment }),
     ...(input.mcpServers === undefined ? {} : { mcpServers: input.mcpServers }),
     systemPrompt: {
       type: "preset" as const,
@@ -1405,7 +1417,13 @@ export function makeClaudeQueryOptions(input: {
       append: [
         buildRuntimeInstructions({ harness: "Claude Code" }) +
           (input.mcpServers === undefined ? "" : T3_CODE_ORCHESTRATION_INSTRUCTIONS),
-        ...(input.planFirst === true ? [buildPlanFirstInstructions("TodoWrite")] : []),
+        ...(input.planFirst === true
+          ? [
+              buildPlanFirstInstructions(
+                "with the TaskCreate tool (one task per step) and track it with TaskUpdate (in_progress, then completed)",
+              ),
+            ]
+          : []),
         ...launchAppendSystemPrompt,
       ].join("\n\n"),
     },
