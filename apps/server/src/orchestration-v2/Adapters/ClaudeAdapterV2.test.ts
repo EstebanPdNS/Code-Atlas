@@ -3013,266 +3013,237 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
     );
 
-    it.effect("asks before restricted Full access tools and follows policy across turns", () =>
-      Effect.gen(function* () {
-        const resolveSettings = vi
-          .mocked(ClaudeSdk.resolveSettings)
-          .mockImplementation(async (options) => ({
-            effective:
-              options?.cwd === "/unrestricted"
-                ? {}
-                : {
-                    permissions: {
-                      disableBypassPermissionsMode: "disable",
-                      ...(options?.cwd === "/restricted-worktree"
-                        ? { disableAutoMode: "disable" as const }
-                        : {}),
+    it.effect(
+      "approves restricted Full access tools without asking and follows policy across turns",
+      () =>
+        Effect.gen(function* () {
+          const resolveSettings = vi
+            .mocked(ClaudeSdk.resolveSettings)
+            .mockImplementation(async (options) => ({
+              effective:
+                options?.cwd === "/unrestricted"
+                  ? {}
+                  : {
+                      permissions: {
+                        disableBypassPermissionsMode: "disable",
+                        ...(options?.cwd === "/restricted-worktree"
+                          ? { disableAutoMode: "disable" as const }
+                          : {}),
+                      },
                     },
-                  },
-            provenance: {},
-            sources: [],
-          }));
-        const harness = yield* makeWakeHarnessWithOptions({
-          close: Queue.shutdown,
-          freshQueueOnReopen: true,
-          setPermissionMode: (mode) =>
-            mode === "bypassPermissions"
-              ? Effect.fail(
-                  new ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError({
-                    method: "setPermissionMode",
-                    cause: new Error(
-                      "Cannot set permission mode to bypassPermissions because it is disabled by settings or configuration",
-                    ),
-                  }),
-                )
-              : Effect.void,
-        });
-        const now = yield* DateTime.now;
-        let ordinal = 0;
-        const start = (cwd: string, runtimeMode: "full-access" | "auto" = "full-access") =>
-          harness.runtime.startTurn(
-            makeClaudeTestTurnInput({
-              threadId: harness.threadId,
-              providerThread: harness.providerThread,
-              now,
-              attemptId: RunAttemptId.make(`attempt-policy-${++ordinal}`),
-              providerTurnOrdinal: ordinal,
-              text: "Run git status.",
-              attachments: [],
-              runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
-                runtimeMode,
-                interactionMode: "default",
-                cwd,
+              provenance: {},
+              sources: [],
+            }));
+          const harness = yield* makeWakeHarnessWithOptions({
+            close: Queue.shutdown,
+            freshQueueOnReopen: true,
+            setPermissionMode: (mode) =>
+              mode === "bypassPermissions"
+                ? Effect.fail(
+                    new ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerError({
+                      method: "setPermissionMode",
+                      cause: new Error(
+                        "Cannot set permission mode to bypassPermissions because it is disabled by settings or configuration",
+                      ),
+                    }),
+                  )
+                : Effect.void,
+          });
+          const now = yield* DateTime.now;
+          let ordinal = 0;
+          const start = (cwd: string, runtimeMode: "full-access" | "auto" = "full-access") =>
+            harness.runtime.startTurn(
+              makeClaudeTestTurnInput({
+                threadId: harness.threadId,
+                providerThread: harness.providerThread,
+                now,
+                attemptId: RunAttemptId.make(`attempt-policy-${++ordinal}`),
+                providerTurnOrdinal: ordinal,
+                text: "Run git status.",
+                attachments: [],
+                runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({
+                  runtimeMode,
+                  interactionMode: "default",
+                  cwd,
+                }),
               }),
-            }),
+            );
+          const finish = Effect.gen(function* () {
+            yield* harness.offerAndWait(
+              makeResultFrame({ uuid: `policy-result-${ordinal}`, result: "Done." }),
+            );
+            yield* Queue.take(harness.terminalReceipts);
+          });
+          const notices = () =>
+            harness.events.filter(
+              (event) =>
+                event.type === "turn_item.updated" && event.turnItem.type === "system_notice",
+            );
+          const approveWithoutAsking = Effect.fn("approveWithoutAsking")(function* (
+            toolUseID: string,
+            reason: string,
+          ) {
+            const decision = yield* Effect.promise(() =>
+              harness.getOpenedOptions()!.canUseTool!(
+                "Bash",
+                { command: "git status" },
+                {
+                  signal: new AbortController().signal,
+                  toolUseID,
+                  requestId: `request-${toolUseID}`,
+                },
+              ),
+            ).pipe(Effect.forkScoped);
+            const first = yield* Effect.raceFirst(
+              Queue.take(harness.runtimeRequestReceipts).pipe(
+                Effect.map((event) => ({ type: "request", event }) as const),
+              ),
+              Fiber.join(decision).pipe(
+                Effect.map((result) => ({ type: "decision", result }) as const),
+              ),
+            );
+            assert.equal(first.type, "decision", reason);
+            if (first.type !== "decision") return;
+            assert.equal(first.result?.behavior, "allow");
+            if (first.result?.behavior === "allow") {
+              assert.deepEqual(first.result.updatedInput, { command: "git status" });
+              assert.equal(first.result.toolUseID, toolUseID);
+            }
+            assert.isFalse(
+              harness.events.some((event) => event.type === "runtime_request.updated"),
+              "Full access must not leave a pending approval",
+            );
+          });
+
+          yield* start("/restricted-worktree", "auto");
+          assert.equal(harness.getOpenedOptions()?.permissionMode, "auto");
+          yield* finish;
+          assert.equal(notices().length, 0);
+          assert.equal(resolveSettings.mock.calls.length, 0);
+
+          yield* start("/restricted");
+          const openedOptions = harness.getOpenedOptions()!;
+          yield* approveWithoutAsking(
+            "policy-command",
+            "Full access must approve a policy-restricted command without asking",
           );
-        const finish = Effect.gen(function* () {
+          assert.equal(openedOptions.permissionMode, "auto");
+          assert.isUndefined(openedOptions.allowDangerouslySkipPermissions);
+
           yield* harness.offerAndWait(
-            makeResultFrame({ uuid: `policy-result-${ordinal}`, result: "Done." }),
-          );
-          yield* Queue.take(harness.terminalReceipts);
-        });
-        const notices = () =>
-          harness.events.filter(
-            (event) =>
-              event.type === "turn_item.updated" && event.turnItem.type === "system_notice",
-          );
-
-        yield* start("/restricted-worktree", "auto");
-        assert.equal(harness.getOpenedOptions()?.permissionMode, "auto");
-        yield* finish;
-        assert.equal(notices().length, 0);
-        assert.equal(resolveSettings.mock.calls.length, 0);
-
-        yield* start("/restricted");
-        const openedOptions = harness.getOpenedOptions()!;
-        const decision = yield* Effect.promise(() =>
-          openedOptions.canUseTool!(
-            "Bash",
-            { command: "git status" },
-            {
-              signal: new AbortController().signal,
-              toolUseID: "policy-command",
-              requestId: "request-policy-command",
-            },
-          ),
-        ).pipe(Effect.forkScoped);
-        const first = yield* Effect.raceFirst(
-          Queue.take(harness.runtimeRequestReceipts).pipe(
-            Effect.map((event) => ({ type: "request", event }) as const),
-          ),
-          Fiber.join(decision).pipe(
-            Effect.map((result) => ({ type: "decision", result }) as const),
-          ),
-        );
-        assert.equal(
-          first.type,
-          "request",
-          "Full access must not auto-allow a policy-restricted command",
-        );
-        if (first.type !== "request") return;
-        assert.equal(first.event.runtimeRequest.kind, "command");
-        yield* harness.runtime.respondToRuntimeRequest({
-          requestId: first.event.runtimeRequest.id,
-          decision: "decline",
-        });
-        assert.equal((yield* Fiber.join(decision))?.behavior, "deny");
-        assert.equal(openedOptions.permissionMode, "auto");
-        assert.isUndefined(openedOptions.allowDangerouslySkipPermissions);
-
-        yield* harness.offerAndWait(
-          claudeSdkFrame({
-            type: "system",
-            subtype: "status",
-            status: null,
-            permissionMode: "plan",
-            uuid: "policy-enter-plan",
-            session_id: WAKE_NATIVE_SESSION,
-          }),
-        );
-        yield* finish;
-        assert.equal(notices().length, 1);
-        yield* start("/restricted");
-        assert.strictEqual(harness.getOpenedOptions(), openedOptions);
-        assert.deepEqual(harness.permissionModeChanges, ["auto"]);
-        assert.equal(resolveSettings.mock.calls.length, 1);
-        yield* finish;
-
-        yield* start("/restricted-worktree");
-        assert.equal(harness.getOpenedOptions()?.permissionMode, "default");
-        assert.isUndefined(harness.getOpenedOptions()?.allowDangerouslySkipPermissions);
-        assert.equal(resolveSettings.mock.calls.length, 2);
-        yield* finish;
-
-        yield* start("/unrestricted");
-        assert.equal(harness.getOpenedOptions()?.permissionMode, "bypassPermissions");
-        assert.equal(harness.getOpenedOptions()?.allowDangerouslySkipPermissions, true);
-        // Forwarded asks (including ask rules and settings fallback) still need a decision
-        // before queued init/status frames arrive.
-        for (const { phase, frame } of [
-          {
-            phase: "init",
-            frame: claudeSdkFrame({
-              type: "system",
-              subtype: "init",
-              permissionMode: "bypassPermissions",
-              uuid: "policy-cli-init",
-              session_id: WAKE_NATIVE_SESSION,
-            }),
-          },
-          {
-            phase: "status",
-            frame: claudeSdkFrame({
+            claudeSdkFrame({
               type: "system",
               subtype: "status",
               status: null,
-              permissionMode: "default",
-              uuid: "policy-cli-downgrade",
+              permissionMode: "plan",
+              uuid: "policy-enter-plan",
               session_id: WAKE_NATIVE_SESSION,
             }),
-          },
-        ]) {
-          const forwardedDecision = yield* Effect.promise(() =>
-            harness.getOpenedOptions()!.canUseTool!(
-              "Bash",
-              { command: "git status" },
-              {
-                signal: new AbortController().signal,
-                toolUseID: `forwarded-before-${phase}`,
-                requestId: `request-forwarded-before-${phase}`,
-              },
-            ),
-          ).pipe(Effect.forkScoped);
-          const forwardedFirst = yield* Effect.raceFirst(
-            Queue.take(harness.runtimeRequestReceipts).pipe(
-              Effect.map((event) => ({ type: "request", event }) as const),
-            ),
-            Fiber.join(forwardedDecision).pipe(
-              Effect.map((result) => ({ type: "decision", result }) as const),
-            ),
           );
-          assert.equal(
-            forwardedFirst.type,
-            "request",
-            `CLI-forwarded Bash must ask before the queued ${phase} frame reaches the adapter`,
-          );
-          if (forwardedFirst.type !== "request") return;
-          assert.equal(forwardedFirst.event.runtimeRequest.kind, "command");
-          yield* harness.runtime.respondToRuntimeRequest({
-            requestId: forwardedFirst.event.runtimeRequest.id,
-            decision: "decline",
-          });
-          assert.equal((yield* Fiber.join(forwardedDecision))?.behavior, "deny");
-          yield* harness.offerAndWait(frame);
-        }
-        yield* finish;
-        const unrestrictedOptions = harness.getOpenedOptions();
-        yield* start("/unrestricted");
-        assert.strictEqual(harness.getOpenedOptions(), unrestrictedOptions);
-        assert.deepEqual(
-          harness.permissionModeChanges,
-          ["auto"],
-          "A CLI policy downgrade must not be restored to bypass on the next turn",
-        );
-        assert.equal(resolveSettings.mock.calls.length, 3);
-        yield* harness.offerAndWait(
-          claudeSdkFrame({
-            type: "system",
-            subtype: "status",
-            status: null,
-            permissionMode: "plan",
-            uuid: "policy-restricted-enter-plan",
-            session_id: WAKE_NATIVE_SESSION,
-          }),
-        );
-        yield* finish;
-        assert.equal(notices().length, 1);
-
-        for (const phase of ["restore", "reuse"]) {
-          const started = yield* start("/unrestricted").pipe(Effect.exit);
-          assert.isTrue(
-            Exit.isSuccess(started),
-            `A rejected bypass restore must not fail the ${phase} turn`,
-          );
-          assert.strictEqual(harness.getOpenedOptions(), unrestrictedOptions);
-          assert.deepEqual(harness.permissionModeChanges, ["auto", "bypassPermissions", "default"]);
-          assert.equal(harness.offeredMessages.length, ordinal);
-          const restoredDecision = yield* Effect.promise(() =>
-            harness.getOpenedOptions()!.canUseTool!(
-              "Bash",
-              { command: "git status" },
-              {
-                signal: new AbortController().signal,
-                toolUseID: `forwarded-after-plan-${phase}`,
-                requestId: `request-after-plan-${phase}`,
-              },
-            ),
-          ).pipe(Effect.forkScoped);
-          const restoredFirst = yield* Effect.raceFirst(
-            Queue.take(harness.runtimeRequestReceipts).pipe(
-              Effect.map((event) => ({ type: "request", event }) as const),
-            ),
-            Fiber.join(restoredDecision).pipe(
-              Effect.map((result) => ({ type: "decision", result }) as const),
-            ),
-          );
-          assert.equal(restoredFirst.type, "request");
-          if (restoredFirst.type !== "request") return;
-          assert.equal(restoredFirst.event.runtimeRequest.kind, "command");
-          yield* harness.runtime.respondToRuntimeRequest({
-            requestId: restoredFirst.event.runtimeRequest.id,
-            decision: "decline",
-          });
-          assert.equal((yield* Fiber.join(restoredDecision))?.behavior, "deny");
           yield* finish;
-          assert.equal(harness.terminalEvents().at(-1)?.status, "completed");
-        }
-        assert.equal(notices().length, 1);
-      }).pipe(
-        Effect.provide(
-          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+          assert.equal(notices().length, 1);
+          const notice = notices()[0];
+          assert.equal(
+            notice?.type === "turn_item.updated" && notice.turnItem.type === "system_notice"
+              ? notice.turnItem.message
+              : undefined,
+            "Code Atlas could not confirm Claude bypass permissions here; Full access still approves every request automatically.",
+          );
+          yield* start("/restricted");
+          assert.strictEqual(harness.getOpenedOptions(), openedOptions);
+          assert.deepEqual(harness.permissionModeChanges, ["auto"]);
+          assert.equal(resolveSettings.mock.calls.length, 1);
+          yield* finish;
+
+          yield* start("/restricted-worktree");
+          assert.equal(harness.getOpenedOptions()?.permissionMode, "default");
+          assert.isUndefined(harness.getOpenedOptions()?.allowDangerouslySkipPermissions);
+          assert.equal(resolveSettings.mock.calls.length, 2);
+          yield* finish;
+
+          yield* start("/unrestricted");
+          assert.equal(harness.getOpenedOptions()?.permissionMode, "bypassPermissions");
+          assert.equal(harness.getOpenedOptions()?.allowDangerouslySkipPermissions, true);
+          // Forwarded asks (including ask rules and settings fallback) are approved
+          // automatically, even before queued init/status frames arrive.
+          for (const { phase, frame } of [
+            {
+              phase: "init",
+              frame: claudeSdkFrame({
+                type: "system",
+                subtype: "init",
+                permissionMode: "bypassPermissions",
+                uuid: "policy-cli-init",
+                session_id: WAKE_NATIVE_SESSION,
+              }),
+            },
+            {
+              phase: "status",
+              frame: claudeSdkFrame({
+                type: "system",
+                subtype: "status",
+                status: null,
+                permissionMode: "default",
+                uuid: "policy-cli-downgrade",
+                session_id: WAKE_NATIVE_SESSION,
+              }),
+            },
+          ]) {
+            yield* approveWithoutAsking(
+              `forwarded-before-${phase}`,
+              `CLI-forwarded Bash must be approved without asking before the queued ${phase} frame`,
+            );
+            yield* harness.offerAndWait(frame);
+          }
+          yield* finish;
+          const unrestrictedOptions = harness.getOpenedOptions();
+          yield* start("/unrestricted");
+          assert.strictEqual(harness.getOpenedOptions(), unrestrictedOptions);
+          assert.deepEqual(
+            harness.permissionModeChanges,
+            ["auto"],
+            "A CLI policy downgrade must not be restored to bypass on the next turn",
+          );
+          assert.equal(resolveSettings.mock.calls.length, 3);
+          yield* harness.offerAndWait(
+            claudeSdkFrame({
+              type: "system",
+              subtype: "status",
+              status: null,
+              permissionMode: "plan",
+              uuid: "policy-restricted-enter-plan",
+              session_id: WAKE_NATIVE_SESSION,
+            }),
+          );
+          yield* finish;
+          assert.equal(notices().length, 1);
+
+          for (const phase of ["restore", "reuse"]) {
+            const started = yield* start("/unrestricted").pipe(Effect.exit);
+            assert.isTrue(
+              Exit.isSuccess(started),
+              `A rejected bypass restore must not fail the ${phase} turn`,
+            );
+            assert.strictEqual(harness.getOpenedOptions(), unrestrictedOptions);
+            assert.deepEqual(harness.permissionModeChanges, [
+              "auto",
+              "bypassPermissions",
+              "default",
+            ]);
+            assert.equal(harness.offeredMessages.length, ordinal);
+            yield* approveWithoutAsking(
+              `forwarded-after-plan-${phase}`,
+              `Full access must approve without asking on the ${phase} turn`,
+            );
+            yield* finish;
+            assert.equal(harness.terminalEvents().at(-1)?.status, "completed");
+          }
+          assert.equal(notices().length, 1);
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+          ),
         ),
-      ),
     );
 
     it.effect(
@@ -3474,14 +3445,6 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         decision: "accept",
         behavior: "allow",
       },
-      {
-        runtimeMode: "full-access",
-        toolName: "Bash",
-        toolInput: { command: "echo after > target.txt" },
-        kind: "command",
-        decision: "cancel",
-        behavior: "deny",
-      },
     ] as const)(
       "asks before $toolName in $runtimeMode Plan, then respects $decision",
       ({ runtimeMode, toolName, toolInput, kind, decision, behavior }) =>
@@ -3506,6 +3469,30 @@ describe("ClaudeAdapterV2 background wake turns", () => {
             Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
           ),
         ),
+    );
+
+    it.effect("denies Bash in full-access Plan without asking", () =>
+      Effect.gen(function* () {
+        const turn = yield* openPlanTurn("full-access");
+        const permission = yield* requestWrite(turn, "Bash", {
+          command: "echo after > target.txt",
+        });
+        assert.equal(permission.first.type, "decision", "Full access Plan raised an approval");
+        if (permission.first.type !== "decision") return;
+        const result = permission.first.result;
+        assert.equal(result?.behavior, "deny");
+        if (result?.behavior === "deny") {
+          assert.equal(
+            result.message,
+            "This tool requires approval in Plan mode, but approvals are disabled for this thread.",
+          );
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
     );
 
     it.effect("denies Plan writes without asking when approvals are never allowed", () =>
@@ -3646,6 +3633,8 @@ describe("ClaudeAdapterV2 background wake turns", () => {
           attemptId: RunAttemptId.make("mcp-presentation"),
           text: "Check the weather",
           attachments: [],
+          // Full access never asks, so use a mode that still shows the approval card.
+          runtimePolicy: { ...CLAUDE_TEST_RUNTIME_POLICY, runtimeMode: "approval-required" },
         }),
       );
       const toolName = "mcp__weather__get_weather";

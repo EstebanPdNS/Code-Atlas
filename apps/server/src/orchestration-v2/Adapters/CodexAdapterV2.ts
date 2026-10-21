@@ -583,6 +583,15 @@ function providerRequestKindFromPermissions(
   return "command";
 }
 
+/** Code Atlas: what Full access accepts without asking: everything. */
+const FULL_ACCESS_REQUEST_KINDS: ReadonlyArray<ProviderRequestKind> = [
+  "command",
+  "file-read",
+  "file-change",
+  "mcp-elicitation",
+  "permission",
+];
+
 function permissionsResponseFromDecision(input: {
   readonly decision: ProviderApprovalDecision;
   readonly permissions: CodexSchema.PermissionsRequestApprovalParams["permissions"];
@@ -1917,6 +1926,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           context: ActiveCodexTurnContext,
         ): Set<ProviderRequestKind> => {
           const runtimeMode = context.input.runtimePolicy.runtimeMode;
+          // Code Atlas: Full access never asks; every approval kind is accepted.
+          if (runtimeMode === "full-access") return new Set(FULL_ACCESS_REQUEST_KINDS);
           const allowed = sessionApprovals.get(nativeThreadId);
           if (allowed?.runtimeMode === runtimeMode) return allowed.kinds;
           if (allowed !== undefined) return new Set();
@@ -5311,6 +5322,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             }
 
             const requestKind = providerRequestKindFromPermissions(payload.permissions);
+            if (sessionAllowance(payload.threadId, context).has(requestKind)) {
+              return permissionsResponseFromDecision({
+                decision: "acceptForSession",
+                permissions: payload.permissions,
+              });
+            }
             const artifacts = yield* buildApprovalRequestArtifacts({
               context,
               nativeItemId: payload.itemId,
@@ -5387,6 +5404,13 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               } satisfies CodexSchema.McpServerElicitationRequestResponse;
             }
 
+            if (
+              payload.threadId !== undefined &&
+              payload.threadId !== null &&
+              sessionAllowance(payload.threadId, context).has("mcp-elicitation")
+            ) {
+              return toMcpElicitationResponse(payload, "acceptForSession");
+            }
             const nativeRequestId =
               payload.mode === "url"
                 ? payload.elicitationId

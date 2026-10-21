@@ -2230,6 +2230,11 @@ function claudeBypassAvailability(
 }
 
 function requiresClaudeApproval(context: ActiveClaudeTurnContext): boolean {
+  // Code Atlas: the user chose Full access to mean no approvals of any kind, so
+  // ask rules, hooks, Claude's safety checks, subagent and MCP tools and the
+  // bypass-disabled fallback are all approved here; Plan mode stays read-only.
+  const runtime = context.input.runtimePolicy;
+  if (runtime.runtimeMode === "full-access" && runtime.interactionMode !== "plan") return false;
   // CLI-forwarded requests need a person's decision even under bypass (ask rules,
   // safety checks, or settings fallback). Do not wait for queued init/status updates.
   const policy = context.queryPolicy;
@@ -8987,7 +8992,8 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
 
           if (
             context.input.runtimePolicy.interactionMode === "plan" &&
-            context.input.runtimePolicy.approvalPolicy === "never"
+            (context.input.runtimePolicy.approvalPolicy === "never" ||
+              context.input.runtimePolicy.runtimeMode === "full-access")
           ) {
             return {
               behavior: "deny",
@@ -9563,7 +9569,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 }
                 const nativeItemId = `bypass-policy-downgrade:${context.providerTurnId}`;
                 const notice =
-                  "Code Atlas could not confirm Claude bypass permissions here, so Full access is running with approval checks.";
+                  "Code Atlas could not confirm Claude bypass permissions here; Full access still approves every request automatically.";
                 yield* emitProviderEvent({
                   type: "turn_item.updated",
                   driver: CLAUDE_PROVIDER,
