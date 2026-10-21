@@ -119,15 +119,20 @@ const AGENT_FACES = {
 
 export const AGENT_SHAPE_NAMES = Object.keys(AGENT_SHAPES) as Array<keyof typeof AGENT_SHAPES>;
 export const AGENT_FACE_NAMES = Object.keys(AGENT_FACES) as Array<keyof typeof AGENT_FACES>;
+// Saturated tones like Codex's agent shapes, with a few softer pastels mixed in.
 export const AGENT_FACE_COLORS = [
+  "#f472b6",
+  "#38bdf8",
+  "#facc15",
+  "#a78bfa",
+  "#4ade80",
+  "#fb923c",
+  "#f87171",
+  "#2dd4bf",
   "#f2b8d0",
   "#add8f5",
-  "#f4e3a1",
   "#c9b8ed",
   "#b8dfc5",
-  "#f5c39f",
-  "#efaba6",
-  "#a8deda",
 ] as const;
 
 /**
