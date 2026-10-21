@@ -9,7 +9,7 @@
 
 ## Install
 
-1. Download `Code-Atlas-v1.3.zip` from the [latest release](https://github.com/EstebanPdNS/Code-Atlas/releases/latest).
+1. Download `Code-Atlas-v1.4.zip` from the [latest release](https://github.com/EstebanPdNS/Code-Atlas/releases/latest).
 2. Open the zip and move **Code Atlas** to Applications.
 3. Open Code Atlas. The app is ad-hoc signed and not notarized, so macOS may block the first launch. Open **System Settings → Privacy & Security** and choose **Open Anyway**.
 
@@ -45,7 +45,7 @@ Code Atlas builds like T3 Code. Install Node 24 and [Vite+](https://viteplus.dev
 
 ```sh
 vp i
-T3CODE_DESKTOP_VERSION=1.3.0 vp run dist:desktop:dmg:arm64
+T3CODE_DESKTOP_VERSION=1.4.0 vp run dist:desktop:dmg:arm64
 ```
 
 The build also compiles the local Whisper server with `native/whisper-server/build.sh` (requires the Xcode command line tools and CMake). See the [development runbook](operations/development.md) for the full T3 Code workflow. The reference sources that coding agents read (`.repos/`) are not in the repository; fetch them with `vp run sync:repos`.

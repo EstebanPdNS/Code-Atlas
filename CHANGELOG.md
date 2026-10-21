@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.4
+
+- When a model is at capacity, Code Atlas retries by itself every 10 seconds until it gets through; Retry now skips the wait and Stop ends it.
+- Agents can answer visually: ask for it, or they show a card with figures, bars and a table when a comparison reads better as a picture.
+- The browser's new tab shows Recents and Favorites; the star beside the address bar saves a page.
+- While an agent works, the composer shows pause and the microphone. A paused task shows Resume and a Stop square.
+- Messages sent during a run steer it right away, by default and always inside a running goal; `/goal` no longer stays in the goal's text.
+- The goal bar works like Codex: its time since it started, then clear, pause or resume, and full screen, with the composer's corners.
+- The plan, the goal and the status line sit above the composer in that order. The status line counts lines added and removed live, subagents included, and the changed files are listed when the run ends; This week adds them up.
+- The terminal fits any window size without overlapping; the intro only types the command, then the frame and grid draw in; the corners line up exactly.
+- The Usage page drops the Limits tab, fills the window, uses each agent's colors and compares tokens per dollar.
+- Working dots appear only on threads that are running, right after the name, and dragging a pinned thread shows where it lands.
+- Agent pages use Code Atlas colors instead of a black background, and agent faces are more saturated.
+
 ## v1.3
 
 - Full access never stops for an approval.
