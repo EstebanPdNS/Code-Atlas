@@ -6,9 +6,19 @@ import { makeAgentControlOverlay } from "../../window/AgentControlOverlay.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 import { SET_AGENT_CONTROL_OVERLAY_CHANNEL } from "../channels.ts";
 
+const BoundedString = (max: number) => Schema.String.check(Schema.isMaxLength(max));
+
 const AgentControlTarget = Schema.NullOr(
   Schema.Struct({
-    app: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(512)),
+    key: BoundedString(1024).check(Schema.isMinLength(1)),
+    apps: Schema.Array(BoundedString(512).check(Schema.isMinLength(1))).check(
+      Schema.isMaxLength(8),
+    ),
+    hint: Schema.NullOr(BoundedString(4096)),
+    agent: BoundedString(80),
+    running: Schema.Boolean,
+    startedAt: BoundedString(64),
+    actionAt: BoundedString(64),
   }),
 );
 
@@ -23,8 +33,7 @@ export const installAgentControlOverlay = Effect.fn("desktop.ipc.installAgentCon
         channel: SET_AGENT_CONTROL_OVERLAY_CHANNEL,
         payload: AgentControlTarget,
         result: Schema.Void,
-        handler: (target, event) =>
-          Effect.sync(() => overlay.set(target?.app ?? null, event?.sender.id)),
+        handler: (target, event) => Effect.sync(() => overlay.set(target, event?.sender.id)),
       }),
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => overlay.set(null)));

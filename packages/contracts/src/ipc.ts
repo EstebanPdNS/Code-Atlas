@@ -1027,6 +1027,26 @@ export const DesktopPreviewRecordingSaveInputSchema = Schema.Struct({
 export const SystemSettingsPaneSchema = Schema.Literals(["full-disk-access"]);
 export type SystemSettingsPane = typeof SystemSettingsPaneSchema.Type;
 
+/** Code Atlas: the app an agent drives, as the desktop shell's overlay looks for it. */
+export interface AgentControlOverlayTarget {
+  /** The tool call; a newer call restarts the idle timeout. */
+  readonly key: string;
+  /** App names, bundle identifiers or `.app` paths, best first. */
+  readonly apps: readonly string[];
+  /** A running command that launched an app it names, when no app is named. */
+  readonly hint: string | null;
+  /** "Claude Code", "Codex". */
+  readonly agent: string;
+  readonly running: boolean;
+  /** ISO times: when the call started, and its latest activity. */
+  readonly startedAt: string;
+  readonly actionAt: string;
+}
+
+export type AgentControlOverlayEvent =
+  | { readonly type: "stop"; readonly key: string }
+  | { readonly type: "resolved"; readonly key: string; readonly app: string };
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getRelayTelemetryEnabled?: () => boolean;
@@ -1034,7 +1054,9 @@ export interface DesktopBridge {
   getClientPlatform?: () => string;
   setNotificationBadge?: (badge: { count: number; image: string | null }) => Promise<void>;
   /** Code Atlas: frame the window of the app an agent is driving; null clears it. */
-  setAgentControlOverlay?: (target: { app: string } | null) => Promise<void>;
+  setAgentControlOverlay?: (target: AgentControlOverlayTarget | null) => Promise<void>;
+  /** Code Atlas: the overlay's Stop button, and the app it found for a target. */
+  onAgentControlOverlayEvent?: (listener: (event: AgentControlOverlayEvent) => void) => () => void;
   onNotificationBadgeClear?: (listener: () => void) => () => void;
   onTrackpadScrollEnd?: (listener: () => void) => () => void;
   /**

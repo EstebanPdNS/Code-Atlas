@@ -36,6 +36,8 @@ import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts"
 import { makeQuitShortcutHandler } from "./QuitHold.ts";
 import { copyContextMenuImage } from "./ContextMenuImage.ts";
 import { installMainWindowPermissions } from "./MainWindowPermissions.ts";
+// Code Atlas: the agent-control overlays stay transparent through theme changes.
+import { isAgentControlOverlayWindow } from "./AgentControlOverlay.ts";
 
 const TITLEBAR_HEIGHT = 40;
 // Matches --workspace-topbar-height in apps/web/src/index.css. Native macOS
@@ -258,7 +260,7 @@ function syncWindowAppearance(
   platform: NodeJS.Platform,
 ): Effect.Effect<void> {
   return Effect.sync(() => {
-    if (window.isDestroyed()) {
+    if (window.isDestroyed() || isAgentControlOverlayWindow(window)) {
       return;
     }
 
