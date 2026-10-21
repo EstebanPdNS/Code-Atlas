@@ -2167,8 +2167,18 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </span>
             {draftIndicator}
             {title}
-            {pinWorkingDots}
-            {pinIndicator}
+            {CODE_ATLAS_SIDEBAR && (pinWorkingDots !== null || pinIndicator !== null) ? (
+              // The row's hover buttons take this space, like the time beside it.
+              <span className="flex shrink-0 items-center transition-opacity group-any-hover/sidebar-row:opacity-0">
+                {pinWorkingDots}
+                {pinIndicator}
+              </span>
+            ) : (
+              <>
+                {pinWorkingDots}
+                {pinIndicator}
+              </>
+            )}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
               <span role="status" className="sr-only">
@@ -2181,7 +2191,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             ) : (
               <span
                 className={cn(
-                  "relative ml-auto flex h-6 min-w-8 shrink-0 items-center justify-end",
+                  "relative ml-auto flex h-6 shrink-0 items-center justify-end",
+                  // Code Atlas: the slot hugs the time, so the pin sits right
+                  // beside it instead of across an empty column.
+                  CODE_ATLAS_SIDEBAR ? "min-w-0" : "min-w-8",
                   props.sweepAction !== null && "hidden",
                 )}
               >
