@@ -303,6 +303,8 @@ import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
 import { ComposerImageThumbnail } from "./ComposerImageThumbnail";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { AtlasPausedControls } from "~/atlas/progress/AtlasPausedControls";
+// Code Atlas: the composer's controls share one icon set.
+import { AtlasPaperclipIcon } from "~/atlas/brand/atlasIcons";
 import { ComposerDictationControl } from "./ComposerDictationControl";
 import { useComposerDictation } from "../../dictation/useComposerDictation";
 import { useDictationHoldShortcut } from "../../dictation/useDictationHoldShortcut";
@@ -1066,7 +1068,6 @@ import { toastManager } from "../ui/toast";
 import {
   BotIcon,
   CircleAlertIcon,
-  PaperclipIcon,
   PencilRulerIcon,
   PlayIcon,
   ShieldIcon,
@@ -7461,7 +7462,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             />
                           }
                         >
-                          <PaperclipIcon />
+                          <AtlasPaperclipIcon />
                         </TooltipTrigger>
                         <TooltipPopup>Attach files</TooltipPopup>
                       </Tooltip>

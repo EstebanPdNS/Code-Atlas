@@ -1,5 +1,6 @@
-import { PauseIcon, PlayIcon, SquareIcon } from "lucide-react";
 import type { PointerEvent, ReactNode } from "react";
+
+import { AtlasPauseIcon, AtlasPlayIcon, AtlasStopIcon } from "~/atlas/brand/atlasIcons";
 
 import { Button } from "~/components/ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
@@ -8,13 +9,15 @@ const keepComposerFocus = (event: PointerEvent) => event.preventDefault();
 
 /**
  * Code Atlas: the composer's quiet task button (attach and the microphone
- * share its style): ghost, icon only, with a label and a tooltip.
+ * share its style): ghost, icon only, with a label and a tooltip. `pop`
+ * pops it in when it takes the send slot.
  */
 export function AtlasTaskButton(props: {
   readonly label: string;
   readonly tooltip: string;
   readonly disabled: boolean;
   readonly onClick: () => void;
+  readonly pop?: boolean;
   readonly children: ReactNode;
 }) {
   return (
@@ -29,6 +32,8 @@ export function AtlasTaskButton(props: {
             onPointerDown={keepComposerFocus}
             onClick={props.onClick}
             aria-label={props.label}
+            data-atlas-press
+            data-atlas-pop-in={props.pop ? "" : undefined}
           />
         }
       >
@@ -50,8 +55,9 @@ export function AtlasPauseButton(props: {
       tooltip="Pause"
       disabled={props.disabled}
       onClick={props.onPause}
+      pop
     >
-      <PauseIcon className="fill-current" />
+      <AtlasPauseIcon />
     </AtlasTaskButton>
   );
 }
@@ -73,8 +79,9 @@ export function AtlasPausedControls(props: {
         tooltip="Resume where it left off"
         disabled={props.disabled}
         onClick={props.onResume}
+        pop
       >
-        <PlayIcon className="fill-current" />
+        <AtlasPlayIcon />
       </AtlasTaskButton>
       <div data-atlas-stop-reveal>
         <div className="min-w-0 overflow-hidden ps-2">
@@ -84,7 +91,7 @@ export function AtlasPausedControls(props: {
             disabled={props.disabled}
             onClick={props.onStop}
           >
-            <SquareIcon className="size-3.5! fill-current" />
+            <AtlasStopIcon />
           </AtlasTaskButton>
         </div>
       </div>

@@ -8540,7 +8540,7 @@ export default function ChatView(props: ChatViewProps) {
                       </div>
                     </div>
                   ) : null}
-                  {/* Code Atlas: plan card, goal, then the status line on the composer. */}
+                  {/* Code Atlas: status line, plan card, then the goal on the composer. */}
                   {claudeProgressStyle && !isDraftHeroState ? (
                     <AtlasClaudeProgress
                       working={isWorking}

@@ -10,9 +10,15 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { useAtomValue } from "@effect/atom-react";
-import { Maximize2Icon, PauseIcon, PlayIcon, TargetIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import {
+  AtlasExpandIcon,
+  AtlasPauseIcon,
+  AtlasPlayIcon,
+  AtlasTargetIcon,
+  AtlasTrashIcon,
+} from "~/atlas/brand/atlasIcons";
 import { AtlasTaskButton } from "~/atlas/progress/AtlasPausedControls";
 import { ComposerSurface } from "~/components/chat/ComposerSurface";
 import { Button } from "~/components/ui/button";
@@ -161,15 +167,14 @@ export function AtlasGoalCard(props: {
   };
 
   return (
-    <ComposerSurface.Shell>
+    <ComposerSurface.Shell data-atlas-rise>
       <ComposerSurface.Host>
         <section
           aria-label="Goal"
           data-atlas-goal-card
           className="relative z-10 flex min-h-10 items-center gap-2 py-1 ps-3.5 pe-2 text-sm"
         >
-          <TargetIcon
-            aria-hidden
+          <AtlasTargetIcon
             className={
               props.goal.status === "active" && props.working
                 ? "size-4 shrink-0 text-primary"
@@ -186,7 +191,7 @@ export function AtlasGoalCard(props: {
               {presentation.objective}
             </span>
           </button>
-          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
             {presentation.metrics === null ? null : (
               <span className="tabular-nums">{presentation.metrics}</span>
             )}
@@ -210,7 +215,7 @@ export function AtlasGoalCard(props: {
                   )
                 }
               >
-                <Trash2Icon />
+                <AtlasTrashIcon />
               </AtlasTaskButton>
             ) : null}
             {presentation.toggle === null ? null : (
@@ -220,11 +225,7 @@ export function AtlasGoalCard(props: {
                 disabled={disabled}
                 onClick={toggle}
               >
-                {presentation.toggle === "pause" ? (
-                  <PauseIcon className="fill-current" />
-                ) : (
-                  <PlayIcon className="fill-current" />
-                )}
+                {presentation.toggle === "pause" ? <AtlasPauseIcon /> : <AtlasPlayIcon />}
               </AtlasTaskButton>
             )}
             <AtlasTaskButton
@@ -233,7 +234,7 @@ export function AtlasGoalCard(props: {
               disabled={false}
               onClick={() => setEditorOpen(true)}
             >
-              <Maximize2Icon />
+              <AtlasExpandIcon />
             </AtlasTaskButton>
           </div>
         </section>

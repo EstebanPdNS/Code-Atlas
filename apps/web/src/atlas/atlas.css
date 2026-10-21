@@ -21,9 +21,16 @@
   --atlas-ascii-0: #ffe0c5;
   --atlas-ascii-1: #ffad66;
   --atlas-ascii-2: #d98442;
-  /* Motion: one curve for state changes, one springy curve for things that appear. */
+  /* Motion: one curve for state changes, one springy curve for things that
+     appear, and three durations: fast for hover and press, base for state
+     changes (folds, chevrons, check-offs), slow for panels and entrances. */
   --atlas-ease-out: cubic-bezier(0.2, 0, 0, 1);
   --atlas-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --atlas-duration-fast: 140ms;
+  --atlas-duration-base: 220ms;
+  --atlas-duration-slow: 360ms;
+  /* How far a pressed control sinks. */
+  --atlas-press-scale: 0.96;
   /* Concrete names first: some engines alias ui-monospace to the proportional UI font. */
   --atlas-font-console:
     "SF Mono", "SFMono-Regular", ui-monospace, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
@@ -702,7 +709,7 @@ span[data-atlas-hero-heading] {
 }
 
 [data-atlas-chrome="on"] [data-atlas-prompt] {
-  animation: atlas-fade-in calc(var(--atlas-enter) * 240ms) ease-out both;
+  animation: atlas-fade-in calc(var(--atlas-enter) * 240ms) var(--atlas-ease-out) both;
   animation-delay: calc(var(--atlas-enter) * 1300ms);
 }
 
@@ -796,6 +803,7 @@ span[data-atlas-hero-heading] {
       [data-atlas-corner],
       [data-atlas-edge],
       [data-atlas-rule],
+      [data-atlas-status],
       [data-atlas-info-cell],
       [data-atlas-rule-line],
       [data-atlas-prompt]
@@ -860,7 +868,7 @@ span[data-atlas-hero-heading] {
 }
 
 [data-atlas-reveal] {
-  transition: opacity 300ms ease;
+  transition: opacity var(--atlas-duration-slow) var(--atlas-ease-out);
 }
 
 [data-atlas-chrome="off"] {
@@ -1044,7 +1052,7 @@ span[data-atlas-hero-heading] {
 [data-atlas-row-count] {
   margin-inline-start: auto;
   padding-inline-end: 0.25rem;
-  transition: transform 180ms ease-out;
+  transition: transform var(--atlas-duration-fast) var(--atlas-ease-out);
 }
 
 [data-atlas-row-actions] {
@@ -1052,7 +1060,7 @@ span[data-atlas-hero-heading] {
   inset-inline-end: 0.25rem;
   top: 50%;
   translate: 0 -50%;
-  transition: opacity 150ms ease-out;
+  transition: opacity var(--atlas-duration-fast) var(--atlas-ease-out);
 }
 
 [data-atlas-row]:hover [data-atlas-row-count],
@@ -1073,6 +1081,15 @@ span[data-atlas-hero-heading] {
 
 [data-atlas-activity] > span:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+/* Sortable lists (Pinned, a project's threads, a group's projects, the
+   groups): rows glide aside with dnd-kit's inline transition while one drags;
+   with reduced motion they move at once. */
+@media (prefers-reduced-motion: reduce) {
+  [data-atlas-sortable-list] > li {
+    transition: none !important;
+  }
 }
 
 /* ========== Progress ========== */
@@ -1099,8 +1116,8 @@ span[data-atlas-hero-heading] {
 }
 
 /* The status line sits 2% in from the composer edge, and the conversation
-   fades out over a short band above the plan card instead of scrolling
-   visibly behind it. */
+   fades out over a short band above the stack instead of scrolling visibly
+   behind it. */
 [data-atlas-claude-progress] {
   padding-top: 1rem;
   background: linear-gradient(to bottom, transparent, var(--background) 1rem);
@@ -1110,17 +1127,39 @@ span[data-atlas-hero-heading] {
   padding-inline-start: 2%;
 }
 
-/* The goal bar sits in the same lane: in the Claude Code style between the
-   plan card and the status line, otherwise on its own, fading the
+/* The goal bar sits in the same lane: in the Claude Code style under the
+   status line and the plan card, otherwise on its own, fading the
    conversation out the same way. */
 [data-atlas-goal] {
   padding-top: 1rem;
   background: linear-gradient(to bottom, transparent, var(--background) 1rem);
 }
 
+/* What joins the stack above the composer (status line, changed files, plan
+   card, goal bar) and the retry countdown rise in once. */
+[data-atlas-rise] {
+  animation: atlas-rise-in var(--atlas-duration-slow) var(--atlas-ease-out) backwards;
+}
+
+/* Folds: content opens and closes on grid rows instead of jumping, and fades
+   in a beat slower than it fades out. Plan steps fold the same way. */
+:is([data-atlas-fold], [data-atlas-plan-step]) {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--atlas-duration-base) var(--atlas-ease-out),
+    opacity var(--atlas-duration-fast) var(--atlas-ease-out);
+}
+
+:is([data-atlas-fold], [data-atlas-plan-step])[data-shown] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition-duration: var(--atlas-duration-base);
+}
+
 /* Plan card: folded, only the steps being worked on stay open; the others
-   collapse to zero height. One-shot grid-row transitions, no repaint loop.
-   Unfolded, a long plan scrolls inside the card. */
+   collapse to zero height. Unfolded, a long plan scrolls inside the card. */
 [data-atlas-plan-list] {
   max-height: min(40vh, 22rem);
   overflow-y: auto;
@@ -1128,45 +1167,47 @@ span[data-atlas-hero-heading] {
   scrollbar-width: thin;
 }
 
-[data-atlas-plan-step] {
-  display: grid;
-  grid-template-rows: 0fr;
-  opacity: 0;
-  transition:
-    grid-template-rows 240ms var(--atlas-ease-out),
-    opacity 180ms ease-out;
-}
-
-[data-atlas-plan-step][data-shown] {
-  grid-template-rows: 1fr;
-  opacity: 1;
-}
-
-/* A step the agent adds slides into the plan card. */
+/* A step the agent adds slides into the plan card. Only once the card has
+   settled (its own entrance done), so a card that mounts with its steps, on
+   a thread switch, does not unfold each of them. */
 @starting-style {
-  [data-atlas-plan-step][data-shown] {
+  [data-atlas-plan-card][data-settled] [data-atlas-plan-step][data-shown] {
     grid-template-rows: 0fr;
     opacity: 0;
   }
 }
 
-[data-atlas-plan-chevron] {
-  transition: rotate 200ms var(--atlas-ease-out);
+[data-atlas-plan-text] {
+  transition: color var(--atlas-duration-base) var(--atlas-ease-out);
+}
+
+:is([data-atlas-plan-chevron], [data-atlas-disclosure]) {
+  transition: rotate var(--atlas-duration-base) var(--atlas-ease-out);
 }
 
 [data-atlas-plan-card][data-expanded] [data-atlas-plan-chevron] {
   rotate: 180deg;
 }
 
-/* A step that completes: its check pops in once. */
-[data-atlas-plan-check] {
-  animation: atlas-pop-in 320ms var(--atlas-ease-spring);
-  --atlas-pop-from: 0.4;
+/* A step that completes: its check pops in once (a transition from its
+   starting style, so checks already done when the card mounts stay still). */
+[data-atlas-plan-card][data-settled] [data-atlas-plan-check] {
+  transition:
+    scale var(--atlas-duration-slow) var(--atlas-ease-spring),
+    opacity var(--atlas-duration-base) var(--atlas-ease-out);
 }
 
-/* Resume appears beside the pressed stop button with a small pop. */
+@starting-style {
+  [data-atlas-plan-card][data-settled] [data-atlas-plan-check] {
+    scale: 0.4;
+    opacity: 0;
+  }
+}
+
+/* The task button that takes the send slot (Pause while a task runs, Resume
+   once it is paused) pops in. */
 [data-atlas-pop-in] {
-  animation: atlas-pop-in 260ms var(--atlas-ease-spring);
+  animation: atlas-pop-in var(--atlas-duration-slow) var(--atlas-ease-spring);
   --atlas-pop-from: 0.6;
 }
 
@@ -1177,8 +1218,8 @@ span[data-atlas-hero-heading] {
   grid-template-columns: 1fr;
   opacity: 1;
   transition:
-    grid-template-columns 220ms var(--atlas-ease-out),
-    opacity 180ms ease-out;
+    grid-template-columns var(--atlas-duration-base) var(--atlas-ease-out),
+    opacity var(--atlas-duration-base) var(--atlas-ease-out);
 }
 
 @starting-style {
@@ -1188,14 +1229,28 @@ span[data-atlas-hero-heading] {
   }
 }
 
+/* Code Atlas icon buttons (composer, goal bar, browser) sink a little while
+   pressed. */
+[data-atlas-press] {
+  transition-property: color, background-color, opacity, box-shadow, scale;
+  transition-duration: var(--atlas-duration-fast);
+  transition-timing-function: var(--atlas-ease-out);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-atlas-press]:active:not(:disabled, [aria-disabled="true"]) {
+    scale: var(--atlas-press-scale);
+  }
+}
+
 /* ========== Agents ========== */
 /* A new agent's face pops in once; every face tilts a little on hover. */
 [data-atlas-agent-face] {
-  transition: rotate 200ms var(--atlas-ease-out);
+  transition: rotate var(--atlas-duration-base) var(--atlas-ease-out);
 }
 
 [data-atlas-agent-face][data-fresh] {
-  animation: atlas-pop-in 420ms var(--atlas-ease-spring);
+  animation: atlas-pop-in var(--atlas-duration-slow) var(--atlas-ease-spring);
   --atlas-pop-from: 0.5;
 }
 
@@ -1232,11 +1287,8 @@ span[data-atlas-hero-heading] {
   font-size: 0.8125rem;
 }
 
-/* Disclosure chevrons (Memory files) turn a quarter when their list opens. */
-[data-atlas-disclosure] {
-  transition: rotate 200ms var(--atlas-ease-out);
-}
-
+/* Disclosure chevrons (Context, Memory files) turn a quarter when their list
+   opens (the turn itself is timed with the plan chevrons). */
 [data-atlas-disclosure][data-open] {
   rotate: 90deg;
 }
@@ -1297,7 +1349,6 @@ span[data-atlas-hero-heading] {
   border-radius: calc(var(--radius) - 2px);
   color: var(--foreground);
   cursor: pointer;
-  transition: background-color 150ms var(--atlas-ease-out);
 }
 
 [data-atlas-site-open]:hover {
@@ -1357,7 +1408,6 @@ span[data-atlas-hero-heading] {
   color: var(--muted-foreground);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 150ms var(--atlas-ease-out);
 }
 
 [data-atlas-site-remove] svg {
@@ -1382,11 +1432,34 @@ span[data-atlas-hero-heading] {
   }
 }
 
+/* The new tab's sections rise in once; tiles and their remove control share
+   the pressable controls' hover fade and press. A tile is larger, so it sinks
+   less. */
+[data-atlas-newtab-body] {
+  animation: atlas-rise-in var(--atlas-duration-slow) var(--atlas-ease-out) backwards;
+}
+
+:is([data-atlas-site-open], [data-atlas-site-remove]) {
+  transition-property: color, background-color, opacity, scale;
+  transition-duration: var(--atlas-duration-fast);
+  transition-timing-function: var(--atlas-ease-out);
+}
+
+[data-atlas-site-open] {
+  --atlas-press-scale: 0.98;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is([data-atlas-site-open], [data-atlas-site-remove]):active {
+    scale: var(--atlas-press-scale);
+  }
+}
+
 /* The address bar's star fills in the Code Atlas orange while the page is a favorite. */
 [data-atlas-favorite-star] {
   transition:
-    fill 150ms var(--atlas-ease-out),
-    color 150ms var(--atlas-ease-out);
+    fill var(--atlas-duration-fast) var(--atlas-ease-out),
+    color var(--atlas-duration-fast) var(--atlas-ease-out);
 }
 
 [data-atlas-favorite-star][data-on] {
@@ -1417,7 +1490,7 @@ span[data-atlas-hero-heading] {
   }
 }
 
-/* Things that appear: plan checks, Resume and new agent faces. */
+/* Things that appear: Pause and Resume, and new agent faces. */
 @keyframes atlas-pop-in {
   from {
     scale: var(--atlas-pop-from, 0.6);
@@ -1425,15 +1498,24 @@ span[data-atlas-hero-heading] {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-atlas-chrome="on"] [data-atlas-info-cell],
-  [data-atlas-chrome="on"] [data-atlas-rule-line] {
-    animation: none;
+/* Usage bars grow from their start once, when the page shows them. */
+@keyframes atlas-grow-x {
+  from {
+    scale: 0 1;
   }
+}
 
+[data-atlas-bar] {
+  transform-origin: left center;
+  animation: atlas-grow-x var(--atlas-duration-slow) var(--atlas-ease-out) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
   [data-atlas-caret],
-  [data-atlas-plan-check],
+  [data-atlas-rise],
   [data-atlas-pop-in],
+  [data-atlas-bar],
+  [data-atlas-newtab-body],
   [data-atlas-agent-face][data-fresh] {
     animation: none;
   }
@@ -1448,12 +1530,17 @@ span[data-atlas-hero-heading] {
     opacity: 0.7;
   }
 
+  [data-atlas-reveal],
   [data-atlas-row-count],
   [data-atlas-row-actions],
+  [data-atlas-fold],
   [data-atlas-plan-step],
+  [data-atlas-plan-text],
+  [data-atlas-plan-check],
   [data-atlas-stop-reveal],
   [data-atlas-plan-chevron],
   [data-atlas-disclosure],
+  [data-atlas-press],
   [data-atlas-agent-face],
   [data-atlas-site-open],
   [data-atlas-site-remove],

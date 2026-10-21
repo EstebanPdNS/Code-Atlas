@@ -1,14 +1,8 @@
 import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
-import {
-  CheckIcon,
-  ChevronDownIcon,
-  CornerDownLeftIcon,
-  ChevronLeftIcon,
-  Minimize2Icon,
-  PlayIcon,
-} from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon } from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
+import { AtlasPlayIcon, AtlasReturnIcon } from "~/atlas/brand/atlasIcons";
 import { AtlasPauseButton } from "~/atlas/progress/AtlasPausedControls";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
@@ -84,7 +78,7 @@ const messageActionPillClassName =
 
 /** Code Atlas: send, pause and resume share Claude Code's quiet icon button. */
 const atlasIconActionClassName =
-  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring enabled:text-foreground disabled:pointer-events-none [&_svg]:pointer-events-none";
+  "relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring enabled:text-foreground disabled:pointer-events-none sm:size-7 [&_svg]:pointer-events-none";
 
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
   event.preventDefault();
@@ -326,6 +320,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const sendButton = (
     <button
       type={showResume ? "button" : "submit"}
+      data-atlas-press
       className={cn(atlasIconActionClassName, "disabled:opacity-40")}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
@@ -341,13 +336,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       {isConnecting || isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
-        <PlayIcon className="size-4 fill-current" aria-hidden="true" />
+        <AtlasPlayIcon className="size-4.5 sm:size-4" />
       ) : isEditingQueuedMessage ? (
         <CheckIcon className="size-4" aria-hidden="true" />
       ) : isRunning ? (
         <MorphIcon className="size-4" icon={isQueuing ? ListPlus : CornerUpRight} />
       ) : (
-        <CornerDownLeftIcon className="size-4" aria-hidden="true" />
+        <AtlasReturnIcon className="size-4.5 sm:size-4" />
       )}
     </button>
   );
