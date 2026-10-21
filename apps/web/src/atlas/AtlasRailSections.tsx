@@ -25,6 +25,7 @@ import { sourceControlEnvironment } from "~/state/sourceControl";
 import { useKnownTerminalSessions } from "~/state/terminalSessions";
 
 import type { AtlasGitHubAccount, AtlasTerminalMeta } from "./atlasIntro";
+import { atlasProviderFill } from "./providerColors";
 
 const AGENT_DRIVERS = new Set(["claudeAgent", "codex"]);
 const NO_PROVIDERS: readonly ServerProvider[] = [];
@@ -103,7 +104,17 @@ export function useAtlasTerminalSummary(
   };
 }
 
-function Meter({ percent, className }: { readonly percent: number; readonly className?: string }) {
+function Meter({
+  percent,
+  className,
+  fill = null,
+}: {
+  readonly percent: number;
+  readonly className?: string;
+  /** A provider's own bar color (see atlasProviderFill). */
+  readonly fill?: string | null;
+}) {
+  const width = `${Math.min(100, Math.max(0, percent))}%`;
   return (
     <span
       aria-hidden
@@ -112,9 +123,10 @@ function Meter({ percent, className }: { readonly percent: number; readonly clas
       <span
         className={cn(
           "block h-full rounded-full",
-          percent >= 90 ? "bg-destructive" : percent >= 70 ? "bg-warning" : "bg-primary",
+          fill === null &&
+            (percent >= 90 ? "bg-destructive" : percent >= 70 ? "bg-warning" : "bg-primary"),
         )}
-        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+        style={fill === null ? { width } : { width, background: fill }}
       />
     </span>
   );
@@ -273,7 +285,7 @@ export function AtlasUsageSection({ environmentId }: { readonly environmentId: E
         type="button"
         onClick={openUsage}
         aria-label="Open usage statistics"
-        className="grid w-full cursor-pointer gap-3 rounded-lg px-1.5 pb-1 text-left hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden"
+        className="grid w-full cursor-pointer gap-3 rounded-lg px-1.5 pb-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden"
       >
         {providers.map((provider) => {
           const limits = provider.usageLimits;
@@ -293,7 +305,7 @@ export function AtlasUsageSection({ environmentId }: { readonly environmentId: E
                       <span className="text-muted-foreground">{window.label}</span>
                       <span className="tabular-nums">{Math.round(window.usedPercent)}%</span>
                     </div>
-                    <Meter percent={window.usedPercent} />
+                    <Meter percent={window.usedPercent} fill={atlasProviderFill(provider.driver)} />
                     {resets ? (
                       <span className="text-2xs text-muted-foreground">{resets}</span>
                     ) : null}

@@ -100,7 +100,11 @@ export function driveDictationWaveform(
 }
 
 // Code Atlas: one new sample per step; between steps the row slides one bar left.
-const SCROLL_STEP_MS = 90;
+const SCROLL_STEP_MS = 70;
+// Resting bars are round dots: 3px wide on a 16px-tall bar.
+export const SCROLL_REST_SCALE = 3 / 16;
+// Each sample moves this far toward the new level, so bars rise and fall smoothly.
+const LEVEL_SMOOTHING = 0.45;
 // Bars this close to the left edge shrink as they leave, like Claude's voice input.
 const EDGE_SHRINK_BARS = 6;
 
@@ -122,10 +126,11 @@ export function driveScrollingWaveform(
   level: DictationLevel,
 ): () => void {
   const count = bars.length;
-  const values = new Float32Array(count).fill(WAVEFORM_REST_SCALE);
+  const values = new Float32Array(count).fill(SCROLL_REST_SCALE);
   const pitch = count > 1 ? bars[1]!.offsetLeft - bars[0]!.offsetLeft : (bars[0]?.offsetWidth ?? 0);
   let floor = 1;
   let peak = 0;
+  let smoothed = 0;
   let lastStep = performance.now();
   let frame = 0;
 
@@ -136,8 +141,9 @@ export function driveScrollingWaveform(
     peak = Math.max(raw, peak * 0.99, floor + 0.08);
     const relative = (raw - floor) / Math.max(0.08, peak - floor);
     const shaped = raw <= 0 ? 0 : Math.min(1, Math.max(0, relative) ** 1.2);
+    smoothed += (shaped - smoothed) * LEVEL_SMOOTHING;
     values.copyWithin(0, 1);
-    values[count - 1] = Math.max(WAVEFORM_REST_SCALE, shaped);
+    values[count - 1] = Math.max(SCROLL_REST_SCALE, smoothed);
   };
 
   const draw = (now: number) => {
@@ -150,7 +156,8 @@ export function driveScrollingWaveform(
     for (let index = 0; index < count; index++) {
       const edge = Math.min(1, Math.max(0, (index - phase) / EDGE_SHRINK_BARS));
       const size = 0.15 + 0.85 * edge;
-      bars[index]!.style.transform = `scale(${size.toFixed(3)}, ${(values[index]! * size).toFixed(3)})`;
+      bars[index]!.style.transform =
+        `scale(${size.toFixed(3)}, ${(values[index]! * size).toFixed(3)})`;
     }
     frame = requestAnimationFrame(draw);
   };
@@ -159,6 +166,6 @@ export function driveScrollingWaveform(
   return () => {
     cancelAnimationFrame(frame);
     row.style.transform = "";
-    for (const bar of bars) bar.style.transform = `scaleY(${WAVEFORM_REST_SCALE})`;
+    for (const bar of bars) bar.style.transform = `scaleY(${SCROLL_REST_SCALE})`;
   };
 }

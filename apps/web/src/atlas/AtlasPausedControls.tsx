@@ -8,7 +8,7 @@ const keepComposerFocus = (event: PointerEvent) => event.preventDefault();
 
 /**
  * Code Atlas: a paused task (an interrupted run that can continue) offers
- * Resume and Stop before the microphone and send buttons.
+ * Stop and Resume before the microphone and send buttons.
  */
 export function AtlasPausedControls(props: {
   readonly disabled: boolean;
@@ -26,14 +26,14 @@ export function AtlasPausedControls(props: {
               size="icon-sm"
               disabled={props.disabled}
               onPointerDown={keepComposerFocus}
-              onClick={props.onResume}
-              aria-label="Resume task"
+              onClick={props.onStop}
+              aria-label="Stop task"
             />
           }
         >
-          <PlayIcon className="fill-current" />
+          <SquareIcon className="fill-current" />
         </TooltipTrigger>
-        <TooltipPopup>Resume where it left off</TooltipPopup>
+        <TooltipPopup>Stop the task</TooltipPopup>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger
@@ -44,14 +44,14 @@ export function AtlasPausedControls(props: {
               size="icon-sm"
               disabled={props.disabled}
               onPointerDown={keepComposerFocus}
-              onClick={props.onStop}
-              aria-label="Stop task"
+              onClick={props.onResume}
+              aria-label="Resume task"
             />
           }
         >
-          <SquareIcon className="fill-current" />
+          <PlayIcon className="fill-current" />
         </TooltipTrigger>
-        <TooltipPopup>Stop the task</TooltipPopup>
+        <TooltipPopup>Resume where it left off</TooltipPopup>
       </Tooltip>
     </>
   );
