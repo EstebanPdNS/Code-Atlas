@@ -419,7 +419,7 @@ import {
   parseAtlasGoalCommand,
 } from "~/atlas/goal/goalPresentation";
 import { atlasActivityLabel } from "~/atlas/progress/claudeProgress";
-import { deriveCompactionFollowUps } from "~/atlas/compaction/compactionMessages";
+import { useCompactionFollowUps } from "~/atlas/compaction/useCompactionFollowUps";
 import { isCompactCommandMessage as isAtlasCompactCommand } from "@t3tools/shared/compactionFollowUps";
 import { useAtlasPausedTask } from "~/atlas/progress/pausedTask";
 import { useAtlasRunLines } from "~/atlas/progress/useAtlasRunLines";
@@ -2672,14 +2672,6 @@ export default function ChatView(props: ChatViewProps) {
     isConnecting ||
     isCompacting ||
     runlessWorkStartedAt !== null;
-  // Code Atlas: messages sent while the thread compacts read as sent, not queued.
-  const compactionFollowUps = deriveCompactionFollowUps({
-    projection: serverProjection,
-    visibleTurnItems: serverVisibleTurnItems,
-    optimisticMessages: optimisticUserMessages,
-    isCompacting,
-    editingRunId: queuedRunEdit.editingRunId,
-  });
   const atlasAgentSummary = useAtlasTerminalSummary(
     activeThread?.environmentId ?? activeProject?.environmentId ?? null,
     activeProject?.workspaceRoot ?? null,
@@ -2955,13 +2947,22 @@ export default function ChatView(props: ChatViewProps) {
           { ...codexFeedbackMessage(submission, "assistant"), runId: null },
         ],
   );
+  // Code Atlas: messages sent while the thread compacts read as sent, not queued.
+  const { followUps: compactionFollowUps, anchoredMessages: atlasAnchoredMessages } =
+    useCompactionFollowUps(
+      {
+        projection: serverProjection,
+        visibleTurnItems: serverVisibleTurnItems,
+        optimisticMessages: optimisticUserMessages,
+        isCompacting,
+        editingRunId: queuedRunEdit.editingRunId,
+      },
+      anchoredTimelineMessages,
+    );
   const serverTimelineEntries = useIncrementalTimelineEntries(activeThreadKey, {
     visibleTurnItems: serverVisibleTurnItems,
     optimisticMessages: optimisticUserMessages,
-    anchoredMessages:
-      compactionFollowUps.messages.length === 0
-        ? anchoredTimelineMessages
-        : [...anchoredTimelineMessages, ...compactionFollowUps.messages],
+    anchoredMessages: atlasAnchoredMessages,
     attachmentUrlById: timelineAttachmentUrlById,
     ...(serverProjection === null
       ? {}
