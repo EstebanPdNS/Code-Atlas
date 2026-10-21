@@ -1,9 +1,10 @@
-import { HTML_RENDER_DEFAULT_FONTS, type HtmlRenderTheme } from "@t3tools/shared/htmlRender";
+import type { HtmlRenderTheme } from "@t3tools/shared/htmlRender";
 import { BUILT_IN_THEME_IDS } from "@t3tools/shared/themePalettes";
 import { useEffect } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { render } from "../../test/render";
+import { DEFAULT_CODE_FONT_STACK, DEFAULT_SANS_FONT_STACK } from "../appearanceFonts";
 import {
   getStandardThemeColors,
   setEnvironmentThemes,
@@ -57,12 +58,27 @@ describe("useHtmlRenderTheme", () => {
           if (variable === "--radius" || variable.startsWith("--font-")) continue;
           expect(value, variable).toMatch(/^#[\da-f]{6}(?:[\da-f]{2})?$/i);
         }
-        expect(theme.variables["--font-sans"]).toBe(HTML_RENDER_DEFAULT_FONTS.sans);
-        expect(theme.variables["--font-mono"]).toBe(HTML_RENDER_DEFAULT_FONTS.mono);
-        expect(theme.variables["--radius"]).toBe("0.625rem");
+        expect(theme.variables["--font-sans"]).toBe(DEFAULT_SANS_FONT_STACK);
+        expect(theme.variables["--font-mono"]).toBe(DEFAULT_CODE_FONT_STACK);
+        expect(theme.variables["--radius"]).toBe(
+          preference === appearance ? "0.75rem" : "0.625rem",
+        );
       },
     );
   }
+
+  // Code Atlas: atlas.css restyles the default theme, so pages must not get
+  // the upstream #0a0a0a palette.
+  it.each([
+    ["dark", { "--background": "#262624", "--foreground": "#ecebe6", "--border": "#3a3935" }],
+    ["light", { "--background": "#faf9f5", "--foreground": "#1f1e1b", "--border": "#e6e3d8" }],
+  ] as const)("matches the Code Atlas default theme in %s mode", async (appearance, expected) => {
+    using _selection = setup(appearance, appearance);
+
+    const theme = await readRenderTheme();
+
+    expect(theme.variables).toMatchObject(expected);
+  });
 
   it("preserves alpha when converting a published palette", async () => {
     using _selection = setup("transparent", "dark");
