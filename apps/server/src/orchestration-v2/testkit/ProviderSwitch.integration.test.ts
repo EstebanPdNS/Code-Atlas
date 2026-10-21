@@ -50,6 +50,7 @@ import * as EventSink from "../EventSink.ts";
 import * as EventStore from "../EventStore.ts";
 import * as LegacyV1ThreadImporter from "../legacy/LegacyV1ThreadImporter.ts";
 import * as Orchestrator from "../Orchestrator.ts";
+import * as ContextOverflowRecoveryService from "../ContextOverflowRecoveryService.ts";
 import * as EffectWorker from "../EffectWorker.ts";
 import * as EffectOutbox from "../EffectOutbox.ts";
 import * as ProjectionMaintenance from "../ProjectionMaintenance.ts";
@@ -122,6 +123,8 @@ function makeTestAdapter(input: {
   readonly holdRunOrdinal?: number;
   readonly holdFirstTurn?: Deferred.Deferred<void>;
   readonly releaseFirstTurn?: Deferred.Deferred<void>;
+  /** False models a provider without native compaction. */
+  readonly compaction?: boolean;
 }): ProviderAdapter.ProviderAdapterV2["Service"] {
   return {
     instanceId: input.instanceId,
@@ -221,7 +224,9 @@ function makeTestAdapter(input: {
                     ),
                   ),
               }),
-          compactThread: (turnInput) => runtime.startTurn(turnInput),
+          ...(input.compaction === false
+            ? {}
+            : { compactThread: (turnInput) => runtime.startTurn(turnInput) }),
           startTurn: (turnInput) =>
             Effect.gen(function* () {
               if (
@@ -479,7 +484,9 @@ describe("orchestration v2 provider switching", () => {
             responseByRunOrdinal: {},
             capturedTurns,
             ...(scenario.includes("retry") || scenario.includes("unsent") ? { failStartOnce } : {}),
-            ...(replaceNative ? { failResumeOnce, nativeThreadGeneration: generation } : {}),
+            ...(replaceNative
+              ? { failResumeOnce, nativeThreadGeneration: generation, compaction: false }
+              : {}),
             ...(scenario.includes("reported-capacity")
               ? { initialContextUsage: { usedTokens: 999_999, maxTokens: 1_000_000 } }
               : {}),
@@ -734,19 +741,21 @@ describe("orchestration v2 provider switching", () => {
           }
           if (reasoningScenario && replaceNative) {
             const replaced = yield* orchestrator.getThreadProjection(threadId);
-            assert.equal(
-              replaced.runs.at(-1)?.status,
-              scenario.includes("small") ? "failed" : "completed",
-            );
+            // Even a window too small for any history takes the turn with the
+            // one-line recovery pointer instead of refusing it.
+            assert.equal(replaced.runs.at(-1)?.status, "completed");
             const target = replaced.providerThreads.find(
               (thread) => thread.providerInstanceId === CLAUDE_MODEL_SELECTION.instanceId,
             )!;
             assert.isNull(target.contextUsage);
             assert.equal(yield* Ref.get(generation), 2);
-            assert.equal(
-              (yield* Ref.get(capturedTurns)).at(-1)!.driver,
-              scenario.includes("small") ? CODEX_DRIVER : CLAUDE_DRIVER,
-            );
+            const lastTurn = (yield* Ref.get(capturedTurns)).at(-1)!;
+            assert.equal(lastTurn.driver, CLAUDE_DRIVER);
+            if (scenario.includes("small")) {
+              const delivered =
+                (yield* encodeJson(yield* Ref.get(injectedHistory))) + lastTurn.text;
+              assert.include(delivered, "t3_thread_read");
+            }
             return;
           }
           if (replaceNative) {
@@ -3209,6 +3218,8 @@ describe("orchestration v2 provider switching", () => {
             // The resumed native conversation is past the point where any
             // history envelope fits beside the reserve for new work.
             tokenUsageByRunOrdinal: { 1: { usedTokens: 240_000, maxTokens: 258_400 } },
+            // Replacement is the last resort when native compaction is unavailable.
+            compaction: false,
           }),
           makeTestAdapter({
             instanceId: ProviderInstanceId.make("claudeAgent"),
@@ -3305,6 +3316,253 @@ describe("orchestration v2 provider switching", () => {
         assert.include(turns[2]?.text ?? "", "codex before switch");
         assert.include(turns[2]?.text ?? "", "claude switched response");
         assert.include(turns[2]?.text ?? "", returnPrompt);
+      }),
+    ),
+  );
+
+  it.live.each([
+    { name: "without native compaction", compaction: false },
+    { name: "with native compaction", compaction: true },
+  ])("recovers a measured native thread too full for the next message $name", ({ compaction }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const cwd = yield* checkpointWorkspace(`full-native-${compaction ? "compact" : "replace"}`);
+        const capturedTurns = yield* Ref.make<ReadonlyArray<CapturedTurn>>([]);
+        const generation = yield* Ref.make(0);
+        const layerDatabase = SqlitePersistence.layerMemory;
+        const layerRegistry = ProviderAdapterRegistry.layerFromAdapters([
+          makeTestAdapter({
+            instanceId: ProviderInstanceId.make("codex"),
+            driver: CODEX_DRIVER,
+            capabilities: CodexProviderCapabilitiesV2,
+            modelSelection: CODEX_MODEL_SELECTION,
+            responseByRunOrdinal: { 1: "codex before switch" },
+            capturedTurns,
+            nativeThreadGeneration: generation,
+            compaction,
+            // No handoff is pending; the native conversation alone leaves no room.
+            tokenUsageByRunOrdinal: {
+              1: { usedTokens: 250_000, maxTokens: 258_400 },
+              3: { usedTokens: 20_000, maxTokens: 258_400 },
+            },
+          }),
+        ]);
+        const projection = yield* Effect.gen(function* () {
+          const orchestrator = yield* Orchestrator.OrchestratorV2;
+          const eventSink = yield* EventSink.EventSinkV2;
+          yield* (yield* ContextOverflowRecoveryService.make).start();
+          const dispatch = (key: string, text: string) =>
+            orchestrator.dispatch({
+              type: "message.dispatch",
+              createdBy: "user",
+              creationSource: "web",
+              commandId: CommandId.make(`command:full-native:${key}`),
+              threadId,
+              messageId: MessageId.make(`message:full-native:${key}`),
+              text,
+              attachments: [],
+              modelSelection: CODEX_MODEL_SELECTION,
+              dispatchMode: { type: "start_immediately" },
+            });
+          yield* orchestrator.dispatch({
+            type: "thread.create",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:full-native:create"),
+            threadId,
+            projectId,
+            title: "Full native thread",
+            modelSelection: CODEX_MODEL_SELECTION,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+          });
+          yield* dispatch("first", firstPrompt);
+          yield* waitForIdle(threadId);
+          const afterSequence = yield* eventSink.latestSequence({ threadId });
+          yield* dispatch("second", returnPrompt);
+          // The resent message completing is the last step of native recovery.
+          yield* eventSink.stream({ threadId, afterSequence }).pipe(
+            Stream.filter(
+              ({ event }) =>
+                event.type === "run.updated" &&
+                event.payload.status === "completed" &&
+                (compaction
+                  ? event.payload.userMessageId.startsWith("context-overflow-retry:")
+                  : event.payload.userMessageId === MessageId.make("message:full-native:second")),
+            ),
+            Stream.runHead,
+          );
+          return yield* waitForIdle(threadId);
+        }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              ProviderReplayHarness.layerWithRegistry(
+                {
+                  name: `full-native-${compaction ? "compact" : "replace"}`,
+                  runtimePolicyOverride: {
+                    cwd,
+                    approvalPolicy: "never",
+                    sandboxPolicy: { type: "readOnly" },
+                  },
+                },
+                layerRegistry,
+                { databaseLayer: layerDatabase },
+              ),
+              ProjectionStore.layer.pipe(Layer.provide(layerDatabase)),
+            ),
+          ),
+        );
+        const turns = yield* Ref.get(capturedTurns);
+        const notices = projection.turnItems.flatMap((item) =>
+          item.type === "system_notice" ? [item.message] : [],
+        );
+        if (!compaction) {
+          assert.deepEqual(
+            projection.runs.map((run) => run.status),
+            ["completed", "completed"],
+          );
+          assert.equal(yield* Ref.get(generation), 2);
+          assert.equal(turns[1]?.nativeThreadId, `codex:${threadId}:1`);
+          assert.include(turns[1]?.text ?? "", "Context handoff (full_thread_summary):");
+          assert.include(turns[1]?.text ?? "", "codex before switch");
+          assert.include(turns[1]?.text ?? "", returnPrompt);
+          assert.lengthOf(notices, 1);
+          assert.include(notices[0]!, "fresh session");
+          return;
+        }
+        // Compaction comes first: the turn is refused, the native thread compacts,
+        // and the same message is sent again on the same native thread.
+        assert.deepEqual(
+          projection.runs.map((run) => run.status),
+          ["completed", "failed", "completed", "completed"],
+        );
+        const failure = projection.turnItems.find(
+          (item) => item.type === "error" && item.runId === projection.runs[1]!.id,
+        );
+        assert.equal(
+          failure?.type === "error" ? failure.failure.code : null,
+          "context_window_full",
+        );
+        assert.equal(yield* Ref.get(generation), 1);
+        assert.deepEqual(
+          turns.map((turn) => turn.nativeThreadId),
+          [`codex:${threadId}:0`, `codex:${threadId}:0`, `codex:${threadId}:0`],
+        );
+        assert.equal(turns[1]?.text, "/compact");
+        assert.include(turns[2]?.text ?? "", returnPrompt);
+        const resent = projection.messages.find(
+          (message) => message.id === projection.runs[3]!.userMessageId,
+        );
+        assert.equal(resent?.text, returnPrompt);
+        assert.deepEqual(notices, ["Code Atlas compacted the conversation to continue."]);
+      }),
+    ),
+  );
+
+  it.live("forks a source too full to copy natively onto a fresh thread with a summary", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const sourceThreadId = ThreadId.make("thread:full-fork:source");
+        const targetThreadId = ThreadId.make("thread:full-fork:target");
+        const cwd = yield* checkpointWorkspace("full-fork");
+        const capturedTurns = yield* Ref.make<ReadonlyArray<CapturedTurn>>([]);
+        const layerRegistry = ProviderAdapterRegistry.layerFromAdapters([
+          makeTestAdapter({
+            instanceId: ProviderInstanceId.make("codex"),
+            driver: CODEX_DRIVER,
+            capabilities: CodexProviderCapabilitiesV2,
+            modelSelection: CODEX_MODEL_SELECTION,
+            responseByRunOrdinal: { 1: "The release color is violet." },
+            capturedTurns,
+            // The adapter's forkThread is unimplemented: only the portable path succeeds.
+            tokenUsageByRunOrdinal: { 1: { usedTokens: 250_000, maxTokens: 258_400 } },
+          }),
+        ]);
+        const target = yield* Effect.gen(function* () {
+          const orchestrator = yield* Orchestrator.OrchestratorV2;
+          yield* orchestrator.dispatch({
+            type: "thread.create",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:full-fork:create"),
+            threadId: sourceThreadId,
+            projectId,
+            title: "Full fork source",
+            modelSelection: CODEX_MODEL_SELECTION,
+            runtimeMode: "full-access",
+            interactionMode: "default",
+            branch: null,
+            worktreePath: null,
+          });
+          yield* orchestrator.dispatch({
+            type: "message.dispatch",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:full-fork:source"),
+            threadId: sourceThreadId,
+            messageId: MessageId.make("message:full-fork:source"),
+            text: "Remember that the release color is violet.",
+            attachments: [],
+            modelSelection: CODEX_MODEL_SELECTION,
+            dispatchMode: { type: "start_immediately" },
+          });
+          yield* waitForIdle(sourceThreadId);
+          yield* orchestrator.dispatch({
+            type: "thread.fork",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:full-fork:fork"),
+            sourceThreadId,
+            targetThreadId,
+            sourcePoint: { type: "latest_stable" },
+            title: "Full fork target",
+          });
+          yield* orchestrator.dispatch({
+            type: "message.dispatch",
+            createdBy: "user",
+            creationSource: "web",
+            commandId: CommandId.make("command:full-fork:target"),
+            threadId: targetThreadId,
+            messageId: MessageId.make("message:full-fork:target"),
+            text: "What release color did we choose?",
+            attachments: [],
+            modelSelection: CODEX_MODEL_SELECTION,
+            dispatchMode: { type: "start_immediately" },
+          });
+          return yield* waitForIdle(targetThreadId);
+        }).pipe(
+          Effect.provide(
+            ProviderReplayHarness.layerWithRegistry(
+              {
+                name: "full-fork",
+                runtimePolicyOverride: {
+                  cwd,
+                  approvalPolicy: "never",
+                  sandboxPolicy: { type: "readOnly" },
+                },
+              },
+              layerRegistry,
+            ),
+          ),
+        );
+        assert.deepEqual(
+          target.runs.map((run) => run.status),
+          ["completed"],
+        );
+        const transfer = target.contextTransfers.find((candidate) => candidate.type === "fork");
+        assert.equal(transfer?.status, "resolved_portable");
+        assert.equal(transfer?.resolution?.strategy, "portable_context");
+        const last = (yield* Ref.get(capturedTurns)).at(-1)!;
+        assert.equal(last.threadId, targetThreadId);
+        assert.include(last.text, "Context handoff (full_thread_summary):");
+        assert.include(last.text, "The release color is violet.");
+        assert.isTrue(
+          target.turnItems.some(
+            (item) => item.type === "system_notice" && item.message.includes("forked conversation"),
+          ),
+        );
       }),
     ),
   );

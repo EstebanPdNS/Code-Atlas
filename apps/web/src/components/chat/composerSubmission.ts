@@ -34,12 +34,22 @@ export function submitComposerDraft(
   options: ComposerSubmissionInput & {
     event: ComposerSubmitEvent | undefined;
     onSend: (event?: ComposerSubmitEvent) => boolean | void;
+    /**
+     * Moves a draft over the character limit into a text attachment, as a large
+     * paste is. Returns false when it cannot, and the limit message shows instead.
+     */
+    foldOversizedPrompt?: (prompt: string) => boolean;
   },
 ): { validationMessage: string | null; didDispatch: boolean } {
   const validationMessage = getComposerSubmissionValidationMessage(options);
   if (validationMessage) {
     options.event?.preventDefault();
-    return { validationMessage, didDispatch: false };
+    // Only the draft itself can move into a file; composed context stays inline.
+    const folded =
+      options.submissionTarget === "provider-turn" &&
+      getComposerPromptLengthValidationMessage(options.prompt) !== null &&
+      options.foldOversizedPrompt?.(options.prompt) === true;
+    return { validationMessage: folded ? null : validationMessage, didDispatch: false };
   }
 
   if (options.onSend(options.event) === false) {

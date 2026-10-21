@@ -106,6 +106,59 @@ export function attachmentTokenAllowance(attachments: ReadonlyArray<ChatAttachme
 // One UTF-8 byte per token is deliberately pessimistic for byte-based tokenizers,
 // including multilingual text. It is not a tokenizer or a guarantee for arbitrary
 // custom models.
+function currentMessageCost(userText: string, attachments: ReadonlyArray<ChatAttachment>): number {
+  return Buffer.byteLength(JSON.stringify(userText)) + attachmentTokenAllowance(attachments);
+}
+
+/** The window the provider itself refuses past, ignoring its auto-compaction threshold. */
+function hardContextWindow(input: {
+  readonly providerThread: Pick<OrchestrationV2ProviderThread, "contextUsage">;
+  readonly modelContextWindow?: number | undefined;
+}): number {
+  const usage = input.providerThread.contextUsage;
+  return Math.min(
+    input.modelContextWindow ?? usage?.maxTokens ?? 128_000,
+    usage?.maxTokens ?? Infinity,
+  );
+}
+
+// Providers compact on their own at their threshold; a native thread is only
+// replaced when this turn would leave less than this much of the hard window.
+const NATIVE_OVERFLOW_RESERVE = 16_000;
+
+/**
+ * Whether a native thread whose measured occupancy is `usedTokens` cannot take
+ * this message without the provider refusing the prompt.
+ */
+export function nativeContextOverflows(input: {
+  readonly usedTokens: number;
+  readonly userText: string;
+  readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly providerThread: Pick<OrchestrationV2ProviderThread, "contextUsage">;
+  readonly modelContextWindow?: number | undefined;
+}): boolean {
+  return (
+    input.usedTokens > 0 &&
+    input.usedTokens +
+      currentMessageCost(input.userText, input.attachments) +
+      NATIVE_OVERFLOW_RESERVE >=
+      hardContextWindow(input)
+  );
+}
+
+/**
+ * Room the current message leaves in an empty native thread. Negative only
+ * when nothing, not even a fresh thread, can take this message.
+ */
+export function messageHeadroom(input: {
+  readonly userText: string;
+  readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly providerThread: Pick<OrchestrationV2ProviderThread, "contextUsage">;
+  readonly modelContextWindow?: number | undefined;
+}): number {
+  return hardContextWindow(input) - currentMessageCost(input.userText, input.attachments);
+}
+
 export function handoffBudget(input: {
   readonly tokenCap: number;
   readonly userText: string;
@@ -115,14 +168,9 @@ export function handoffBudget(input: {
   readonly modelContextWindow?: number | undefined;
 }): number {
   const usage = input.providerThread.contextUsage;
-  const window = Math.min(
-    input.modelContextWindow ?? usage?.maxTokens ?? 128_000,
-    usage?.maxTokens ?? Infinity,
-    usage?.autoCompactThreshold ?? Infinity,
-  );
+  const window = Math.min(hardContextWindow(input), usage?.autoCompactThreshold ?? Infinity);
   const native = usage?.usedTokens ?? input.nativeContextEstimate;
-  const current =
-    Buffer.byteLength(JSON.stringify(input.userText)) + attachmentTokenAllowance(input.attachments);
+  const current = currentMessageCost(input.userText, input.attachments);
   return Math.max(
     0,
     Math.min(
