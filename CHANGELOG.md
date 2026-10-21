@@ -2,15 +2,18 @@
 
 ## v1.3
 
-- When a conversation is too full to switch agents, Code Atlas compacts it and continues instead of failing.
+- Full access never stops for an approval.
+- A conversation that gets too full is compacted automatically and the message is sent again, instead of failing; very long messages become an attachment.
+- When the connection to this Mac drops, Code Atlas shows Reconnecting… and recovers by itself, also after sleep.
+- Codex follows the reasoning effort set in its config; Claude's Ultrathink uses maximum effort, and Opus, Fable and Sonnet 5.x start at High.
 - Subagents have names and faces: "Ronny is working on: …", with the model below.
-- The task list folds to the current steps and scrolls when long.
-- Claude Code's composer: one line with the controls below, ⏎ to send and the microphone beside it.
+- The task list is written in one step, folds to the current steps and scrolls when long.
+- Claude Code's composer: one line with the controls below, ⏎ to send, the microphone beside it, and the stop button while it works. A paused task shows Resume beside it; Stop really cancels it, and typing starts a new action.
 - The Context card shows Claude Code's full breakdown during long tasks, with its memory files.
 - Pinned threads show when they are working; only stopped threads turn gray. Drag to reorder them.
 - Agents use the in-app browser; links open there too. A new preview opens beside the details card.
 - The conversation lines up with the composer and no longer shows through below it.
-- Code Atlas instead of T3 everywhere in the app.
+- The macOS icon has Apple's exact size, and Code Atlas replaces T3 everywhere in the app.
 
 ## v1.2
 
