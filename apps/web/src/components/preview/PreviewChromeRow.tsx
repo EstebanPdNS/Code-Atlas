@@ -46,6 +46,8 @@ interface Props {
   pickDisabledReason?: string | undefined;
   trailingActions?: ReactNode;
   leadingActions?: ReactNode;
+  // Code Atlas: controls right after the address bar (the favorites star).
+  addressActions?: ReactNode;
 }
 
 const NOOP = () => {};
@@ -75,6 +77,7 @@ export function PreviewChromeRow({
   pickDisabledReason,
   trailingActions,
   leadingActions,
+  addressActions,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState(url);
@@ -215,6 +218,7 @@ export function PreviewChromeRow({
             </InputGroupAddon>
           ) : null}
         </InputGroup>
+        {addressActions}
 
         {onPickElement ? (
           <Tooltip>
