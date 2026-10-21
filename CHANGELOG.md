@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.3
+
+- When a conversation is too full to switch agents, Code Atlas compacts it and continues instead of failing.
+- Subagents have names and faces: "Ronny is working on: …", with the model below.
+- The task list folds to the current steps and scrolls when long.
+- Claude Code's composer: one line with the controls below, ⏎ to send and the microphone beside it.
+- The Context card shows Claude Code's full breakdown during long tasks, with its memory files.
+- Pinned threads show when they are working; only stopped threads turn gray. Drag to reorder them.
+- Agents use the in-app browser; links open there too. A new preview opens beside the details card.
+- The conversation lines up with the composer and no longer shows through below it.
+- Code Atlas instead of T3 everywhere in the app.
+
 ## v1.2
 
 - Plan first, on by default: Claude Code and Codex keep a task list for every request and check off each step (Settings → General → Plan first).
