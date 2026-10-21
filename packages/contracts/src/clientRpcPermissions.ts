@@ -10,6 +10,8 @@ import {
 } from "./auth.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { WS_METHODS } from "./rpc.ts";
+// Code Atlas: goal controls.
+import { THREAD_GOAL_WS_METHODS } from "./threadGoal.ts";
 
 /** Incremental client enforcement; the server still authorizes every request. */
 export const CLIENT_GUARDED_RPC_SCOPES = {
@@ -49,6 +51,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
+  // Code Atlas: goal controls.
+  [THREAD_GOAL_WS_METHODS.updateGoal]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationInstall]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.dictationStart]: AuthOrchestrationOperateScope,

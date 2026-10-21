@@ -5,6 +5,7 @@ import type {
   OrchestrationV2ThreadProjection,
   OrchestrationV2TurnItem,
 } from "@t3tools/contracts";
+import { keepContextBreakdown } from "@t3tools/contracts";
 import {
   createOrchestrationV2TurnItemVisibility,
   isOrchestrationV2TurnItemVisible,
@@ -294,20 +295,8 @@ export function applyOrchestrationV2ProjectionEvent(
     case "provider-turn.updated": {
       const current = base.providerTurns.find((turn) => turn.id === event.payload.id)?.tokenUsage;
       const next = event.payload.tokenUsage;
-      // Code Atlas: a provider sends its context breakdown only when it changes,
-      // so usage without one keeps the turn's last breakdown.
-      const tokenUsage =
-        next === undefined
-          ? current
-          : next.contextCategories !== undefined || current?.contextCategories === undefined
-            ? next
-            : {
-                ...next,
-                contextCategories: current.contextCategories,
-                ...(current.contextMemoryFiles === undefined
-                  ? {}
-                  : { contextMemoryFiles: current.contextMemoryFiles }),
-              };
+      // Code Atlas: usage without a breakdown keeps the turn's last one.
+      const tokenUsage = keepContextBreakdown(current, next);
       return {
         ...base,
         providerTurns: upsertEntity(base.providerTurns, {

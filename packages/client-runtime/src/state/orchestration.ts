@@ -1,4 +1,9 @@
-import { ORCHESTRATION_V2_WS_METHODS, type ThreadId } from "@t3tools/contracts";
+import {
+  ORCHESTRATION_V2_WS_METHODS,
+  // Code Atlas: goal controls.
+  THREAD_GOAL_WS_METHODS,
+  type ThreadId,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -95,6 +100,11 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
     stopWorkflow: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:orchestration:stop-workflow",
       tag: ORCHESTRATION_V2_WS_METHODS.stopWorkflow,
+    }),
+    // Code Atlas: Codex-style goal controls.
+    updateGoal: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:orchestration:update-goal",
+      tag: THREAD_GOAL_WS_METHODS.updateGoal,
     }),
     turnItem: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:turn-item",

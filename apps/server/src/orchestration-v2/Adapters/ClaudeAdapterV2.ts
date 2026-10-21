@@ -241,8 +241,9 @@ function claudeMessageInputTokens(usage: {
 
 /** Code Atlas: how often a long Claude turn refreshes its /context breakdown. */
 const CLAUDE_CONTEXT_BREAKDOWN_REFRESH_MS = 20_000;
-/** The context card lists at most this many memory files. */
+/** The context card lists at most this many memory files and skills. */
 const CLAUDE_CONTEXT_MEMORY_FILES_LIMIT = 20;
+const CLAUDE_CONTEXT_SKILLS_LIMIT = 40;
 
 /**
  * Code Atlas: adds Claude's /context categories, and its real auto-compact
@@ -256,7 +257,7 @@ export function withClaudeContextBreakdown<
     SDKControlGetContextUsageResponse,
     "categories" | "autoCompactThreshold" | "isAutoCompactEnabled"
   > &
-    Partial<Pick<SDKControlGetContextUsageResponse, "memoryFiles">>,
+    Partial<Pick<SDKControlGetContextUsageResponse, "memoryFiles" | "skills" | "totalTokens">>,
 ): Usage & {
   readonly contextCategories: ReadonlyArray<{
     readonly name: string;
@@ -264,7 +265,10 @@ export function withClaudeContextBreakdown<
     readonly kind: "used" | "free" | "buffer" | "deferred";
   }>;
   readonly contextMemoryFiles?: ReadonlyArray<{ readonly path: string; readonly tokens: number }>;
+  readonly contextSkills?: ReadonlyArray<{ readonly name: string; readonly tokens: number }>;
+  readonly contextBreakdownTotalTokens?: number;
 } {
+  const skills = breakdown.skills?.skillFrontmatter ?? [];
   return {
     ...withClaudeAutoCompactThreshold(usage, breakdown),
     contextCategories: breakdown.categories
@@ -280,6 +284,17 @@ export function withClaudeContextBreakdown<
             .slice(0, CLAUDE_CONTEXT_MEMORY_FILES_LIMIT)
             .map((file) => ({ path: file.path, tokens: Math.max(0, Math.round(file.tokens)) })),
         }
+      : {}),
+    ...(skills.length > 0
+      ? {
+          contextSkills: skills
+            .slice(0, CLAUDE_CONTEXT_SKILLS_LIMIT)
+            .map((skill) => ({ name: skill.name, tokens: Math.max(0, Math.round(skill.tokens)) })),
+        }
+      : {}),
+    // The card shows what the conversation added since as "Since last update".
+    ...(breakdown.totalTokens !== undefined && breakdown.totalTokens > 0
+      ? { contextBreakdownTotalTokens: Math.round(breakdown.totalTokens) }
       : {}),
   };
 }

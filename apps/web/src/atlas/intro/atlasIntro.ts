@@ -3,6 +3,7 @@
  * once per app launch (and on Replay); the in-page terminal hides while it
  * runs so the intro's camera can land exactly where the terminal sits.
  */
+import type { SourceControlDiscoveryResult } from "@t3tools/contracts";
 import { useSyncExternalStore } from "react";
 
 export type AtlasIntroStatus = "pending" | "playing" | "done";
@@ -14,9 +15,56 @@ export interface AtlasUsageEntry {
 }
 
 export interface AtlasWeekActivity {
-  readonly commits: number;
   readonly linesAdded: number;
   readonly linesRemoved: number;
+  /** Code Atlas turns that changed files; null when only git history is known. */
+  readonly turns: number | null;
+  /** The repository author's commits; null outside a repository. */
+  readonly commits: number | null;
+}
+
+/**
+ * Lines come from Code Atlas's own turn checkpoints, so projects without git,
+ * or with commits under another email, still count; git's lines are the
+ * fallback when no turn changed files this week.
+ */
+export function toAtlasWeekActivity(
+  discovery: SourceControlDiscoveryResult | null | undefined,
+): AtlasWeekActivity | null {
+  const turns = discovery?.turnActivity;
+  const git = discovery?.weeklyActivity;
+  if (turns !== undefined) {
+    return {
+      linesAdded: turns.linesAdded,
+      linesRemoved: turns.linesRemoved,
+      turns: turns.turns,
+      commits: git?.commits ?? null,
+    };
+  }
+  if (git === undefined) return null;
+  return {
+    linesAdded: git.linesAdded,
+    linesRemoved: git.linesRemoved,
+    turns: null,
+    commits: git.commits,
+  };
+}
+
+const countFormat = new Intl.NumberFormat("en-US");
+export function formatAtlasCount(value: number): string {
+  return countFormat.format(value);
+}
+
+/** "3 turns · 2 commits", naming only the counts that are known. */
+export function formatAtlasWeekCounts(week: AtlasWeekActivity): string {
+  const counts: string[] = [];
+  if (week.turns !== null) {
+    counts.push(`${formatAtlasCount(week.turns)} ${week.turns === 1 ? "turn" : "turns"}`);
+  }
+  if (week.commits !== null) {
+    counts.push(`${formatAtlasCount(week.commits)} ${week.commits === 1 ? "commit" : "commits"}`);
+  }
+  return counts.join(" · ");
 }
 
 export interface AtlasGitHubAccount {
@@ -28,7 +76,7 @@ export interface AtlasTerminalMeta {
   readonly projectName: string | null;
   readonly agents: readonly string[];
   readonly usage: readonly AtlasUsageEntry[];
-  /** Lines committed in the project this week; null outside a repository or while loading. */
+  /** Lines changed in the project this week; null when nothing is known or while loading. */
   readonly week: AtlasWeekActivity | null;
   readonly github: readonly AtlasGitHubAccount[];
 }

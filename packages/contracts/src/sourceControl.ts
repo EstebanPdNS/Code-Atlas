@@ -171,6 +171,15 @@ export const VcsWeeklyActivityResult = Schema.Struct({
 });
 export type VcsWeeklyActivityResult = typeof VcsWeeklyActivityResult.Type;
 
+/** Code Atlas: lines the project's turns changed in the last seven days, from their checkpoints. */
+export const TurnWeeklyActivityResult = Schema.Struct({
+  /** Turns whose checkpoint changed at least one file. */
+  turns: NonNegativeInt,
+  linesAdded: NonNegativeInt,
+  linesRemoved: NonNegativeInt,
+});
+export type TurnWeeklyActivityResult = typeof TurnWeeklyActivityResult.Type;
+
 /**
  * Code Atlas: discovery can also report `activityCwd`'s weekly commits, so the
  * new-thread terminal needs no RPC method of its own (the RPC group sits at
@@ -186,6 +195,8 @@ export const SourceControlDiscoveryResult = Schema.Struct({
   sourceControlProviders: Schema.Array(SourceControlProviderDiscoveryItem),
   /** Present when the request named an `activityCwd` inside a git repository. */
   weeklyActivity: Schema.optionalKey(VcsWeeklyActivityResult),
+  /** Present when `activityCwd` is a project's workspace root whose turns changed files this week. */
+  turnActivity: Schema.optionalKey(TurnWeeklyActivityResult),
 });
 export type SourceControlDiscoveryResult = typeof SourceControlDiscoveryResult.Type;
 

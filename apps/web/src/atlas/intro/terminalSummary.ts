@@ -6,7 +6,7 @@ import { useEnvironmentQuery } from "~/state/query";
 import { sourceControlEnvironment } from "~/state/sourceControl";
 
 import { atlasProviderLabel, useAtlasAgentProviders } from "../brand/agentProviders";
-import type { AtlasGitHubAccount, AtlasTerminalMeta } from "./atlasIntro";
+import { toAtlasWeekActivity, type AtlasGitHubAccount, type AtlasTerminalMeta } from "./atlasIntro";
 
 /** The GitHub logins source-control discovery reports, with their sign-in state. */
 export function toAtlasGitHubAccounts(
@@ -32,14 +32,14 @@ export function toAtlasGitHubAccounts(
 
 /**
  * Everything the terminal shows below the logo: installed agents and each
- * one's weekly usage (session lives in the Usage card), lines committed in the
- * project this week, and the GitHub accounts' sign-in state.
+ * one's weekly usage (session lives in the Usage card), lines the project's
+ * turns changed this week, and the GitHub accounts' sign-in state.
  */
 export function useAtlasTerminalSummary(
   environmentId: EnvironmentId | null,
   cwd: string | null,
 ): Omit<AtlasTerminalMeta, "projectName"> {
-  // One discovery call answers both the GitHub sign-in state and this week's commits.
+  // One discovery call answers the GitHub sign-in state and this week's turns and commits.
   const discovery = useEnvironmentQuery(
     environmentId === null
       ? null
@@ -58,7 +58,7 @@ export function useAtlasTerminalSummary(
   return {
     agents,
     usage,
-    week: discovery.data?.weeklyActivity ?? null,
+    week: toAtlasWeekActivity(discovery.data),
     github: toAtlasGitHubAccounts(discovery.data),
   };
 }

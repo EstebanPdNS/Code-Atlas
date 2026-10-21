@@ -1037,6 +1037,90 @@ it.effect.each([
   }),
 );
 
+// Code Atlas: goal card controls.
+it.effect.each(["updated", "no-goal", "no-session", "unsupported-runtime"] as const)(
+  "updates the goal of the active provider thread with state %s",
+  (state) =>
+    Effect.gen(function* () {
+      const threadId = ThreadId.make("thread:goal-update");
+      const providerThreadId = ProviderThreadId.make("provider-thread:goal-update");
+      const providerSessionId = ProviderSessionId.make("provider-session:goal-update");
+      const driver = ProviderDriverKind.make("codex");
+      const now = yield* DateTime.now;
+      const providerThread = {
+        id: providerThreadId,
+        driver,
+        providerSessionId,
+        appThreadId: threadId,
+        goal: state === "no-goal" ? null : { objective: "Ship it", status: "active" },
+        createdAt: now,
+        updatedAt: now,
+      } as unknown as OrchestrationV2ProviderThread;
+      const calls: Array<unknown> = [];
+      const runtime = {
+        driver,
+        providerSessionId,
+        ...(state === "unsupported-runtime"
+          ? {}
+          : {
+              updateGoal: (input: unknown) =>
+                Effect.sync(() => {
+                  calls.push(input);
+                }),
+            }),
+      } as unknown as ProviderAdapter.ProviderAdapterV2SessionRuntime;
+      const layerTest = ThreadManagementService.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(Orchestrator.OrchestratorV2)({
+              getThreadRecords: () =>
+                Effect.succeed({
+                  thread: {
+                    id: threadId,
+                    deletedAt: null,
+                    activeProviderThreadId: providerThreadId,
+                  },
+                  providerThreads: [providerThread],
+                } as unknown as OrchestrationV2ThreadProjection),
+            }),
+            Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({
+              get: () =>
+                Effect.succeed(state === "no-session" ? Option.none() : Option.some(runtime)),
+            }),
+          ),
+        ),
+        Layer.provide(ServerSettings.layerTest()),
+        Layer.provide(layerReceiptsTest),
+      );
+      const result = yield* Effect.gen(function* () {
+        const service = yield* ThreadManagementService.ThreadManagementService;
+        return yield* service
+          .updateGoal({ threadId, action: { type: "pause" } })
+          .pipe(Effect.result);
+      }).pipe(Effect.provide(Layer.merge(layerTest, ThreadCommandExecutor.layer)));
+
+      if (state === "updated") {
+        expect(result).toMatchObject({ _tag: "Success" });
+        expect(calls).toEqual([{ providerThread, action: { type: "pause" } }]);
+        return;
+      }
+      expect(result).toMatchObject({
+        _tag: "Failure",
+        failure: {
+          _tag: "OrchestrationV2UpdateGoalError",
+          threadId,
+          reason:
+            state === "no-goal"
+              ? "no-goal"
+              : state === "unsupported-runtime"
+                ? "unsupported"
+                : "unavailable",
+        },
+      });
+      expect(calls).toEqual([]);
+    }),
+);
+
 it.effect.each([
   { status: "completed" as const, settles: true },
   { status: "failed" as const, settles: false },

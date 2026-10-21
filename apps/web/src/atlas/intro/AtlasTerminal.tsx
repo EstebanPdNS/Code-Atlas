@@ -21,6 +21,8 @@ import { atlasProviderFill } from "../brand/providerColors";
 import { CODE_ATLAS_VERSION } from "../brand/version";
 import {
   ATLAS_SOUND_STORAGE_KEY,
+  formatAtlasCount,
+  formatAtlasWeekCounts,
   publishAtlasTerminalMeta,
   replayAtlasIntro,
   setAtlasIntroStatus,
@@ -95,11 +97,6 @@ const OVERLAY_FADE_MS = 160;
 const INTRO_SAFETY_TIMEOUT_MS = 15_000;
 // Well below the macOS window buttons, which sit over the fullscreen intro.
 const INTRO_COMMAND_TOP_PX = 104;
-
-const countFormat = new Intl.NumberFormat("en-US");
-function formatCount(value: number): string {
-  return countFormat.format(value);
-}
 
 function randomBetween(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
@@ -279,13 +276,14 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
               ) : (
                 <div className="grid gap-1 tabular-nums">
                   <p>
-                    <span className="text-success">+{formatCount(meta.week.linesAdded)}</span>
+                    <span className="text-success">+{formatAtlasCount(meta.week.linesAdded)}</span>
                     <span className="text-muted-foreground"> / </span>
-                    <span className="text-destructive">−{formatCount(meta.week.linesRemoved)}</span>
+                    <span className="text-destructive">
+                      −{formatAtlasCount(meta.week.linesRemoved)}
+                    </span>
+                    <span className="text-muted-foreground"> lines</span>
                   </p>
-                  <p className="text-muted-foreground">
-                    {`${formatCount(meta.week.commits)} ${meta.week.commits === 1 ? "commit" : "commits"}`}
-                  </p>
+                  <p className="text-muted-foreground">{formatAtlasWeekCounts(meta.week)}</p>
                 </div>
               )}
             </AtlasInfoCell>

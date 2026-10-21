@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { contextRows, formatContextShare, withContextTones } from "./contextBreakdown";
+import {
+  contextRows,
+  formatContextRowTokens,
+  formatContextShare,
+  withContextTones,
+} from "./contextBreakdown";
 
 const usage = {
   cachedInputTokens: null,
@@ -45,6 +50,57 @@ describe("contextRows", () => {
       10_000,
     );
     expect(rows.map((row) => row.name)).toEqual(["Messages", "Free space", "MCP tools (deferred)"]);
+  });
+
+  it("adds what usage grew by since the breakdown after the used rows, like Claude's /context", () => {
+    const contextCategories = [
+      { name: "Messages", tokens: 3_000, kind: "used" },
+      { name: "Memory files", tokens: 500, kind: "used" },
+      { name: "Autocompact buffer", tokens: 1_000, kind: "buffer" },
+      { name: "Free space", tokens: 5_500, kind: "free" },
+      { name: "System tools (deferred)", tokens: 900, kind: "deferred" },
+    ] as const;
+    const rows = contextRows(
+      { ...usage, usedTokens: 4_200, contextBreakdownTotalTokens: 3_500, contextCategories },
+      10_000,
+    );
+    expect(rows.map(({ name, tokens }) => [name, tokens])).toEqual([
+      ["Messages", 3_000],
+      ["Memory files", 500],
+      ["Since last update", 700],
+      ["Autocompact buffer", 1_000],
+      ["Free space", 5_500],
+      ["System tools (deferred)", 900],
+    ]);
+    // Nothing added, or usage that shrank, shows no row.
+    expect(
+      contextRows(
+        { ...usage, usedTokens: 3_400, contextBreakdownTotalTokens: 3_500, contextCategories },
+        10_000,
+      ).some((row) => row.name === "Since last update"),
+    ).toBe(false);
+  });
+
+  it("marks an estimated breakdown's used rows, not its free space", () => {
+    const rows = contextRows(
+      {
+        ...usage,
+        usedTokens: 2_000,
+        contextEstimated: true,
+        contextCategories: [
+          { name: "Messages", tokens: 1_200, kind: "used" },
+          { name: "System prompt & tools", tokens: 800, kind: "used" },
+          { name: "Free space", tokens: 8_000, kind: "free" },
+        ],
+      },
+      10_000,
+    );
+    expect(rows.map((row) => [row.name, row.estimated === true])).toEqual([
+      ["Messages", true],
+      ["System prompt & tools", true],
+      ["Free space", false],
+    ]);
+    expect(rows.map((row) => formatContextRowTokens(row))).toEqual(["≈1.2k", "≈800", "8k"]);
   });
 });
 

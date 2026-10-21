@@ -32,6 +32,7 @@ import * as GitCafeApi from "@t3tools/source-control-gitcafe/server/GitCafeApi";
 import * as GitCafeCredentials from "@t3tools/source-control-gitcafe/server/GitCafeCredentials";
 import * as ForgejoSourceControlProvider from "@t3tools/source-control-forgejo/server/ForgejoSourceControlProvider";
 import * as ForgejoPullRequestProvider from "@t3tools/source-control-forgejo/server/ForgejoPullRequestProvider";
+import * as ProjectTurnActivity from "../orchestration-v2/ProjectTurnActivity.ts";
 import * as SourceControlDiscovery from "./SourceControlDiscovery.ts";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 import * as ServerSourceControlHost from "./ServerSourceControlHost.ts";
@@ -141,6 +142,8 @@ it.effect("reports implemented tools separately from locally available executabl
     },
   } satisfies Partial<VcsProcess.VcsProcess["Service"]>;
   const layerTest = SourceControlDiscovery.layer.pipe(
+    // Only `discoverFor` with an `activityCwd` reads turn activity.
+    Layer.provide(Layer.mock(ProjectTurnActivity.ProjectTurnActivity)({})),
     Layer.provide(
       ServerConfig.layerTest(process.cwd(), {
         prefix: "t3-source-control-discovery-",
@@ -305,6 +308,8 @@ Logged in to gitlab.com as gitlab-user
     },
   } satisfies Partial<VcsProcess.VcsProcess["Service"]>;
   const layerTest = SourceControlDiscovery.layer.pipe(
+    // Only `discoverFor` with an `activityCwd` reads turn activity.
+    Layer.provide(Layer.mock(ProjectTurnActivity.ProjectTurnActivity)({})),
     Layer.provide(
       ServerConfig.layerTest(process.cwd(), {
         prefix: "t3-source-control-auth-discovery-",
@@ -636,7 +641,16 @@ it.effect("reads weekly activity once a minute and only with a configured author
       );
     },
   } satisfies Partial<VcsProcess.VcsProcess["Service"]>;
+  const turnActivity = new Map([
+    ["/repo/anonymous", { turns: 2, linesAdded: 40, linesRemoved: 5 }],
+  ]);
   const layerTest = SourceControlDiscovery.layer.pipe(
+    Layer.provide(
+      Layer.mock(ProjectTurnActivity.ProjectTurnActivity)({
+        weekly: (workspaceRoot) =>
+          Effect.succeed(Option.fromUndefinedOr(turnActivity.get(workspaceRoot))),
+      }),
+    ),
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-source-control-weekly-" })),
     Layer.provide(Layer.mock(VcsProcess.VcsProcess)(processMock)),
     Layer.provide(
@@ -659,6 +673,7 @@ it.effect("reads weekly activity once a minute and only with a configured author
     const discovery = yield* SourceControlDiscovery.SourceControlDiscovery;
     const mine = yield* discovery.discoverFor({ activityCwd: "/repo/mine" });
     assert.deepStrictEqual(mine.weeklyActivity, { commits: 3, linesAdded: 11, linesRemoved: 9 });
+    assert.isUndefined(mine.turnActivity);
     yield* discovery.discoverFor({ activityCwd: "/repo/mine" });
     assert.deepStrictEqual(gitCalls.toSorted(), ["config /repo/mine", "log /repo/mine"]);
     yield* TestClock.adjust("61 seconds");
@@ -666,5 +681,7 @@ it.effect("reads weekly activity once a minute and only with a configured author
     assert.lengthOf(gitCalls, 4);
     const anonymous = yield* discovery.discoverFor({ activityCwd: "/repo/anonymous" });
     assert.isUndefined(anonymous.weeklyActivity);
+    // Code Atlas: a project's own turn diffs count without a git author.
+    assert.deepStrictEqual(anonymous.turnActivity, { turns: 2, linesAdded: 40, linesRemoved: 5 });
   }).pipe(Effect.provide(layerTest));
 });

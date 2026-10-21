@@ -193,6 +193,8 @@ describe("applyOrchestrationV2ProjectionEvent", () => {
         ...running.tokenUsage!,
         contextCategories: [{ name: "Messages", tokens: 10, kind: "used" as const }],
         contextMemoryFiles: [{ path: "/w/CLAUDE.md", tokens: 4 }],
+        contextSkills: [{ name: "notes", tokens: 3 }],
+        contextBreakdownTotalTokens: 10,
       },
     };
     const update = (tokenUsage: typeof withBreakdown.tokenUsage | typeof running.tokenUsage) =>
@@ -214,6 +216,8 @@ describe("applyOrchestrationV2ProjectionEvent", () => {
       usedTokens: 20,
       contextCategories: withBreakdown.tokenUsage.contextCategories,
       contextMemoryFiles: withBreakdown.tokenUsage.contextMemoryFiles,
+      contextSkills: withBreakdown.tokenUsage.contextSkills,
+      contextBreakdownTotalTokens: 10,
     });
 
     const cleared = applyOrchestrationV2ProjectionEvent(
@@ -222,6 +226,8 @@ describe("applyOrchestrationV2ProjectionEvent", () => {
     );
     expect(cleared?.providerTurns[0]?.tokenUsage?.contextCategories).toEqual([]);
     expect(cleared?.providerTurns[0]?.tokenUsage?.contextMemoryFiles).toBeUndefined();
+    expect(cleared?.providerTurns[0]?.tokenUsage?.contextSkills).toBeUndefined();
+    expect(cleared?.providerTurns[0]?.tokenUsage?.contextBreakdownTotalTokens).toBeUndefined();
   });
 
   it("applies thread lifecycle payloads instead of leaving stale metadata", () => {

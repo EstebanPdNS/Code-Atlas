@@ -76,6 +76,9 @@ export interface ThreadDetailsPanelProps extends Pick<
   onDeleteProjectScript: (scriptId: string) => Promise<ProjectScriptActionResult>;
   /** Code Atlas cards below the workspace: context window and background work. */
   contextWindow?: ContextWindowSnapshot | null;
+  /** Code Atlas: the Context card's Compact session button. */
+  onCompactContext?: () => void;
+  compactContextDisabled?: boolean;
   backgroundTasks?: readonly OrchestrationV2PendingBackgroundTask[];
 }
 
@@ -189,7 +192,11 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
           </ThreadDetailsSection>
 
           {/* Code Atlas: Context and Usage always stay; a short window scrolls the card. */}
-          <AtlasContextSection contextWindow={props.contextWindow ?? null} />
+          <AtlasContextSection
+            contextWindow={props.contextWindow ?? null}
+            onCompactContext={props.onCompactContext}
+            compactDisabled={props.compactContextDisabled}
+          />
           <AtlasUsageSection environmentId={props.environmentId} />
           {showBackgroundTasks ? (
             <AtlasBackgroundSection

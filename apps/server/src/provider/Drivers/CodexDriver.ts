@@ -186,7 +186,11 @@ export const CodexDriver: ProviderDriver<
         enabled,
         config,
       },
-      { onUsageLimits: (update) => snapshot.applyUsageLimits(update) },
+      {
+        onUsageLimits: (update) => snapshot.applyUsageLimits(update),
+        // Code Atlas: the skills in the estimated context breakdown.
+        getProviderSnapshot: Effect.suspend(() => snapshot.getSnapshot),
+      },
     ).pipe(
       Effect.mapError(
         (cause) =>

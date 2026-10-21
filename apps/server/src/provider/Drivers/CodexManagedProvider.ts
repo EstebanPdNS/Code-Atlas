@@ -230,6 +230,8 @@ export const makeManagedCodexProvider = Effect.fn("makeManagedCodexProvider")(fu
   const orchestrationAdapter = yield* createCodexAdapterV2(input, {
     onUsageLimits: (update) => snapshot.applyUsageLimits(update),
     resolveRuntime: runtime.resolve,
+    // Code Atlas: the skills in the estimated context breakdown.
+    getProviderSnapshot: snapshot.getSnapshot,
   }).pipe(
     Effect.mapError(
       (cause) =>
