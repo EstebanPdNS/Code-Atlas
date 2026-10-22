@@ -377,6 +377,16 @@ it.layer(layerTest)("ProjectTurnActivity", (it) => {
         }),
       );
       assert.isTrue(Option.isNone(yield* activity.weekly("/work/unknown")));
+      // Every project at once (the Usage page): one file path per project.
+      assert.deepStrictEqual(
+        Option.map(yield* activity.weekly(null), (week) => ({
+          turns: week.turns,
+          linesAdded: week.linesAdded,
+          linesRemoved: week.linesRemoved,
+          filesChanged: week.filesChanged,
+        })),
+        Option.some({ turns: 4, linesAdded: 1021, linesRemoved: 1006, filesChanged: 3 }),
+      );
     }),
   );
 

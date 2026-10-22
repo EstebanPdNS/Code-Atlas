@@ -456,7 +456,12 @@ export function UsageProviderChart({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-2">
-        <div className="relative h-[var(--usage-chart-height,14rem)] w-14 shrink-0">
+        <div
+          // Code Atlas: the axis fades in afresh when the metric changes.
+          key={metric}
+          data-atlas-chart-axis
+          className="relative h-[var(--usage-chart-height,14rem)] w-14 shrink-0"
+        >
           {scale.labeled
             ? scale.ticks.map((tick) => (
                 <span
@@ -498,10 +503,14 @@ export function UsageProviderChart({
             );
           })}
 
+          {/* Code Atlas: each path also sets d as a style, so switching cost and
+              tokens morphs the curves (same points, new heights) instead of jumping. */}
           {paths.map(({ provider, loading, area }) => (
             <path
               key={provider}
               d={area}
+              data-atlas-chart-path
+              style={{ d: `path("${area}")` }}
               className={seriesClassName(loading)}
               fill={usageChartPaint(paintId, provider)}
               fillOpacity={0.12}
@@ -511,6 +520,8 @@ export function UsageProviderChart({
             <path
               key={provider}
               d={line}
+              data-atlas-chart-path
+              style={{ d: `path("${line}")` }}
               className={seriesClassName(loading)}
               fill="none"
               stroke={usageChartPaint(paintId, provider)}

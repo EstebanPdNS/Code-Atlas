@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off -- electron-builder loads this hook directly, outside any Effect runtime.
 // Code Atlas: an unsigned macOS build gets the stable local identity before
 // electron-builder zips it, so Screen Recording and Accessibility grants
 // survive updates. See code-atlas-sign.sh.

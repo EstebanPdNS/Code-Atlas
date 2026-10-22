@@ -114,6 +114,7 @@ import {
 import { USAGE_TABS, withoutLimitsTab } from "../../atlas/usage/usageTabs";
 import { UsageTokenEfficiency } from "../../atlas/usage/UsageTokenEfficiency";
 import { UsageTokenTypes } from "../../atlas/usage/UsageTokenTypes";
+import { UsageCodeActivity } from "../../atlas/usage/UsageCodeActivity";
 import { usageProviderFill } from "../../atlas/usage/usageProviderPaint";
 
 function isUsageMetric(value: string | null | undefined): value is UsageMetric {
@@ -704,6 +705,17 @@ function UsageOverview({
       .map((provider) => ({ kind: "usage" as const, provider })),
   ];
 
+  // Code Atlas: two placements under review. A: tokens by type beside the
+  // providers, the week's code below; B: the week's code beside the providers.
+  const atlasLayout = (() => {
+    try {
+      return window.localStorage.getItem("codeatlas:usage-layout") === "b" ? "b" : "a";
+    } catch {
+      return "a";
+    }
+  })();
+  const typesBesideProviders = atlasLayout === "a" && metric === "tokens";
+
   return (
     <div aria-busy={loadingPartial} className="flex flex-col gap-6">
       {sourceMessages.map((message) => (
@@ -826,6 +838,22 @@ function UsageOverview({
               </div>
             );
           })}
+          {/* Code Atlas: the space under the providers holds token types or the week's code. */}
+          {typesBesideProviders ? (
+            merged.totalTokens > 0 ? (
+              <div className={cn("pt-2", figureClass(loadingPartial))}>
+                <UsageTokenTypes
+                  label="Tokens by type"
+                  segments={tokenTypeSegments(merged)}
+                  format={formatTokens}
+                />
+              </div>
+            ) : null
+          ) : (
+            <div className="pt-2">
+              <UsageCodeActivity compact />
+            </div>
+          )}
         </div>
 
         {/* Code Atlas: a taller chart on wide windows. */}
@@ -889,12 +917,16 @@ function UsageOverview({
         >
           {metric === "tokens" ? (
             <>
-              {/* Code Atlas: a row per token type, as tall as the efficiency card beside it. */}
-              <UsageTokenTypes
-                label="Tokens by type"
-                segments={tokenTypeSegments(merged)}
-                format={formatTokens}
-              />
+              {/* Code Atlas: a row per token type (or the week's code), as tall as the efficiency card beside it. */}
+              {typesBesideProviders ? (
+                <UsageCodeActivity />
+              ) : (
+                <UsageTokenTypes
+                  label="Tokens by type"
+                  segments={tokenTypeSegments(merged)}
+                  format={formatTokens}
+                />
+              )}
               {/* Code Atlas: tokens per subscription dollar beside the token types. */}
               <UsageTokenEfficiency />
             </>
