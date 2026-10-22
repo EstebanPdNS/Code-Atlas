@@ -150,12 +150,8 @@ function deriveSelection(
   };
 }
 
-export function useUsage(
-  input: UsageSummaryInput,
-  selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null = null,
-  hiddenProviders: ReadonlySet<UsageProviderKind> = NO_HIDDEN_PROVIDERS,
-): UsageView {
-  const windowKey = JSON.stringify({
+function usageWindowKey(input: UsageSummaryInput): string {
+  return JSON.stringify({
     sinceDay: input.sinceDay,
     untilDay: input.untilDay,
     timeZone: input.timeZone,
@@ -163,6 +159,18 @@ export function useUsage(
     sinceTime: input.sinceTime,
     untilTime: input.untilTime,
   });
+}
+
+// Code Atlas: the Usage page preloads every period's window through this.
+export const usageWindowAtom = (input: UsageSummaryInput) =>
+  usageByWindowAtom(usageWindowKey(input));
+
+export function useUsage(
+  input: UsageSummaryInput,
+  selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null = null,
+  hiddenProviders: ReadonlySet<UsageProviderKind> = NO_HIDDEN_PROVIDERS,
+): UsageView {
+  const windowKey = usageWindowKey(input);
   const atom = usageByWindowAtom(windowKey);
   const environments = useAtomValue(atom);
   // The render-time sync below compares merged by identity, so the derivation is
