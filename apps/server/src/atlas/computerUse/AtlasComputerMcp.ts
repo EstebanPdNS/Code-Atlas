@@ -73,6 +73,13 @@ const TOOLS = [
     annotations: { readOnlyHint: true },
   },
   {
+    name: "computer_app_state",
+    description:
+      "See an app the way to operate it: a screenshot of its front window plus a numbered list of its accessible controls (buttons, fields, menus, links) with their labels and values. Start here; then click or set controls by their number.",
+    inputSchema: { type: "object", properties: targetProperties },
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: "computer_screenshot",
     description:
       "See an app's front window (or the whole main screen when no app is given) as an image. Coordinates for the other tools are pixels in the latest screenshot of that window.",
@@ -82,18 +89,34 @@ const TOOLS = [
   {
     name: "computer_click",
     description:
-      "Click at x, y (pixels in the latest screenshot of the window) with Claude's own cursor; the app stays where it is and the user keeps their pointer.",
+      "Click a control by its number from computer_app_state (preferred), or at x, y in pixels of the latest screenshot. Claude's own cursor shows the click; the app stays where it is and the user keeps their pointer.",
     inputSchema: {
       type: "object",
       properties: {
         ...targetProperties,
+        element: { type: "number", description: "A control's number from computer_app_state." },
         x: { type: "number" },
         y: { type: "number" },
         button: { type: "string", enum: ["left", "right"] },
         clicks: { type: "number", description: "1, 2 (double click) or 3." },
         ...screenshotAfter,
       },
-      required: ["x", "y"],
+      required: [],
+    },
+  },
+  {
+    name: "computer_set_value",
+    description:
+      "Set a text field's (or slider's) value directly by its number from computer_app_state, replacing what it holds. Faster and more reliable than clicking and typing.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...targetProperties,
+        element: { type: "number" },
+        text: { type: "string" },
+        ...screenshotAfter,
+      },
+      required: ["element", "text"],
     },
   },
   {
@@ -239,9 +262,35 @@ const SETTINGS_PANES = {
 const STALE_GRANT_HINT =
   "If Code Atlas already shows as on there, macOS still holds the permission of an older Code Atlas build: select Code Atlas, remove it with −, add it again with +, then quit and reopen Code Atlas.";
 
+interface AccessibleControl {
+  readonly role: string;
+  readonly label: string;
+  readonly value: string;
+  readonly actions: ReadonlyArray<string>;
+  readonly depth: number;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+function controlLine(index: number, control: AccessibleControl): string {
+  const role = control.role.replace(/^AX/u, "");
+  const label = control.label ? ` “${control.label}”` : "";
+  const value =
+    control.value && control.value !== control.label ? ` = ${JSON.stringify(control.value)}` : "";
+  const actions =
+    control.actions.length > 0
+      ? ` [${control.actions.map((action) => action.replace(/^AX/u, "").toLowerCase()).join(", ")}]`
+      : "";
+  return `${"  ".repeat(Math.min(control.depth, 6))}${index} ${role}${label}${value}${actions}`;
+}
+
 export function makeAtlasComputer(helper: string) {
   // The size of the latest screenshot of each window (key 0: the screen).
   const shots = new Map<number, { readonly width: number; readonly height: number }>();
+  // The controls listed by the latest computer_app_state of each window, in global points.
+  const controls = new Map<number, ReadonlyArray<AccessibleControl>>();
   // "Allow Once" answers last for this session; "Always Allow" is stored.
   const allowed = new Set<string>();
   const alwaysAllowed = readAlwaysAllowed();
@@ -445,6 +494,19 @@ export function makeAtlasComputer(helper: string) {
     return foreground ? "foreground" : "background";
   };
 
+  const controlCenter = (window: DesktopWindow, element: number) => {
+    const control = controls.get(window.windowId)?.[element];
+    if (control === undefined) {
+      throw new ComputerUseError(
+        `No control ${element} in the latest computer_app_state of ${window.app}; call computer_app_state again.`,
+      );
+    }
+    return {
+      x: Math.round(control.x + control.width / 2),
+      y: Math.round(control.y + control.height / 2),
+    };
+  };
+
   const callTool = async (name: string, args: Json): Promise<ToolContent[]> => {
     switch (name) {
       case "computer_windows": {
@@ -461,6 +523,44 @@ export function makeAtlasComputer(helper: string) {
         );
         return [{ type: "text", text: lines.length > 0 ? lines.join("\n") : "No windows found." }];
       }
+      case "computer_app_state": {
+        const window = await resolveTarget(args);
+        const shot = await screenshot(window);
+        await ensurePermission("accessibility");
+        const list =
+          ((
+            await callHelper([
+              "tree",
+              String(window.pid),
+              String(window.x),
+              String(window.y),
+              String(window.width),
+              String(window.height),
+            ])
+          ).elements as AccessibleControl[] | undefined) ?? [];
+        controls.set(window.windowId, list);
+        const text =
+          list.length > 0
+            ? `Controls of ${window.app} (click or set them by number):\n${list.map((control, index) => controlLine(index, control)).join("\n")}`
+            : `${window.app} exposes no accessible controls here (a game, an emulator or a canvas): work from the screenshot's pixel coordinates.`;
+        return [...shot, { type: "text", text }];
+      }
+      case "computer_set_value": {
+        const window = await resolveTarget(args);
+        await ensurePermission("accessibility");
+        const point = controlCenter(window, numberArg(args, "element"));
+        if (typeof args.text !== "string") throw new ComputerUseError("text must be a string.");
+        await glideTo(point);
+        cue(`click ${point.x} ${point.y}`);
+        await callHelper([
+          "setvalue",
+          String(window.pid),
+          String(point.x),
+          String(point.y),
+          args.text,
+        ]);
+        return afterAction(args, window, `Set control ${args.element} in ${window.app}.`);
+      }
       case "computer_screenshot": {
         if (args.app === undefined && args.windowId === undefined) {
           await approve("the whole screen");
@@ -471,11 +571,14 @@ export function makeAtlasComputer(helper: string) {
       case "computer_click": {
         const window = await resolveTarget(args);
         const mode = await prepareInput(window, args);
-        const point = toScreen(window, numberArg(args, "x"), numberArg(args, "y"));
+        const point =
+          typeof args.element === "number"
+            ? controlCenter(window, args.element)
+            : toScreen(window, numberArg(args, "x"), numberArg(args, "y"));
         const clicks = typeof args.clicks === "number" ? Math.round(args.clicks) : 1;
         await glideTo(point);
         cue(`click ${point.x} ${point.y}`);
-        await callHelper([
+        const clicked = await callHelper([
           "click",
           String(window.pid),
           String(window.windowId),
@@ -485,11 +588,10 @@ export function makeAtlasComputer(helper: string) {
           args.button === "right" ? "right" : "left",
           String(clicks),
         ]);
-        return afterAction(
-          args,
-          window,
-          `Clicked ${window.app} at (${args.x}, ${args.y}) (${mode}).`,
-        );
+        const target =
+          typeof args.element === "number" ? `control ${args.element}` : `(${args.x}, ${args.y})`;
+        const via = clicked.via === "accessibility" ? "accessibility" : mode;
+        return afterAction(args, window, `Clicked ${target} in ${window.app} (${via}).`);
       }
       case "computer_type": {
         const window = await resolveTarget(args);

@@ -13,6 +13,8 @@
 //   atlas-computer request <screen|accessibility>
 //   atlas-computer windows
 //   atlas-computer display
+//   atlas-computer tree <pid> <x> <y> <width> <height>
+//   atlas-computer setvalue <pid> <x> <y> <text>
 //   atlas-computer activate <pid>
 //   atlas-computer click <pid> <windowId> <background|foreground> <x> <y> <left|right> <count>
 //   atlas-computer drag <pid> <windowId> <mode> <x1> <y1> <x2> <y2>
@@ -110,6 +112,115 @@ func delivery(pidAt: Int, windowAt: Int?, modeAt: Int) -> Delivery {
     background: args.count > modeAt && args[modeAt] != "foreground")
 }
 
+// MARK: - Accessibility
+
+// Like Codex's computer use, background clicks and typing first go through the
+// app's accessibility tree: the control under the point is pressed, or the
+// focused field takes the text. Nothing moves and no event is synthesized;
+// apps without accessible controls (games, emulators) get events instead.
+
+/// Presses the accessible control at a global point, if the app has one there.
+func pressAccessibleControl(pid: pid_t, at point: CGPoint, action: String) -> Bool {
+  let app = AXUIElementCreateApplication(pid)
+  var hit: AXUIElement?
+  guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &hit) == .success,
+    let element = hit
+  else { return false }
+  var names: CFArray?
+  guard AXUIElementCopyActionNames(element, &names) == .success,
+    let actions = names as? [String], actions.contains(action)
+  else { return false }
+  return AXUIElementPerformAction(element, action as CFString) == .success
+}
+
+/// Inserts text at the caret of the app's focused field, if it accepts that.
+func insertIntoFocusedField(pid: pid_t, text: String) -> Bool {
+  let app = AXUIElementCreateApplication(pid)
+  var focused: CFTypeRef?
+  guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+    let value = focused, CFGetTypeID(value) == AXUIElementGetTypeID()
+  else { return false }
+  let element = value as! AXUIElement
+  var settable = DarwinBoolean(false)
+  guard AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
+    settable.boolValue
+  else { return false }
+  return AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFString) == .success
+}
+
+/// The window's accessible controls, front to back in reading order: what an
+/// agent can press or type into, with frames in global points. Text-less
+/// layout groups are walked through but not listed.
+func accessibleElements(pid: pid_t, near frame: CGRect, limit: Int = 400) -> [[String: Any]] {
+  let app = AXUIElementCreateApplication(pid)
+  func attribute(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
+  }
+  func text(_ element: AXUIElement, _ name: String) -> String {
+    guard let value = attribute(element, name) else { return "" }
+    if let string = value as? String { return string }
+    if let number = value as? NSNumber { return number.stringValue }
+    return ""
+  }
+  func rect(_ element: AXUIElement) -> CGRect? {
+    guard let position = attribute(element, kAXPositionAttribute),
+      let size = attribute(element, kAXSizeAttribute)
+    else { return nil }
+    var point = CGPoint.zero
+    var extent = CGSize.zero
+    AXValueGetValue(position as! AXValue, .cgPoint, &point)
+    AXValueGetValue(size as! AXValue, .cgSize, &extent)
+    return CGRect(origin: point, size: extent)
+  }
+  // The AX window whose frame matches the screen window.
+  let windows = (attribute(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+  let root =
+    windows.min { a, b in
+      let fa = rect(a) ?? .zero
+      let fb = rect(b) ?? .zero
+      return abs(fa.minX - frame.minX) + abs(fa.minY - frame.minY)
+        < abs(fb.minX - frame.minX) + abs(fb.minY - frame.minY)
+    } ?? app
+  var result: [[String: Any]] = []
+  var stack: [(AXUIElement, Int)] = [(root, 0)]
+  var visited = 0
+  while let (element, depth) = stack.popLast(), result.count < limit, visited < 4000 {
+    visited += 1
+    let role = text(element, kAXRoleAttribute)
+    let label = [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute]
+      .map { text(element, $0) }.first { !$0.isEmpty } ?? ""
+    let value = String(text(element, kAXValueAttribute).prefix(80))
+    var names: CFArray?
+    AXUIElementCopyActionNames(element, &names)
+    let actions = ((names as? [String]) ?? []).filter { !$0.hasPrefix("AXScroll") && $0 != "AXShowDefaultUI" }
+    if let frame = rect(element), frame.width > 1, frame.height > 1,
+      !label.isEmpty || !value.isEmpty || !actions.isEmpty || role == "AXTextField" || role == "AXTextArea",
+      role != "AXWindow", role != "AXApplication"
+    {
+      result.append([
+        "role": role, "label": label, "value": value, "actions": actions, "depth": depth,
+        "x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height,
+      ])
+    }
+    if depth < 30, let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] {
+      for child in children.reversed() { stack.append((child, depth + 1)) }
+    }
+  }
+  return result
+}
+
+/// Sets an accessible field's value (a text field, a slider), focusing it first.
+func setAccessibleValue(pid: pid_t, at point: CGPoint, text: String) -> Bool {
+  let app = AXUIElementCreateApplication(pid)
+  var hit: AXUIElement?
+  guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &hit) == .success,
+    let element = hit
+  else { return false }
+  AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+  return AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, text as CFString) == .success
+}
+
 // MARK: - Windows
 
 func windows() -> [[String: Any]] {
@@ -142,84 +253,107 @@ func windows() -> [[String: Any]] {
 
 // MARK: - Agent cursor
 
-/// The agent's own pointer: the classic macOS arrow with a dark rounded
-/// outline, filled with the agent's color (Claude's orange, Codex's violet). It
-/// glides to where the agent acts and presses with a ripple on clicks.
+/// The agent's own pointer, in a Liquid Glass style: a rounded arrow of soft
+/// colour (Claude's oranges, Codex's violets and pinks) under a white glass
+/// rim. It glides to where the agent acts and presses with a ripple on clicks.
 /// Click-through, above everything, on every Space, and left out of screen
 /// captures so the agent's screenshots show the app alone.
-func agentColor(_ agent: String) -> NSColor {
-  agent == "codex"
-    ? NSColor(calibratedRed: 0x8B / 255, green: 0x5C / 255, blue: 0xF6 / 255, alpha: 1)
-    : NSColor(calibratedRed: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255, alpha: 1)
+func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> NSColor {
+  NSColor(calibratedRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255, blue: CGFloat(hex & 0xFF) / 255, alpha: a)
+}
+
+/// Soft colour blobs laid over each other, like a mesh gradient.
+struct GlassPalette {
+  let tip: NSColor      // deep colour at the tip
+  let middle: NSColor   // saturated band through the body
+  let right: NSColor    // light toward the right point
+  let lower: NSColor    // pastel toward the tail
+  let rim: NSColor      // tint of the upper rim
+}
+
+let glassPalettes: [String: GlassPalette] = [
+  "claude": GlassPalette(tip: rgb(0xD94400), middle: rgb(0xEE5A1E), right: rgb(0xFFC86B), lower: rgb(0xF08A4C), rim: rgb(0xFFC94A)),
+  "codex": GlassPalette(tip: rgb(0x4A10D6), middle: rgb(0x8A35EE), right: rgb(0xD39CFF), lower: rgb(0xE05ADC), rim: rgb(0xC49BFF)),
+]
+
+/// The arrow: rounded tip up-left, a right point, a soft notch, a tail point.
+func glassPath(tip: CGPoint, scale s: CGFloat) -> NSBezierPath {
+  func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: tip.x + x * s, y: tip.y + y * s) }
+  let a = p(0, 0), b = p(22.5, 7.6), c = p(13.4, 14.2), d = p(7.9, 22.4)
+  let path = NSBezierPath()
+  path.move(to: CGPoint(x: (a.x + d.x) / 2, y: (a.y + d.y) / 2))
+  path.appendArc(from: a, to: b, radius: 3.6 * s)
+  path.appendArc(from: b, to: c, radius: 2.6 * s)
+  path.appendArc(from: c, to: d, radius: 1.6 * s)
+  path.appendArc(from: d, to: a, radius: 3.0 * s)
+  path.close()
+  return path
+}
+
+func blob(_ color: NSColor, at c: CGPoint, radius r: CGFloat, alpha: CGFloat = 1) {
+  NSGradient(colors: [color.withAlphaComponent(alpha), color.withAlphaComponent(alpha * 0.55), color.withAlphaComponent(0)],
+             atLocations: [0, 0.45, 1], colorSpace: .deviceRGB)!
+    .draw(fromCenter: c, radius: 0, toCenter: c, radius: r, options: [])
+}
+
+func drawGlassCursor(_ pal: GlassPalette, tip: CGPoint, scale s: CGFloat) {
+  let path = glassPath(tip: tip, scale: s)
+  func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: tip.x + x * s, y: tip.y + y * s) }
+  // A faint drop shadow keeps it readable on white.
+  NSGraphicsContext.saveGraphicsState()
+  let shadow = NSShadow(); shadow.shadowBlurRadius = 3 * s; shadow.shadowOffset = NSSize(width: 0, height: -1 * s)
+  shadow.shadowColor = NSColor.black.withAlphaComponent(0.12); shadow.set()
+  NSColor.white.setFill(); path.fill()
+  NSGraphicsContext.restoreGraphicsState()
+  // The colour body: a wash from the tip to the tail, then soft blobs.
+  NSGraphicsContext.saveGraphicsState()
+  path.addClip()
+  NSGradient(colors: [pal.tip, pal.middle, pal.lower, NSColor.white], atLocations: [0, 0.4, 0.72, 1], colorSpace: .deviceRGB)!
+    .draw(from: p(2, 2), to: p(10, 22), options: [.drawsBeforeStartingLocation, .drawsAfterEndingLocation])
+  blob(pal.right, at: p(19, 8.5), radius: 10 * s, alpha: 1)
+  blob(pal.right, at: p(13, 9), radius: 5 * s, alpha: 0.6)
+  blob(pal.middle, at: p(8.5, 11), radius: 6 * s, alpha: 0.9)
+  blob(pal.tip, at: p(3, 3), radius: 7 * s, alpha: 1)
+  blob(NSColor.white, at: p(8.5, 21), radius: 6 * s, alpha: 1)
+  // Glass: a thin white rim glowing inward from the edge.
+  let rim = NSShadow(); rim.shadowBlurRadius = 1.6 * s; rim.shadowOffset = .zero; rim.shadowColor = NSColor.white.withAlphaComponent(0.85)
+  rim.set()
+  NSColor.white.withAlphaComponent(0.8).setStroke()
+  path.lineWidth = 1.2 * s
+  path.stroke()
+  NSGraphicsContext.restoreGraphicsState()
+  // A tinted highlight right on the top edge.
+  NSGraphicsContext.saveGraphicsState()
+  path.addClip()
+  let top = NSBezierPath(); top.move(to: p(2.2, 0.75)); top.line(to: p(20.5, 6.92))
+  pal.rim.setStroke(); top.lineWidth = 1.3 * s; top.lineCapStyle = .round; top.stroke()
+  NSGraphicsContext.restoreGraphicsState()
 }
 
 final class CursorView: NSView {
   override var isFlipped: Bool { true }
-  // The arrow's tip inside the view; room around it for the outline, shadow and ripple.
-  static let tip = CGPoint(x: 12, y: 10)
-  var fill = agentColor("claude")
-  // Codex's arrow runs from cyan through blue to violet, like Codex's own cursor.
-  var gradient: NSGradient?
-
-  /// The system arrow's proportions at its usual size (about 20 points tall).
-  static func arrow(at tip: CGPoint) -> NSBezierPath {
-    let path = NSBezierPath()
-    path.move(to: tip)
-    path.line(to: CGPoint(x: tip.x + 0.6, y: tip.y + 17.5))
-    path.line(to: CGPoint(x: tip.x + 4.6, y: tip.y + 13.4))
-    path.line(to: CGPoint(x: tip.x + 12.6, y: tip.y + 12.6))
-    path.close()
-    path.lineJoinStyle = .round
-    path.lineCapStyle = .round
-    return path
-  }
+  // The arrow's tip inside the view; room around it for the shadow and ripple.
+  static let tip = CGPoint(x: 9, y: 8)
+  var palette = glassPalettes["claude"]!
 
   override func draw(_ dirtyRect: NSRect) {
-    let arrow = CursorView.arrow(at: CursorView.tip)
-    let shadow = NSShadow()
-    shadow.shadowBlurRadius = 2.5
-    shadow.shadowOffset = NSSize(width: 0, height: -1.5)
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
-    guard let context = NSGraphicsContext.current?.cgContext else { return }
-    NSGraphicsContext.saveGraphicsState()
-    shadow.set()
-    // One transparency layer, so the shadow falls once around the whole arrow.
-    context.beginTransparencyLayer(auxiliaryInfo: nil)
-    NSColor(calibratedWhite: 0.08, alpha: 1).setStroke()
-    arrow.lineWidth = 2.6
-    arrow.stroke()
-    if let gradient {
-      let tip = CursorView.tip
-      NSGraphicsContext.saveGraphicsState()
-      arrow.addClip()
-      gradient.draw(
-        from: tip, to: CGPoint(x: tip.x + 11, y: tip.y + 17), options: [.drawsBeforeStartingLocation, .drawsAfterEndingLocation])
-      NSGraphicsContext.restoreGraphicsState()
-    } else {
-      fill.setFill()
-      arrow.fill()
-    }
-    context.endTransparencyLayer()
-    NSGraphicsContext.restoreGraphicsState()
+    drawGlassCursor(palette, tip: CursorView.tip, scale: 1)
   }
 }
 
 final class AgentCursor {
   let window: NSWindow
   let view = CursorView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+  // Real Liquid Glass (macOS 26+) in the arrow's shape under the colour, so
+  // the cursor bends and frosts what is behind it; the window server renders
+  // it, and the window is tiny and hidden when idle.
+  let container = NSView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
   var hideTimer: Timer?
   var shown = false
   var position: CGPoint?
 
   init(agent: String) {
-    view.fill = agentColor(agent)
-    if agent == "codex" {
-      view.gradient = NSGradient(colors: [
-        NSColor(calibratedRed: 0x38 / 255, green: 0xB6 / 255, blue: 0xFF / 255, alpha: 1),
-        NSColor(calibratedRed: 0x5B / 255, green: 0x6C / 255, blue: 0xFF / 255, alpha: 1),
-        NSColor(calibratedRed: 0xA8 / 255, green: 0x5C / 255, blue: 0xF7 / 255, alpha: 1),
-      ])
-    }
+    view.palette = glassPalettes[agent] ?? glassPalettes["claude"]!
     window = NSWindow(
       contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
     window.isOpaque = false
@@ -229,8 +363,26 @@ final class AgentCursor {
     window.level = .screenSaver
     window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
     window.sharingType = .none
-    window.contentView = view
-    view.wantsLayer = true
+    container.wantsLayer = true
+    if #available(macOS 26.0, *) {
+      let host = NSView(frame: container.bounds)
+      host.wantsLayer = true
+      let glass = NSGlassEffectView(frame: host.bounds)
+      glass.cornerRadius = 0
+      host.addSubview(glass)
+      // The layer is not flipped, unlike the view the arrow is drawn in.
+      let arrow = glassPath(tip: CursorView.tip, scale: 1)
+      var flip = AffineTransform(translationByX: 0, byY: container.bounds.height)
+      flip.scale(x: 1, y: -1)
+      arrow.transform(using: flip)
+      let mask = CAShapeLayer()
+      mask.path = arrow.cgPath
+      host.layer?.mask = mask
+      container.addSubview(host)
+      view.alphaValue = 0.74
+    }
+    container.addSubview(view)
+    window.contentView = container
     window.alphaValue = 0
   }
 
@@ -266,7 +418,7 @@ final class AgentCursor {
 
   func click(at point: CGPoint) {
     move(to: point)
-    guard let layer = view.layer else { return }
+    guard let layer = container.layer else { return }
     // The layer is not flipped: the tip sits `tip.y` below the top edge.
     let tipInLayer = CGPoint(x: CursorView.tip.x, y: view.frame.height - CursorView.tip.y)
     let ring = CAShapeLayer()
@@ -275,8 +427,8 @@ final class AgentCursor {
       ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2),
       transform: nil)
     ring.position = tipInLayer
-    ring.fillColor = view.fill.withAlphaComponent(0.35).cgColor
-    ring.strokeColor = view.fill.cgColor
+    ring.fillColor = view.palette.middle.withAlphaComponent(0.3).cgColor
+    ring.strokeColor = view.palette.tip.withAlphaComponent(0.8).cgColor
     ring.lineWidth = 1.2
     layer.insertSublayer(ring, at: 0)
     let scale = CABasicAnimation(keyPath: "transform.scale")
@@ -389,6 +541,17 @@ case "display":
     "width": bounds.width, "height": bounds.height,
   ])
 
+case "tree":
+  // tree <pid> <x> <y> <width> <height>: the screen window's bounds pick the AX window.
+  let frame = CGRect(x: number(3), y: number(4), width: number(5), height: number(6))
+  emit(["ok": true, "elements": accessibleElements(pid: pid_t(number(2)), near: frame)])
+
+case "setvalue":
+  // setvalue <pid> <x> <y> <text>
+  guard args.count > 5 else { fail("No text.") }
+  let done = setAccessibleValue(pid: pid_t(number(2)), at: CGPoint(x: number(3), y: number(4)), text: args[5])
+  emit(["ok": done, "error": done ? "" : "That element does not take a value; click it and use computer_type."])
+
 case "activate":
   let pid = pid_t(number(2))
   guard let app = NSRunningApplication(processIdentifier: pid) else { fail("That app is not running.") }
@@ -402,6 +565,13 @@ case "click":
   let right = args.count > 7 && args[7] == "right"
   let count = max(1, min(3, Int(args.count > 8 ? number(8) : 1)))
   let button: CGMouseButton = right ? .right : .left
+  if target.background && count == 1
+    && pressAccessibleControl(
+      pid: target.pid, at: point, action: right ? kAXShowMenuAction : kAXPressAction)
+  {
+    emit(["ok": true, "via": "accessibility"])
+    exit(0)
+  }
   target.keepingUserPointer {
     target.mouse(.mouseMoved, point, button)
     pause(40)
@@ -462,6 +632,10 @@ case "key":
 case "type":
   let target = delivery(pidAt: 2, windowAt: nil, modeAt: 3)
   guard args.count > 4 else { fail("No text.") }
+  if target.background && insertIntoFocusedField(pid: target.pid, text: args[4]) {
+    emit(["ok": true, "via": "accessibility"])
+    exit(0)
+  }
   // In small chunks: some apps read only the first characters of one event.
   let units = Array(args[4].utf16)
   var index = 0
