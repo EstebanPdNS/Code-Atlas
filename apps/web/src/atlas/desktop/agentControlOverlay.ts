@@ -1,6 +1,6 @@
 /**
  * Code Atlas: while an agent drives an app on this Mac, the desktop shell
- * frames that app's window with an orange glow and a pill naming the agent,
+ * frames that app's window with a thin orange line and a pill naming the agent,
  * whose Stop pauses the thread's run (an interrupt, like ⏸).
  */
 import type {

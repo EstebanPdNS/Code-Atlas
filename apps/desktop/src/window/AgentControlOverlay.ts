@@ -8,12 +8,12 @@ import { AGENT_CONTROL_OVERLAY_EVENT_CHANNEL } from "../ipc/channels.ts";
 
 /**
  * Code Atlas: while an agent drives another app (computer use, a desktop
- * driver, or an app a long command launched), an orange glow frames that
+ * driver, or an app a long command launched), a thin orange line frames that
  * app's front window and a pill over its top edge names the agent, with Stop.
  *
  * Both overlays sit directly above the target window in z-order (not always
  * on top), so windows in front of the target cover them as they cover the
- * target. They are click-through (the glow) or outside the window (the pill),
+ * target. They are click-through (the frame) or outside the window (the pill),
  * never take focus, and are left out of screen captures: the agent's own
  * screenshots show the app as it is.
  */
@@ -146,22 +146,21 @@ function run(argv) {
   }
 }`;
 
-// The glow extends past the window edge by this much on every side.
-const GLOW_MARGIN = 18;
+// The frame's line sits just outside the window edge, so it never covers content.
+const FRAME_LINE = 2;
 const PILL_HEIGHT = 30;
 const PILL_GAP = 8;
 const PILL_DEFAULT_WIDTH = 380;
 
-// Three pulses announce the glow, then it rests at full strength: a
-// continuous animation would keep the compositor busy for the whole task.
-const GLOW_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
+// A solid line with the macOS window's corner radius; it fades in once and
+// then stays still, so nothing repaints while the agent works.
+const FRAME_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-.glow{position:absolute;inset:${GLOW_MARGIN - 2}px;border-radius:14px;border:2px solid rgba(255,173,102,.95);
-box-shadow:0 0 22px 6px rgba(247,148,67,.55),inset 0 0 18px 2px rgba(247,148,67,.3);
-animation:pulse 2.4s ease-in-out 3}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-@media (prefers-reduced-motion:reduce){.glow{animation:none}}
-</style></head><body><div class="glow"></div></body></html>`;
+.frame{position:absolute;inset:0;border-radius:${12 + FRAME_LINE}px;border:${FRAME_LINE}px solid #f79443;
+animation:in 180ms cubic-bezier(.2,0,0,1)}
+@keyframes in{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){.frame{animation:none}}
+</style></head><body><div class="frame"></div></body></html>`;
 
 // Stop sets the page title: the main process reads it without a preload.
 const PILL_HTML = `<!doctype html><html><head><meta charset="utf-8"><title></title><style>
@@ -272,8 +271,8 @@ function makeOverlayWindow(html: string, options: { readonly clickable: boolean 
     movable: false,
     minimizable: false,
     maximizable: false,
-    // Left fullscreenable: `false` keeps the glow out of a full-screen app's Space.
-    // The glow reaches past the window, so past the screen edge for a window at it.
+    // Left fullscreenable: `false` keeps the frame out of a full-screen app's Space.
+    // The frame reaches past the window, so past the screen edge for a window at it.
     enableLargerThanScreen: true,
     focusable: false,
     skipTaskbar: true,
@@ -285,7 +284,13 @@ function makeOverlayWindow(html: string, options: { readonly clickable: boolean 
   overlayWindows.add(window);
   if (!options.clickable) window.setIgnoreMouseEvents(true);
   window.setContentProtection(true);
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Without skipTransformProcessType, Electron briefly turns Code Atlas into a
+  // background app to apply this, which throws its own full-screen window out
+  // of its Space and leaves it stuck there.
+  window.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  });
   void window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
   return window;
 }
@@ -312,7 +317,7 @@ interface Current {
 
 export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
   let current: Current | null = null;
-  let glow: Electron.BrowserWindow | null = null;
+  let frame: Electron.BrowserWindow | null = null;
   let pill: Electron.BrowserWindow | null = null;
   let pillLoaded = false;
   let pillAgent: string | null = null;
@@ -329,10 +334,10 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
       contents.send(AGENT_CONTROL_OVERLAY_EVENT_CHANNEL, event);
   };
 
-  const ensureGlow = () => {
-    if (glow && !glow.isDestroyed()) return glow;
-    glow = makeOverlayWindow(GLOW_HTML, { clickable: false });
-    return glow;
+  const ensureFrame = () => {
+    if (frame && !frame.isDestroyed()) return frame;
+    frame = makeOverlayWindow(FRAME_HTML, { clickable: false });
+    return frame;
   };
 
   const ensurePill = () => {
@@ -379,7 +384,7 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
 
   const hide = () => {
     orderedAbove = null;
-    if (glow && !glow.isDestroyed()) glow.hide();
+    if (frame && !frame.isDestroyed()) frame.hide();
     if (pill && !pill.isDestroyed()) pill.hide();
   };
 
@@ -388,15 +393,15 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
       hide();
       return;
     }
-    const glowWindow = ensureGlow();
+    const frameWindow = ensureFrame();
     const pillWindow = ensurePill();
-    glowWindow.setBounds({
-      x: Math.round(target.x - GLOW_MARGIN),
-      y: Math.round(target.y - GLOW_MARGIN),
-      width: Math.round(target.width + GLOW_MARGIN * 2),
-      height: Math.round(target.height + GLOW_MARGIN * 2),
+    frameWindow.setBounds({
+      x: Math.round(target.x - FRAME_LINE),
+      y: Math.round(target.y - FRAME_LINE),
+      width: Math.round(target.width + FRAME_LINE * 2),
+      height: Math.round(target.height + FRAME_LINE * 2),
     });
-    const shown = [glowWindow];
+    const shown = [frameWindow];
     if (pillWidth !== null) {
       const { workArea } = Electron.screen.getDisplayMatching(target);
       pillWindow.setBounds(pillBounds(target, workArea, pillWidth));
@@ -411,7 +416,7 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
       reorder = true;
     }
     if (!reorder) return;
-    // Right above the target: pill first, then the glow between it and the window.
+    // Right above the target: pill first, then the frame between it and the window.
     try {
       for (const window of shown.toReversed()) window.moveAbove(`window:${target.windowId}:0`);
     } catch {
@@ -466,13 +471,10 @@ export function makeAgentControlOverlay(enabled: boolean): AgentControlOverlay {
     hide();
   };
 
+  // The overlay windows are kept, hidden, for the next target: creating them
+  // again for every call made the frame flicker in and out between actions.
   const clear = () => {
     stopCurrent();
-    for (const window of [glow, pill]) {
-      if (window && !window.isDestroyed()) window.destroy();
-    }
-    glow = null;
-    pill = null;
   };
 
   const set = (target: AgentControlOverlayTarget | null, rendererId?: number) => {
