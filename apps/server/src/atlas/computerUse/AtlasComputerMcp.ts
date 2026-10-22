@@ -399,7 +399,7 @@ export function makeAtlasComputer(helper: string) {
     return [{ type: "text", text: summary } as ToolContent, ...(await screenshot(fresh))];
   };
 
-  // Claude's gray cursor, drawn by the helper; one process for the session.
+  // Claude's coral cursor, drawn by the helper; one process for the session.
   let cursor: NodeChildProcess.ChildProcess | null = null;
   let cursorAt: { readonly x: number; readonly y: number } | null = null;
   const cue = (line: string) => {
