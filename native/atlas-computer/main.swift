@@ -1,5 +1,5 @@
 // Code Atlas: the native half of Claude's computer use on this Mac, like
-// Codex's: Claude gets its own cursor, and its clicks and keys go straight
+// Codex's: the agent gets its own cursor, and its clicks and keys go straight
 // to the target app, so the user's own pointer and focus stay free. Apps that
 // ignore input sent that way (games, emulators) get it in the foreground
 // instead, and the user's pointer goes back where it was.
@@ -19,7 +19,7 @@
 //   atlas-computer scroll <pid> <windowId> <mode> <x> <y> <dx> <dy>
 //   atlas-computer key <pid> <mode> <keycode> <flags> <holdMs>
 //   atlas-computer type <pid> <mode> <text>
-//   atlas-computer cursor        (stdin: "move x y", "click x y", "hide", "quit")
+//   atlas-computer cursor <claude|codex>   (stdin: "move x y", "click x y", "hide", "quit")
 import AppKit
 import ApplicationServices
 import CoreGraphics
@@ -142,46 +142,52 @@ func windows() -> [[String: Any]] {
 
 // MARK: - Agent cursor
 
-/// Claude's own pointer, in Claude's coral (Codex draws its own cursor in its
-/// colors): an arrow that glides to where Claude acts and
-/// ripples on clicks. Click-through, above everything, on every Space, and
-/// left out of screen captures so Claude's screenshots show the app alone.
-let claudeCoral = NSColor(calibratedRed: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255, alpha: 1)
+/// The agent's own pointer: the classic macOS arrow with a dark rounded
+/// outline, filled with the agent's color (Claude's orange, Codex's violet). It
+/// glides to where the agent acts and presses with a ripple on clicks.
+/// Click-through, above everything, on every Space, and left out of screen
+/// captures so the agent's screenshots show the app alone.
+func agentColor(_ agent: String) -> NSColor {
+  agent == "codex"
+    ? NSColor(calibratedRed: 0x8B / 255, green: 0x5C / 255, blue: 0xF6 / 255, alpha: 1)
+    : NSColor(calibratedRed: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255, alpha: 1)
+}
 
 final class CursorView: NSView {
   override var isFlipped: Bool { true }
-  static let tip = CGPoint(x: 18, y: 18)
+  // The arrow's tip inside the view; room around it for the outline, shadow and ripple.
+  static let tip = CGPoint(x: 12, y: 10)
+  var fill = agentColor("claude")
 
-  // Codex's cursor shape: a rounded triangle pointing up-left with a short
-  // stem down-right, solid, with a soft shadow for contrast on any background.
+  /// The system arrow's proportions at its usual size (about 20 points tall).
+  static func arrow(at tip: CGPoint) -> NSBezierPath {
+    let path = NSBezierPath()
+    path.move(to: tip)
+    path.line(to: CGPoint(x: tip.x + 0.6, y: tip.y + 17.5))
+    path.line(to: CGPoint(x: tip.x + 4.6, y: tip.y + 13.4))
+    path.line(to: CGPoint(x: tip.x + 12.6, y: tip.y + 12.6))
+    path.close()
+    path.lineJoinStyle = .round
+    path.lineCapStyle = .round
+    return path
+  }
+
   override func draw(_ dirtyRect: NSRect) {
-    let tip = CursorView.tip
-    let head = NSBezierPath()
-    head.move(to: CGPoint(x: tip.x + 1.5, y: tip.y + 1.5))
-    head.line(to: CGPoint(x: tip.x + 20, y: tip.y + 7))
-    head.line(to: CGPoint(x: tip.x + 7, y: tip.y + 20))
-    head.close()
-    head.lineJoinStyle = .round
-    head.lineWidth = 3
-    let stem = NSBezierPath()
-    stem.move(to: CGPoint(x: tip.x + 12.5, y: tip.y + 12.5))
-    stem.line(to: CGPoint(x: tip.x + 21.5, y: tip.y + 21.5))
-    stem.lineCapStyle = .round
-    stem.lineWidth = 5.5
+    let arrow = CursorView.arrow(at: CursorView.tip)
     let shadow = NSShadow()
-    shadow.shadowBlurRadius = 3
-    shadow.shadowOffset = NSSize(width: 0, height: -1)
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.4)
+    shadow.shadowBlurRadius = 2.5
+    shadow.shadowOffset = NSSize(width: 0, height: -1.5)
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
     guard let context = NSGraphicsContext.current?.cgContext else { return }
     NSGraphicsContext.saveGraphicsState()
     shadow.set()
-    // One transparency layer, so the shadow falls once around the whole shape.
+    // One transparency layer, so the shadow falls once around the whole arrow.
     context.beginTransparencyLayer(auxiliaryInfo: nil)
-    claudeCoral.setFill()
-    claudeCoral.setStroke()
-    head.fill()
-    head.stroke()
-    stem.stroke()
+    NSColor(calibratedWhite: 0.08, alpha: 1).setStroke()
+    arrow.lineWidth = 2.6
+    arrow.stroke()
+    fill.setFill()
+    arrow.fill()
     context.endTransparencyLayer()
     NSGraphicsContext.restoreGraphicsState()
   }
@@ -189,11 +195,13 @@ final class CursorView: NSView {
 
 final class AgentCursor {
   let window: NSWindow
-  let view = CursorView(frame: NSRect(x: 0, y: 0, width: 52, height: 52))
+  let view = CursorView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
   var hideTimer: Timer?
   var shown = false
+  var position: CGPoint?
 
-  init() {
+  init(agent: String) {
+    view.fill = agentColor(agent)
     window = NSWindow(
       contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
     window.isOpaque = false
@@ -219,21 +227,21 @@ final class AgentCursor {
   func move(to point: CGPoint) {
     let target = origin(for: point)
     if !shown {
-      window.setFrameOrigin(target)
+      // Appears a little above and to the left, then glides in.
+      window.setFrameOrigin(CGPoint(x: target.x - 24, y: target.y + 24))
       window.orderFrontRegardless()
       shown = true
-      NSAnimationContext.runAnimationGroup { context in
-        context.duration = 0.18
-        window.animator().alphaValue = 1
-      }
     } else {
       window.orderFrontRegardless()
-      NSAnimationContext.runAnimationGroup { context in
-        context.duration = 0.32
-        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        window.animator().alphaValue = 1
-        window.animator().setFrameOrigin(target)
-      }
+    }
+    // Longer trips take a little longer, like a hand moving a mouse.
+    let distance = position.map { hypot($0.x - point.x, $0.y - point.y) } ?? 40
+    position = point
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = min(0.65, max(0.22, 0.18 + Double(distance) / 1800))
+      context.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0, 0.15, 1)
+      window.animator().alphaValue = 1
+      window.animator().setFrameOrigin(target)
     }
     scheduleHide()
   }
@@ -241,30 +249,39 @@ final class AgentCursor {
   func click(at point: CGPoint) {
     move(to: point)
     guard let layer = view.layer else { return }
+    // The layer is not flipped: the tip sits `tip.y` below the top edge.
+    let tipInLayer = CGPoint(x: CursorView.tip.x, y: view.frame.height - CursorView.tip.y)
     let ring = CAShapeLayer()
-    let radius: CGFloat = 14
+    let radius: CGFloat = 10
     ring.path = CGPath(
       ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2),
       transform: nil)
-    // The layer is not flipped: the tip sits `tip.y` below the top edge.
-    ring.position = CGPoint(x: CursorView.tip.x, y: view.frame.height - CursorView.tip.y)
-    ring.fillColor = claudeCoral.withAlphaComponent(0.35).cgColor
-    ring.strokeColor = NSColor.white.withAlphaComponent(0.8).cgColor
-    ring.lineWidth = 1
-    layer.addSublayer(ring)
+    ring.position = tipInLayer
+    ring.fillColor = view.fill.withAlphaComponent(0.35).cgColor
+    ring.strokeColor = view.fill.cgColor
+    ring.lineWidth = 1.2
+    layer.insertSublayer(ring, at: 0)
     let scale = CABasicAnimation(keyPath: "transform.scale")
-    scale.fromValue = 0.3
+    scale.fromValue = 0.2
     scale.toValue = 1
     let fade = CABasicAnimation(keyPath: "opacity")
     fade.fromValue = 1
     fade.toValue = 0
     let group = CAAnimationGroup()
     group.animations = [scale, fade]
-    group.duration = 0.4
+    group.duration = 0.45
     group.timingFunction = CAMediaTimingFunction(name: .easeOut)
     ring.opacity = 0
     ring.add(group, forKey: "ripple")
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { ring.removeFromSuperlayer() }
+    // The arrow itself presses in and springs back.
+    let press = CAKeyframeAnimation(keyPath: "transform.scale")
+    press.values = [1, 0.82, 1.04, 1]
+    press.keyTimes = [0, 0.35, 0.75, 1]
+    press.duration = 0.3
+    layer.anchorPoint = CGPoint(x: tipInLayer.x / view.frame.width, y: tipInLayer.y / view.frame.height)
+    layer.position = tipInLayer
+    layer.add(press, forKey: "press")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { ring.removeFromSuperlayer() }
   }
 
   func hide() {
@@ -279,7 +296,7 @@ final class AgentCursor {
     })
   }
 
-  // Fades out when Claude stops acting for a while.
+  // Fades out when the agent stops acting for a while.
   func scheduleHide() {
     hideTimer?.invalidate()
     hideTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
@@ -288,10 +305,10 @@ final class AgentCursor {
   }
 }
 
-func runCursor() -> Never {
+func runCursor(agent: String) -> Never {
   let app = NSApplication.shared
   app.setActivationPolicy(.accessory)
-  let cursor = AgentCursor()
+  let cursor = AgentCursor(agent: agent)
   // Ends with Code Atlas's MCP server: its stdin closes.
   Thread.detachNewThread {
     while let line = readLine() {
@@ -443,7 +460,7 @@ case "type":
   emit(["ok": true])
 
 case "cursor":
-  runCursor()
+  runCursor(agent: args.count > 2 ? args[2] : "claude")
 
 default:
   fail("Unknown command \(args[1]).")

@@ -1614,7 +1614,7 @@ export function claudeMcpQueryOverrides(input: {
         type: "stdio",
         command: computer.command,
         args: [...computer.args],
-        env: { ELECTRON_RUN_AS_NODE: "1" },
+        env: { ELECTRON_RUN_AS_NODE: "1", ATLAS_COMPUTER_AGENT: "claude" },
       },
     },
   };
