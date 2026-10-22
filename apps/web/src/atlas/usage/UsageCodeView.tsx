@@ -113,11 +113,11 @@ export function UsageCodeView({
                 <span aria-hidden className="flex h-1 overflow-hidden rounded-full bg-foreground/8">
                   <span
                     data-atlas-bar
-                    className="flex h-full"
+                    className="flex h-full transition-[width] duration-700 ease-out"
                     style={{ width: `${busiest === 0 ? 0 : (changed / busiest) * 100}%` }}
                   >
                     <span
-                      className="block h-full bg-success"
+                      className="block h-full bg-success transition-[width] duration-700 ease-out"
                       style={{
                         width: `${changed === 0 ? 0 : (project.linesAdded / changed) * 100}%`,
                       }}
@@ -146,26 +146,33 @@ export function UsageCodeView({
             {hourly ? "Hourly" : "Daily"} lines changed
           </h2>
           <UsageCodeChart periods={activity.periods ?? []} hourly={hourly} hour12={hour12} />
+          {/* Totals under the chart, beside the project list. */}
+          <section className="flex flex-col gap-2 pt-3">
+            <h2 className="text-sm font-medium text-foreground">Totals</h2>
+            <dl
+              className={cn(
+                "grid grid-cols-2 gap-x-6 gap-y-4 py-1 sm:grid-cols-3",
+                dimmed(loading),
+              )}
+            >
+              {[
+                { label: "Files changed", value: count(activity.filesChanged) },
+                { label: "Files read", value: count(activity.filesRead) },
+                { label: "Turns", value: count(activity.turns) },
+                { label: "Commands", value: count(activity.commands) },
+                { label: "Threads", value: count(activity.threads) },
+                { label: "Agent time", value: agentTime(activity.agentSeconds) },
+              ].map((metric) => (
+                <div key={metric.label} className="flex min-w-0 flex-col gap-0.5">
+                  <dt className="text-xs text-muted-foreground">{metric.label}</dt>
+                  <dd className="text-base font-medium text-foreground tabular-nums">
+                    {metric.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </section>
         </div>
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-foreground">Totals</h2>
-        <dl className={cn("grid grid-cols-2 gap-x-6 gap-y-4 py-1 md:grid-cols-6", dimmed(loading))}>
-          {[
-            { label: "Files changed", value: count(activity.filesChanged) },
-            { label: "Files read", value: count(activity.filesRead) },
-            { label: "Turns", value: count(activity.turns) },
-            { label: "Commands", value: count(activity.commands) },
-            { label: "Threads", value: count(activity.threads) },
-            { label: "Agent time", value: agentTime(activity.agentSeconds) },
-          ].map((metric) => (
-            <div key={metric.label} className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-xs text-muted-foreground">{metric.label}</dt>
-              <dd className="text-base font-medium text-foreground tabular-nums">{metric.value}</dd>
-            </div>
-          ))}
-        </dl>
       </section>
     </div>
   );
