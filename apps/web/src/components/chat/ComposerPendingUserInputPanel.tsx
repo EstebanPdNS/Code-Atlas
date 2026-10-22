@@ -177,73 +177,59 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
     return null;
   }
 
+  // Code Atlas: questions read like Claude Code's prompt cards: the question
+  // on a header strip, the options below it, then Skip (Esc) and the
+  // composer's Next or Submit (⌘↩) in a footer.
+  const dismiss = () => onDismiss(prompt.requestId);
+  const canSubmit = progress.canAdvance && !responseDisabled;
   return (
     <Collapsible
+      data-atlas-question
       open={!isCollapsed}
       onOpenChange={(open) => {
         setCollapsedQuestionId(open ? null : activeQuestion.id);
       }}
     >
-      <CollapsibleTrigger
-        render={<ComposerBanner.Row render={<button type="button" />} />}
-        title={
-          isCollapsed ? "Show the question and its options" : "Hide the question and its options"
-        }
-        data-pending-user-input-toggle={isCollapsed ? "collapsed" : "expanded"}
-      >
-        <ComposerBanner.Icon />
-        <ComposerBanner.Content>
-          <span className="shrink-0 font-medium text-muted-foreground">
-            {activeQuestion.header}
-          </span>
+      <AtlasQuestionKeys
+        enabled={!isCollapsed}
+        onEscape={prompt.dismissible && !isResponding ? dismiss : null}
+        onSubmit={canSubmit ? onAdvance : null}
+      />
+      <div data-atlas-question-head>
+        <div className="min-w-0 flex-1">
           {isCollapsed ? (
-            <span className="min-w-0 flex-1 truncate text-secondary-label">
-              {activeQuestion.question}
-            </span>
-          ) : null}
-        </ComposerBanner.Content>
-        <ComposerBanner.Actions>
+            <span className="block truncate">{activeQuestion.question}</span>
+          ) : (
+            <ChatMarkdown text={activeQuestion.question} cwd={cwd} threadRef={threadRef} />
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           {prompt.questions.length > 1 ? (
             <span className="text-3xs font-medium text-muted-foreground tabular-nums">
               {questionIndex + 1}/{prompt.questions.length}
             </span>
           ) : null}
-          <ComposerBanner.ToggleIcon expanded={!isCollapsed} />
-          {prompt.dismissible ? (
-            <ComposerBanner.Dismiss
-              render={<span role="button" tabIndex={0} />}
-              aria-label="Dismiss question without answering"
-              title="Dismiss question without answering"
-              disabled={isResponding}
-              data-pending-user-input-dismiss
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onDismiss(prompt.requestId);
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                event.stopPropagation();
-                onDismiss(prompt.requestId);
-              }}
-            />
-          ) : null}
-        </ComposerBanner.Actions>
-      </CollapsibleTrigger>
+          <CollapsibleTrigger
+            render={<button type="button" data-atlas-question-toggle />}
+            title={
+              isCollapsed
+                ? "Show the question and its options"
+                : "Hide the question and its options"
+            }
+            aria-label={isCollapsed ? "Show options" : "Hide options"}
+            data-pending-user-input-toggle={isCollapsed ? "collapsed" : "expanded"}
+          >
+            <ComposerBanner.ToggleIcon expanded={!isCollapsed} />
+          </CollapsibleTrigger>
+        </div>
+      </div>
       <CollapsiblePanel>
         <ComposerBanner.Scroll>
-          <ComposerBanner.Body className="pe-1 pb-1 wrap-anywhere">
-            <ChatMarkdown
-              text={activeQuestion.question}
-              cwd={cwd}
-              threadRef={threadRef}
-              className="text-foreground/85"
-            />
-            {activeQuestion.multiSelect ? (
-              <p className="mt-1 text-secondary-label text-xs">Select one or more options.</p>
+          <div data-atlas-question-body className="wrap-anywhere">
+            {activeQuestion.header && activeQuestion.header !== activeQuestion.question ? (
+              <p data-atlas-question-title>{activeQuestion.header}</p>
             ) : null}
-            <div className="mt-2 space-y-0.5">
+            <div className="space-y-0.5">
               {activeQuestion.options.map((option, index) => {
                 const optionValue = option.value ?? option.label;
                 const isOptimisticallySelected =
@@ -252,53 +238,107 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                 const isSelected =
                   isOptimisticallySelected || draftSelectedOptions?.[index] === true;
                 const shortcutKey = index < 9 ? index + 1 : null;
-                const className = cn(
-                  "group flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/25",
-                  isSelected
-                    ? "bg-muted/55 text-foreground"
-                    : "bg-transparent text-foreground/85 hover:bg-muted/30",
-                  (disabled || isResponding) && "opacity-50 cursor-not-allowed",
-                  !disabled && !isResponding && "cursor-pointer",
-                );
-                const content = (
-                  <>
-                    <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+                return (
+                  <button
+                    key={`${activeQuestion.id}:${optionValue}`}
+                    type="button"
+                    data-atlas-question-option
+                    data-selected={isSelected ? "" : undefined}
+                    disabled={disabled || isResponding}
+                    onClick={() => {
+                      handleOptionSelection(activeQuestion.id, optionValue);
+                    }}
+                    className={cn(
+                      "group flex w-full items-center gap-3 text-left outline-none",
+                      (disabled || isResponding) && "cursor-not-allowed opacity-50",
+                      !disabled && !isResponding && "cursor-pointer",
+                    )}
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                       <span className="text-sm font-medium">{option.label}</span>
                       {option.description && option.description !== option.label ? (
-                        <span className="text-secondary-label text-2xs">{option.description}</span>
+                        <span className="text-secondary-label text-xs">{option.description}</span>
                       ) : null}
                     </div>
                     {isSelected ? (
                       <CheckIcon className="size-3.5 shrink-0 text-primary" />
                     ) : shortcutKey !== null ? (
-                      <kbd
-                        className={cn(
-                          "flex size-5 shrink-0 items-center justify-center text-3xs font-medium text-muted-foreground tabular-nums",
-                        )}
-                      >
-                        {shortcutKey}
-                      </kbd>
+                      <kbd data-atlas-keycap>{shortcutKey}</kbd>
                     ) : null}
-                  </>
-                );
-                return (
-                  <button
-                    key={`${activeQuestion.id}:${optionValue}`}
-                    type="button"
-                    disabled={disabled || isResponding}
-                    onClick={() => {
-                      handleOptionSelection(activeQuestion.id, optionValue);
-                    }}
-                    className={className}
-                  >
-                    {content}
                   </button>
                 );
               })}
             </div>
-          </ComposerBanner.Body>
+          </div>
         </ComposerBanner.Scroll>
+        <div data-atlas-question-foot>
+          <span className="min-w-0 truncate text-muted-foreground">
+            {activeQuestion.multiSelect ? "Select one or more" : "Or type your own answer below"}
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            {prompt.dismissible ? (
+              <button
+                type="button"
+                data-atlas-question-skip
+                data-pending-user-input-dismiss
+                aria-label="Skip: dismiss the question without answering"
+                disabled={isResponding}
+                onClick={dismiss}
+              >
+                Skip <kbd data-atlas-keycap>Esc</kbd>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-atlas-question-submit
+              disabled={!canSubmit}
+              onClick={onAdvance}
+            >
+              {isResponding ? "Submitting…" : progress.isLastQuestion ? "Submit" : "Next"}
+              <kbd data-atlas-keycap>⌘↩</kbd>
+            </button>
+          </div>
+        </div>
       </CollapsiblePanel>
     </Collapsible>
   );
 });
+
+/**
+ * Code Atlas: Esc skips and ⌘↩ submits from anywhere but a text field, where
+ * those keys keep their usual meaning (the composer sends on ↩ itself).
+ */
+function AtlasQuestionKeys(props: {
+  readonly enabled: boolean;
+  readonly onEscape: (() => void) | null;
+  readonly onSubmit: (() => void) | null;
+}) {
+  const onEscape = useEffectEvent(() => props.onEscape?.());
+  const onSubmit = useEffectEvent(() => props.onSubmit?.());
+  const hasEscape = props.onEscape !== null;
+  const hasSubmit = props.onSubmit !== null;
+  useEffect(() => {
+    if (!props.enabled || (!hasEscape && !hasSubmit)) return;
+    const handler = (event: globalThis.KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement &&
+          target.closest('[contenteditable]:not([contenteditable="false"])'))
+      ) {
+        return;
+      }
+      if (event.key === "Escape" && hasEscape) {
+        event.preventDefault();
+        onEscape();
+      } else if (event.key === "Enter" && event.metaKey && hasSubmit) {
+        event.preventDefault();
+        onSubmit();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [props.enabled, hasEscape, hasSubmit]);
+  return null;
+}

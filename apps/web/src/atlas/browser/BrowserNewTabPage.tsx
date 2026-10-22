@@ -1,5 +1,5 @@
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
-import { X } from "lucide-react";
+import { ClockIcon, type LucideIcon, ServerIcon, StarIcon, X } from "lucide-react";
 
 import { useFaviconForThreadUrl } from "~/browserFaviconStore";
 import { FaviconImage } from "~/components/preview/PreviewFaviconIcon";
@@ -7,7 +7,13 @@ import { PreviewLocalServerCard } from "~/components/preview/PreviewLocalServerC
 import { useDiscoveredLocalServers } from "~/components/preview/useDiscoveredLocalServers";
 import { DiscoveryList } from "~/components/ui/discovery-list";
 
-import { type BrowserSite, siteFaviconFallbackUrl, siteInitial, siteLabel } from "./browserSites";
+import {
+  type BrowserSite,
+  siteFaviconFallbackUrl,
+  siteHost,
+  siteInitial,
+  siteLabel,
+} from "./browserSites";
 import { useBrowserSitesStore } from "./browserSitesStore";
 
 interface Props {
@@ -32,6 +38,7 @@ export function BrowserNewTabPage({ threadRef, environmentId, configuredUrls, on
     <div data-atlas-newtab className="h-full min-h-0 overflow-y-auto">
       <div data-atlas-newtab-body>
         <SiteSection
+          icon={ClockIcon}
           title="Recents"
           hint="Pages you open show up here."
           sites={recents}
@@ -41,6 +48,7 @@ export function BrowserNewTabPage({ threadRef, environmentId, configuredUrls, on
           onRemove={removeRecent}
         />
         <SiteSection
+          icon={StarIcon}
           title="Favorites"
           hint="Star a page beside the address bar to keep it here."
           sites={favorites}
@@ -51,7 +59,11 @@ export function BrowserNewTabPage({ threadRef, environmentId, configuredUrls, on
         />
         {servers.length > 0 ? (
           <section data-atlas-newtab-section>
-            <h2 data-atlas-newtab-heading>Local servers</h2>
+            <h2 data-atlas-newtab-heading>
+              <ServerIcon aria-hidden />
+              Local servers
+              <span data-atlas-newtab-count>{servers.length}</span>
+            </h2>
             <DiscoveryList>
               {servers.map((server) => (
                 <PreviewLocalServerCard
@@ -71,6 +83,7 @@ export function BrowserNewTabPage({ threadRef, environmentId, configuredUrls, on
 }
 
 function SiteSection(props: {
+  readonly icon: LucideIcon;
   readonly title: string;
   readonly hint: string;
   readonly sites: ReadonlyArray<BrowserSite>;
@@ -79,9 +92,14 @@ function SiteSection(props: {
   readonly onOpen: (url: string) => void;
   readonly onRemove: (url: string) => void;
 }) {
+  const Icon = props.icon;
   return (
     <section data-atlas-newtab-section>
-      <h2 data-atlas-newtab-heading>{props.title}</h2>
+      <h2 data-atlas-newtab-heading>
+        <Icon aria-hidden />
+        {props.title}
+        {props.sites.length > 0 ? <span data-atlas-newtab-count>{props.sites.length}</span> : null}
+      </h2>
       {props.sites.length > 0 ? (
         <ul data-atlas-site-grid>
           {props.sites.map((site) => (
@@ -96,7 +114,10 @@ function SiteSection(props: {
           ))}
         </ul>
       ) : (
-        <p data-atlas-newtab-hint>{props.hint}</p>
+        <div data-atlas-newtab-empty>
+          <Icon aria-hidden />
+          <p data-atlas-newtab-hint>{props.hint}</p>
+        </div>
       )}
     </section>
   );
@@ -112,6 +133,7 @@ function SiteTile(props: {
   const { site } = props;
   const captured = useFaviconForThreadUrl(props.threadRef, site.url);
   const label = siteLabel(site);
+  const host = siteHost(site.url);
   return (
     <li data-atlas-site-tile>
       <button type="button" data-atlas-site-open onClick={() => props.onOpen(site.url)}>
@@ -121,7 +143,10 @@ function SiteTile(props: {
             fallback={<span data-atlas-site-letter>{siteInitial(site.url)}</span>}
           />
         </span>
-        <span data-atlas-site-title>{label}</span>
+        <span data-atlas-site-text>
+          <span data-atlas-site-title>{label}</span>
+          {host !== label ? <span data-atlas-site-host>{host}</span> : null}
+        </span>
       </button>
       <button
         type="button"
