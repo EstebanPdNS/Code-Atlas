@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.5
+
+- Code Atlas is signed with its own stable certificate instead of an ad-hoc signature, so macOS keeps Screen Recording and Accessibility across updates, and terminals, agents and computer-use helpers share that one permission. Allow Code Atlas once more after installing 1.5.
+- A window an agent uses gets a thin orange line and the pill above it; Code Atlas no longer leaves full screen when it appears, and the frame no longer flickers between actions.
+- Claude and Codex delegate to each other's models when that does the job better (Sol, Astra or Luna; Opus or Sonnet), use Luna for very small tasks, and Claude hands desktop-app work to Codex's computer use.
+- Agent questions are cards: the question on top, the options, then Skip (Esc) and Submit (⌘↩).
+- A message with only an image shows only the image.
+- Clicking a file an agent mentions shows it in Finder.
+- Subagent groups show each subagent's face; working dots use each agent's colors; the Usage page shows the Codex icon.
+- Pinned threads drop their pin icons.
+- The launch intro frames itself after the window settles and lands without a blink.
+- The browser's new tab shows Recents and Favorites as cards with each site's address.
+
 ## v1.4
 
 - When a model is at capacity, Code Atlas retries by itself every 10 seconds until it gets through; Retry now skips the wait and Stop ends it.
