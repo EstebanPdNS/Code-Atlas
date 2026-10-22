@@ -217,6 +217,97 @@ const workingRun = (
   ];
 };
 
+/** A finished run in a project without git: no checkpoint diff, only the agent's own work. */
+const plainRun = (
+  threadId: ThreadId,
+  input: {
+    readonly minutes: number;
+    readonly edits: ReadonlyArray<readonly [fileName: string, diffStr: string]>;
+    readonly commands: number;
+    readonly reads: ReadonlyArray<string>;
+  },
+): ReadonlyArray<OrchestrationV2DomainEvent> => {
+  ordinal += 1;
+  const runId = RunId.make(`run:${threadId}:${ordinal}`);
+  const nodeId = NodeId.make(`node:${threadId}:${ordinal}`);
+  const startedAt = daysAgo(1);
+  const completedAt = DateTime.makeUnsafe(NOW - 24 * 60 * 60 * 1000 + input.minutes * 60 * 1000);
+  const base = (index: number, title: string | null) => ({
+    id: TurnItemId.make(`plain:${ordinal}:${index}`),
+    threadId,
+    runId,
+    nodeId,
+    providerThreadId: null,
+    providerTurnId: null,
+    nativeItemRef: null,
+    parentItemId: null,
+    ordinal: index + 1,
+    status: "completed" as const,
+    title,
+    startedAt,
+    completedAt,
+    updatedAt: completedAt,
+  });
+  const items = [
+    ...input.edits.map(([fileName, diffStr]) => ({
+      type: "file_change" as const,
+      fileName,
+      diffStr,
+    })),
+    ...Array.from({ length: input.commands }, () => ({
+      type: "command_execution" as const,
+      input: "make",
+    })),
+    ...input.reads.map((path) => ({
+      type: "dynamic_tool" as const,
+      readTitle: `Read ${path}`,
+      toolName: "Read",
+      input: { file_path: path },
+    })),
+  ];
+  return [
+    {
+      id: EventId.make(`run:${ordinal}`),
+      type: "run.created",
+      threadId,
+      runId,
+      nodeId,
+      providerInstanceId,
+      occurredAt: startedAt,
+      payload: {
+        id: runId,
+        threadId,
+        ordinal,
+        providerInstanceId,
+        modelSelection: { instanceId: providerInstanceId, model: "gpt-5" },
+        providerThreadId: null,
+        userMessageId: MessageId.make(`message:${ordinal}`),
+        rootNodeId: nodeId,
+        activeAttemptId: null,
+        status: "completed",
+        requestedAt: startedAt,
+        startedAt,
+        completedAt,
+        checkpointId: null,
+        contextHandoffId: null,
+      },
+    },
+    ...items.map((item, index): OrchestrationV2DomainEvent => {
+      const { readTitle, ...fields } = item as typeof item & { readonly readTitle?: string };
+      return {
+        id: EventId.make(`plain:${ordinal}:${index}`),
+        type: "turn-item.updated",
+        threadId,
+        runId,
+        nodeId,
+        providerInstanceId,
+        occurredAt: completedAt,
+        payload: { ...base(index, readTitle ?? null), ...fields } as never,
+      };
+    }),
+  ];
+};
+
 it.layer(layerTest)("ProjectTurnActivity", (it) => {
   it.effect("sums this week's turn diffs for the project's live threads", () =>
     Effect.gen(function* () {
@@ -261,11 +352,29 @@ it.layer(layerTest)("ProjectTurnActivity", (it) => {
 
       assert.deepStrictEqual(
         yield* activity.weekly("/work/atlas"),
-        Option.some({ turns: 3, linesAdded: 22, linesRemoved: 7 }),
+        Option.some({
+          turns: 3,
+          linesAdded: 22,
+          linesRemoved: 7,
+          filesChanged: 2,
+          filesRead: 0,
+          commands: 0,
+          threads: 0,
+          agentSeconds: 0,
+        }),
       );
       assert.deepStrictEqual(
         yield* activity.weekly("/work/other"),
-        Option.some({ turns: 1, linesAdded: 999, linesRemoved: 999 }),
+        Option.some({
+          turns: 1,
+          linesAdded: 999,
+          linesRemoved: 999,
+          filesChanged: 1,
+          filesRead: 0,
+          commands: 0,
+          threads: 0,
+          agentSeconds: 0,
+        }),
       );
       assert.isTrue(Option.isNone(yield* activity.weekly("/work/unknown")));
     }),
@@ -295,7 +404,16 @@ it.layer(layerTest)("ProjectTurnActivity", (it) => {
       yield* Effect.forEach(events, projections.apply, { discard: true });
       assert.deepStrictEqual(
         yield* activity.weekly("/work/subagents"),
-        Option.some({ turns: 2, linesAdded: 16, linesRemoved: 5 }),
+        Option.some({
+          turns: 2,
+          linesAdded: 16,
+          linesRemoved: 5,
+          filesChanged: 1,
+          filesRead: 0,
+          commands: 0,
+          threads: 0,
+          agentSeconds: 0,
+        }),
       );
 
       // Working now: the parent and a subagent are editing, before any checkpoint.
@@ -309,7 +427,67 @@ it.layer(layerTest)("ProjectTurnActivity", (it) => {
       );
       assert.deepStrictEqual(
         yield* activity.weekly("/work/subagents"),
-        Option.some({ turns: 2, linesAdded: 19, linesRemoved: 7 }),
+        Option.some({
+          turns: 4,
+          linesAdded: 19,
+          linesRemoved: 7,
+          filesChanged: 2,
+          filesRead: 0,
+          commands: 0,
+          threads: 1,
+          agentSeconds: 0,
+        }),
+      );
+    }),
+  );
+  it.effect("reads a project without git from the agents' own work", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW);
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const activity = yield* ProjectTurnActivity.ProjectTurnActivity;
+      const project = ProjectId.make("project:plain");
+      yield* createProject(project, "/work/plain");
+      const main = ThreadId.make("thread:plain");
+      const helper = ThreadId.make("thread:plain-subagent");
+      yield* Effect.forEach(
+        [
+          thread(main, project),
+          // Without git the checkpoint records no files.
+          checkpoint(main, { daysAgo: 1, lines: [] }),
+          ...plainRun(main, {
+            minutes: 10,
+            edits: [
+              ["/work/plain/src/game.cpp", "@@ -1 +1,3 @@\n-a\n+b\n+c\n+d"],
+              ["/work/plain/src/game.cpp", "@@ -4 +4 @@\n-e\n+f"],
+              ["/work/plain/README.md", "@@ -0,0 +1,2 @@\n+# Title\n+Text"],
+            ],
+            commands: 3,
+            reads: ["/work/plain/src/game.cpp", "/work/plain/notes.md"],
+          }),
+          // A subagent's edits and commands count; its time is inside its parent's run.
+          thread(helper, project, { subagentOf: main }),
+          ...plainRun(helper, {
+            minutes: 4,
+            edits: [["/work/plain/src/audio.cpp", "@@ -1 +1 @@\n-x\n+y"]],
+            commands: 2,
+            reads: ["/work/plain/notes.md"],
+          }),
+        ],
+        projections.apply,
+        { discard: true },
+      );
+      assert.deepStrictEqual(
+        yield* activity.weekly("/work/plain"),
+        Option.some({
+          turns: 2,
+          linesAdded: 7,
+          linesRemoved: 3,
+          filesChanged: 3,
+          filesRead: 2,
+          commands: 5,
+          threads: 1,
+          agentSeconds: 600,
+        }),
       );
     }),
   );
