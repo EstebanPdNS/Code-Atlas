@@ -152,30 +152,38 @@ final class CursorView: NSView {
   override var isFlipped: Bool { true }
   static let tip = CGPoint(x: 18, y: 18)
 
+  // Codex's cursor shape: a rounded triangle pointing up-left with a short
+  // stem down-right, solid, with a soft shadow for contrast on any background.
   override func draw(_ dirtyRect: NSRect) {
     let tip = CursorView.tip
-    let arrow = NSBezierPath()
-    arrow.move(to: tip)
-    arrow.line(to: CGPoint(x: tip.x, y: tip.y + 21))
-    arrow.line(to: CGPoint(x: tip.x + 5, y: tip.y + 16.5))
-    arrow.line(to: CGPoint(x: tip.x + 8.5, y: tip.y + 24))
-    arrow.line(to: CGPoint(x: tip.x + 11.5, y: tip.y + 22.5))
-    arrow.line(to: CGPoint(x: tip.x + 8, y: tip.y + 15.5))
-    arrow.line(to: CGPoint(x: tip.x + 14.5, y: tip.y + 15.5))
-    arrow.close()
-    arrow.lineJoinStyle = .round
+    let head = NSBezierPath()
+    head.move(to: CGPoint(x: tip.x + 1.5, y: tip.y + 1.5))
+    head.line(to: CGPoint(x: tip.x + 20, y: tip.y + 7))
+    head.line(to: CGPoint(x: tip.x + 7, y: tip.y + 20))
+    head.close()
+    head.lineJoinStyle = .round
+    head.lineWidth = 3
+    let stem = NSBezierPath()
+    stem.move(to: CGPoint(x: tip.x + 12.5, y: tip.y + 12.5))
+    stem.line(to: CGPoint(x: tip.x + 21.5, y: tip.y + 21.5))
+    stem.lineCapStyle = .round
+    stem.lineWidth = 5.5
     let shadow = NSShadow()
     shadow.shadowBlurRadius = 3
     shadow.shadowOffset = NSSize(width: 0, height: -1)
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.4)
+    guard let context = NSGraphicsContext.current?.cgContext else { return }
     NSGraphicsContext.saveGraphicsState()
     shadow.set()
+    // One transparency layer, so the shadow falls once around the whole shape.
+    context.beginTransparencyLayer(auxiliaryInfo: nil)
     claudeCoral.setFill()
-    arrow.fill()
+    claudeCoral.setStroke()
+    head.fill()
+    head.stroke()
+    stem.stroke()
+    context.endTransparencyLayer()
     NSGraphicsContext.restoreGraphicsState()
-    NSColor.white.setStroke()
-    arrow.lineWidth = 1.5
-    arrow.stroke()
   }
 }
 
