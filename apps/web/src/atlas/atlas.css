@@ -1691,16 +1691,17 @@ span[data-atlas-hero-heading] {
   fill: var(--primary);
 }
 
-/* Usage chart: switching cost and tokens morphs each curve to its new
-   heights (the paths keep their points), and the axis labels fade in. */
+/* Usage charts: switching metric or period morphs each curve to its new
+   shape (every path keeps the same samples), and the axis labels fade in.
+   A long, soft landing reads as one glide rather than a jump. */
 [data-atlas-chart-path] {
   transition-property: d, opacity;
-  transition-duration: 520ms, 150ms;
-  transition-timing-function: var(--atlas-ease-out);
+  transition-duration: 720ms, 150ms;
+  transition-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 [data-atlas-chart-axis] {
-  animation: atlas-chart-axis-in var(--atlas-duration-base) var(--atlas-ease-out);
+  animation: atlas-chart-axis-in var(--atlas-duration-slow) var(--atlas-ease-out);
 }
 
 @keyframes atlas-chart-axis-in {
