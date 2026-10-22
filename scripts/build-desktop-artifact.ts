@@ -1119,6 +1119,11 @@ export const MAC_WHISPER_EXTRA_RESOURCES = [
     from: "apps/desktop/prod-resources/whisper-server",
     to: "whisper-server",
   },
+  // Code Atlas: the native helper of Claude's computer use.
+  {
+    from: "apps/desktop/prod-resources/atlas-computer",
+    to: "atlas-computer",
+  },
 ] as const;
 export const LINUX_CAPTURE_EXTRA_RESOURCES = [
   {
@@ -2420,6 +2425,31 @@ export const stageWhisperServer = Effect.fn("stageWhisperServer")(function* (inp
   yield* fs.makeDirectory(destinationDirectory, { recursive: true });
   const destinationPath = path.join(destinationDirectory, "whisper-server");
   yield* fs.copyFile(binaryPath, destinationPath);
+  yield* fs.chmod(destinationPath, 0o755);
+});
+
+/** Code Atlas: builds and stages the native helper of Claude's computer use. */
+export const stageAtlasComputer = Effect.fn("stageAtlasComputer")(function* (input: {
+  readonly repoRoot: string;
+  readonly stageResourcesDir: string;
+  readonly verbose: boolean;
+}) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  yield* runCommand(
+    ChildProcess.make("bash", [path.join(input.repoRoot, "native/atlas-computer/build.sh")], {
+      cwd: input.repoRoot,
+    }),
+    { label: "build the computer-use helper", verbose: input.verbose },
+  );
+  const destinationDirectory = path.join(input.stageResourcesDir, "atlas-computer");
+  yield* fs.remove(destinationDirectory, { recursive: true, force: true }).pipe(Effect.ignore);
+  yield* fs.makeDirectory(destinationDirectory, { recursive: true });
+  const destinationPath = path.join(destinationDirectory, "atlas-computer");
+  yield* fs.copyFile(
+    path.join(input.repoRoot, "native/atlas-computer/dist/atlas-computer"),
+    destinationPath,
+  );
   yield* fs.chmod(destinationPath, 0o755);
 });
 
@@ -3810,6 +3840,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   });
   if (options.platform === "mac" && options.arch === "arm64") {
     yield* stageWhisperServer({ repoRoot, stageResourcesDir, verbose: options.verbose });
+    yield* stageAtlasComputer({ repoRoot, stageResourcesDir, verbose: options.verbose });
   }
   if (options.platform === "linux") {
     for (const backend of ["kde", "hyprland"] as const)

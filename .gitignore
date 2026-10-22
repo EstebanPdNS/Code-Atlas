@@ -52,3 +52,5 @@ native/whisper-server/dist/
 
 # Code Atlas: vendored reference sources for coding agents stay local; fetch them with `vp run sync:repos`.
 /.repos/
+
+native/atlas-computer/dist/

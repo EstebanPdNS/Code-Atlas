@@ -51,7 +51,7 @@ Code Atlas runs Claude and Codex side by side. When you delegate, pick the model
 - Claude \`opus\`: the deepest Claude for architecture, careful reviews, design and writing, and large refactors.
 - Claude \`sonnet\`: fast and capable Claude for routine implementation and tests.
 
-Delegate to the other provider when you judge its model will clearly do better, for example a task that operates desktop apps on this Mac (an emulator, another app's window) goes to Codex, which has native computer use: ask it to report what it saw and did, with screenshots saved to files. Do the work yourself when that is quicker than writing a brief. Give the child a complete brief, and tell the user in one line which model you chose and why.`,
+Delegate to the other provider when you judge its model will clearly do better. Both can operate desktop apps on this Mac (an emulator, another app's window): Codex with its native computer use, Claude with the \`atlas-computer\` tools. Do the work yourself when that is quicker than writing a brief. Give the child a complete brief, and tell the user in one line which model you chose and why.`,
 ];
 
 export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `

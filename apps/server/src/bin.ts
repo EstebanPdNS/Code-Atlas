@@ -20,6 +20,10 @@ if (
   if (command === "acp-mcp-bridge" || command === "acp-mcp-call") {
     const { runAcpMcpCliFastPath } = await import("./mcp/AcpMcpStdioBridge.ts");
     await runAcpMcpCliFastPath(command, process.argv.slice(3));
+  } else if (command === "atlas-computer-mcp") {
+    // Code Atlas: Claude's computer use, a stdio MCP server per Claude session.
+    const { runAtlasComputerMcp } = await import("./atlas/computerUse/AtlasComputerMcp.ts");
+    await runAtlasComputerMcp();
   } else {
     // Before anything reads stdin: the desktop app's Windows launcher starts
     // the CLI without one. Never for the fast paths, whose stdin is a pipe.

@@ -4,8 +4,9 @@
  *
  * - Codex computer use: `cua_repl.js` code (`let arc = await cua.getApp("Arc")`,
  *   then `arc.click(…)` in this or a later call; the REPL keeps its variables).
- * - Claude computer use: `mcp__computer-use__*` and `mcp__remote-devices__computer_*`
- *   (an `app`/`apps` argument, else the app an earlier call of the turn named).
+ * - Claude computer use: `mcp__computer-use__*`, `mcp__remote-devices__computer_*` and
+ *   Code Atlas's own `mcp__atlas-computer__computer_*` (an `app`/`apps` argument,
+ *   else the app an earlier call of the turn named).
  * - Codex MCP computer-use surfaces (the app the server recorded as the tool icon).
  * - Desktop drivers run through the shell: `open -a`, AppleScript `tell application`,
  *   Peekaboo / Cua Driver `--app`, an app bundle's own binary.
@@ -126,7 +127,8 @@ export function cuaCodeApp(
   return latest?.app ?? null;
 }
 
-const COMPUTER_USE_TOOL = /^(?:mcp__computer-use__|mcp__remote-devices__computer_|computer-use\.)/u;
+const COMPUTER_USE_TOOL =
+  /^(?:mcp__computer-use__|mcp__remote-devices__computer_|mcp__atlas-computer__computer_|computer-use\.)/u;
 
 export function isComputerUseToolName(toolName: string | null | undefined): boolean {
   return typeof toolName === "string" && COMPUTER_USE_TOOL.test(toolName);
