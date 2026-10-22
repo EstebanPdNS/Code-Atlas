@@ -195,6 +195,8 @@ import {
   makeSubagentConversationArtifacts,
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
+import { resolveSelfInvocation, selfInvocationArgs } from "@t3tools/shared/nodeRuntime";
+import { ATLAS_COMPUTER_INSTRUCTIONS } from "../../atlas/computerUse/instructions.ts";
 
 export const CLAUDE_PROVIDER = ProviderDriverKind.make("claudeAgent");
 export const CLAUDE_AGENT_SDK_QUERY_PROTOCOL = "claude-agent-sdk.query" as const;
@@ -1466,7 +1468,11 @@ export function makeClaudeQueryOptions(input: {
           (input.mcpServers === undefined
             ? ""
             : (input.browserTools === true ? T3_CODE_BROWSER_TOOL_INSTRUCTIONS : "") +
-              T3_CODE_ORCHESTRATION_INSTRUCTIONS),
+              T3_CODE_ORCHESTRATION_INSTRUCTIONS +
+              // Code Atlas: computer use on this Mac.
+              (input.mcpServers[ATLAS_COMPUTER_MCP_SERVER] === undefined
+                ? ""
+                : ATLAS_COMPUTER_INSTRUCTIONS)),
         ...(input.planFirst === true
           ? [
               buildPlanFirstInstructions(
@@ -1564,7 +1570,57 @@ export const CLAUDE_T3_MCP_TOOL_TIMEOUT_MS = 65 * 60 * 1_000;
 // pre-approve only the annotated read-only orchestrator tools so a read-only session cannot
 // silently spawn threads or scheduled tasks.
 
+// Code Atlas: Claude's computer use on macOS (apps/server/src/atlas/computerUse).
+// Its tools are pre-approved because the server itself asks the user, in a
+// system dialog, before Claude first sees or controls each app; a read-only
+// sandbox only gets to look.
+export const ATLAS_COMPUTER_MCP_SERVER = "atlas-computer";
+const ATLAS_COMPUTER_ALLOWED_TOOLS = ["mcp__atlas-computer__*"];
+const ATLAS_COMPUTER_READ_ONLY_TOOLS = [
+  "mcp__atlas-computer__computer_windows",
+  "mcp__atlas-computer__computer_screenshot",
+];
+
+export interface AtlasComputerLaunch {
+  readonly command: string;
+  readonly args: ReadonlyArray<string>;
+}
+
 export function claudeMcpQueryOverrides(input: {
+  readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
+  readonly readOnlySandbox: boolean;
+  readonly allowedTools?: ReadonlyArray<string>;
+  readonly atlasComputer?: AtlasComputerLaunch | undefined;
+}): {
+  readonly allowedTools?: ReadonlyArray<string>;
+  readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
+  readonly browserTools?: boolean;
+} {
+  const base = claudeT3McpQueryOverrides(input);
+  const computer = input.atlasComputer;
+  // Rides with Code Atlas's own MCP session, as the app's other agent tools do.
+  if (computer === undefined || input.mcpSession === undefined) return base;
+  return {
+    ...base,
+    allowedTools: Array.from(
+      new Set([
+        ...(base.allowedTools ?? []),
+        ...(input.readOnlySandbox ? ATLAS_COMPUTER_READ_ONLY_TOOLS : ATLAS_COMPUTER_ALLOWED_TOOLS),
+      ]),
+    ),
+    mcpServers: {
+      ...base.mcpServers,
+      [ATLAS_COMPUTER_MCP_SERVER]: {
+        type: "stdio",
+        command: computer.command,
+        args: [...computer.args],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      },
+    },
+  };
+}
+
+function claudeT3McpQueryOverrides(input: {
   readonly mcpSession: McpProviderSession.McpProviderSessionConfig | undefined;
   readonly readOnlySandbox: boolean;
   readonly allowedTools?: ReadonlyArray<string>;
@@ -3951,6 +4007,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
   adapterOptions: ClaudeAdapterV2Options,
 ) {
   const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+  // Code Atlas: Claude's computer use runs this server's own entrypoint as a
+  // stdio MCP server, so it stays a descendant of Code Atlas (macOS only).
+  const atlasComputer: AtlasComputerLaunch | undefined = yield* Effect.gen(function* () {
+    if ((yield* HostProcess.Platform) !== "darwin") return undefined;
+    const self = yield* resolveSelfInvocation();
+    return { command: self.command, args: selfInvocationArgs(self, ["atlas-computer-mcp"]) };
+  }).pipe(Effect.orElseSucceed(() => undefined));
   const { attachmentsDir, fileSystem, path, crypto, idAllocator, queryRunner } = adapterOptions;
   const subagentModelCatalog = scopeClaudeModelCatalog(
     BUNDLED_CLAUDE_MODEL_CATALOG,
@@ -9279,6 +9342,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const queryPolicy = yield* queryPolicyForTurn(turnInput);
           const mcpOverrides = claudeMcpQueryOverrides({
             mcpSession: yield* mcpSessions.read(turnInput.threadId),
+            atlasComputer,
             readOnlySandbox:
               sandboxPolicyKindForClaudeRuntimePolicy(turnInput.runtimePolicy) === "readOnly",
             ...(queryPolicy.allowedTools === undefined

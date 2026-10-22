@@ -198,6 +198,16 @@ describe("agentDesktopTarget", () => {
     ).toEqual(["Azahar"]);
   });
 
+  it("covers Code Atlas's own computer use for Claude", () => {
+    expect(
+      agentDesktopTarget([
+        userMessage,
+        claudeTool("mcp__atlas-computer__computer_screenshot", { app: "Azahar" }),
+        claudeTool("mcp__atlas-computer__computer_key", { keys: "return" }),
+      ])?.apps,
+    ).toEqual(["Azahar"]);
+  });
+
   it("hints a long command that launches an app it names", () => {
     const run = command(`python3 run_azahar.py final-old-corneria build.3dsx --old --timeout 600`);
     const target = agentDesktopTarget([userMessage, run, command("ls", "completed")]);

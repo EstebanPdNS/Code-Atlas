@@ -657,6 +657,38 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     browserToolsAvailable: true,
   });
 
+  it("adds Code Atlas computer use beside the MCP session, looking only in read-only sandboxes", () => {
+    const mcpSession = mcpSessionFor(ThreadId.make("thread-claude-atlas-computer"));
+    const atlasComputer = { command: "/app/node", args: ["/app/bin.mjs", "atlas-computer-mcp"] };
+    const full = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession,
+      readOnlySandbox: false,
+      atlasComputer,
+    });
+    assert.deepEqual(full.mcpServers?.["atlas-computer"], {
+      type: "stdio",
+      command: "/app/node",
+      args: ["/app/bin.mjs", "atlas-computer-mcp"],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+    });
+    assert.include(full.allowedTools ?? [], "mcp__atlas-computer__*");
+
+    const readOnly = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession,
+      readOnlySandbox: true,
+      atlasComputer,
+    });
+    assert.notInclude(readOnly.allowedTools ?? [], "mcp__atlas-computer__*");
+    assert.include(readOnly.allowedTools ?? [], "mcp__atlas-computer__computer_screenshot");
+
+    const withoutSession = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession: undefined,
+      readOnlySandbox: false,
+      atlasComputer,
+    });
+    assert.deepEqual(withoutSession, {});
+  });
+
   it("leaves an absent allowlist absent when no MCP session exists", () => {
     const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
       mcpSession: undefined,
