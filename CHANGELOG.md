@@ -15,6 +15,9 @@
 - Pinned threads drop their pin icons.
 - The launch intro frames itself after the window settles and lands without a blink.
 - The browser's new tab shows Recents and Favorites as cards with each site's address.
+- The Usage page has a Code tab (D): lines the agents added and removed over the period, by day or hour and by project, with files, turns, commands, threads and agent time.
+- Usage charts glide between Cost, Tokens and every period, and each period loads as the page opens, so switching never flashes.
+- Panels and the sidebar glide open and closed by default (Settings → Panel animations), with a softer curve across the app.
 
 ## v1.4
 
