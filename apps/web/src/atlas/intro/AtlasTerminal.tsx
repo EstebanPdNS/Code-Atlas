@@ -89,11 +89,13 @@ const TOTAL_ROWS = MAP_ROWS.length;
 const TYPE_SPEEDUP = 2.55;
 const ROW_SPEEDUP = 2.2;
 const INTRO_START_DELAY_MS = 1600;
+// The longest the intro waits for a fresh launch to mount the new thread's terminal.
+const INTRO_READY_TIMEOUT_MS = 6000;
 const LOGO_START_DELAY_MS = 180;
 const ZOOM_DURATION_MS = 1400;
 const BACKDROP_FADE_MS = 650;
 // A safety net: never leave the app covered.
-const INTRO_SAFETY_TIMEOUT_MS = 15_000;
+const INTRO_SAFETY_TIMEOUT_MS = 20_000;
 // Well below the macOS window buttons, which sit over the fullscreen intro.
 const INTRO_COMMAND_TOP_PX = 104;
 
@@ -674,18 +676,30 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       else later(startLogo, LOGO_START_DELAY_MS);
     };
     // The backdrop covers the app from the first frame, but the terminal stays
-    // hidden until it has its final size: the landed terminal usually mounts a
-    // moment after the intro, and framing it again on screen made the prompt
-    // jump. It appears as soon as that size is known (or after a short wait),
-    // well before the typing starts.
-    let waitedForSize = 0;
-    const showCamera = () => {
+    // hidden until it has its final size. On a fresh launch the app is still
+    // loading the new thread, whose terminal is where the zoom lands; starting
+    // with a guessed size made the prompt, then the logo, jump to the real one
+    // mid-animation (Replay never did: the terminal already exists). So the
+    // intro waits for that terminal to settle, then shows and starts typing.
+    // A view without one (an open thread) starts with the default size.
+    let waitedMs = 0;
+    let previous: { readonly width: number; readonly height: number } | null = null;
+    let withoutTerminalMs = 0;
+    const startWhenReady = () => {
       const camera = cameraRef.current;
       if (!camera) return;
       const landed = landedTerminalSize();
-      if (landed === null && waitedForSize < INTRO_START_DELAY_MS - 400) {
-        waitedForSize += 100;
-        later(showCamera, 100);
+      const settled =
+        landed !== null &&
+        previous !== null &&
+        landed.width === previous.width &&
+        landed.height === previous.height;
+      const chatShown = document.querySelector('[data-chat-composer-overlay="true"]') !== null;
+      withoutTerminalMs = landed === null && chatShown ? withoutTerminalMs + 100 : 0;
+      previous = landed;
+      if (!settled && withoutTerminalMs < 600 && waitedMs < INTRO_READY_TIMEOUT_MS) {
+        waitedMs += 100;
+        later(startWhenReady, 100);
         return;
       }
       if (landed) {
@@ -695,9 +709,10 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       }
       startTransform.current = frameIntroCamera(camera, commandRef.current, artRef.current);
       camera.dataset.atlasReady = "";
+      // A beat of blinking caret before the typing, as when the intro starts at once.
+      later(typeNext, Math.max(INTRO_START_DELAY_MS - waitedMs, 450));
     };
-    showCamera();
-    later(typeNext, INTRO_START_DELAY_MS);
+    startWhenReady();
     later(finish, INTRO_SAFETY_TIMEOUT_MS);
     // Escape and a click both skip: the app appears and Aurora stops with it.
     const skip = () => {
