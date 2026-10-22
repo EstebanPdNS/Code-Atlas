@@ -320,7 +320,10 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
                 )}
                 <p className="text-muted-foreground">{formatAtlasWeekCounts(meta.week)}</p>
                 {formatAtlasWeekTime(meta.week) === null ? null : (
-                  <p className="text-muted-foreground">{formatAtlasWeekTime(meta.week)}</p>
+                  <p className="text-muted-foreground">
+                    {formatAtlasWeekTime(meta.week)}
+                    <span className="sr-only"> of agent work</span>
+                  </p>
                 )}
               </div>
             )}

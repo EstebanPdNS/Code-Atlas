@@ -74,28 +74,29 @@ export function formatAtlasCount(value: number): string {
 const counted = (value: number, one: string, many: string) =>
   `${formatAtlasCount(value)} ${value === 1 ? one : many}`;
 
-/** "3 turns · 120 commands · 2 commits", naming only the counts that are known. */
+/** "3 turns · 120 cmds · 2 commits", naming only the counts that are known. */
 export function formatAtlasWeekCounts(week: AtlasWeekActivity): string {
   const counts: string[] = [];
   if (week.turns !== null) counts.push(counted(week.turns, "turn", "turns"));
   if (week.commands !== null && week.commands > 0) {
-    counts.push(counted(week.commands, "command", "commands"));
+    // Short, so the line fits the card's narrow column without wrapping.
+    counts.push(counted(week.commands, "cmd", "cmds"));
   }
   if (week.commits !== null) counts.push(counted(week.commits, "commit", "commits"));
   return counts.join(" · ");
 }
 
-/** "92 files changed · 10 read", or null when nothing is known. */
+/** "92 files · 10 read" ("4 files changed" when none was read), or null when unknown. */
 export function formatAtlasWeekFiles(week: AtlasWeekActivity): string | null {
   if (week.filesChanged === null) return null;
   const read =
     week.filesRead !== null && week.filesRead > 0
       ? ` · ${formatAtlasCount(week.filesRead)} read`
       : "";
-  return `${counted(week.filesChanged, "file", "files")} changed${read}`;
+  return `${counted(week.filesChanged, "file", "files")}${read === "" ? " changed" : read}`;
 }
 
-/** "5 threads · 15h 24m of agent work", or null when nothing is known. */
+/** "5 threads · 15h 24m" (the agents' working time), or null when nothing is known. */
 export function formatAtlasWeekTime(week: AtlasWeekActivity): string | null {
   const parts: string[] = [];
   if (week.threads !== null && week.threads > 0)
@@ -104,7 +105,7 @@ export function formatAtlasWeekTime(week: AtlasWeekActivity): string | null {
     const minutes = Math.round(week.agentSeconds / 60);
     const hours = Math.floor(minutes / 60);
     const time = hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-    parts.push(`${time} of agent work`);
+    parts.push(time);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 }
