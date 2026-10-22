@@ -240,11 +240,13 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
 /* Where the chat, composer and new-thread terminal sit in the window. */
 
 /* New-thread layout with the terminal: the terminal's top lines up with the
-   details cards (2rem from the canvas top), the composer's spacer keeps it 2rem from the bottom,
-   and the headline is centred in the space between them. */
+   details cards (32px from the canvas top, DETAILS_CARD_CLEARANCE: in pixels,
+   not rem, so a smaller root font size cannot lift the terminal above them),
+   the composer's spacer keeps it 2rem from the bottom, and the headline is
+   centred in the space between them. */
 [data-chat-composer-overlay="true"]:has([data-atlas-terminal]) {
   align-items: stretch;
-  padding-top: 2rem;
+  padding-top: 32px;
   padding-bottom: 0;
 }
 
