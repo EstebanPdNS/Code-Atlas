@@ -2,7 +2,8 @@ import { formatPercent, formatTokens, formatUsd } from "@t3tools/shared/usageFor
 import { isModelCostUnknown, type ModelTotals } from "@t3tools/shared/usageMerge";
 
 import { mergeAnsweredUsage, type EnvironmentUsageStatus } from "../../state/usage";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+// Code Atlas: the Usage page shows Codex's own icon.
+import { UsageProviderIcon as ProviderInstanceIcon } from "~/atlas/usage/UsageProviderIcon";
 import { Button } from "../ui/button";
 import {
   Dialog,

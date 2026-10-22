@@ -2235,11 +2235,15 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
     canOpenInPanel,
   });
 
+  // Code Atlas: a click shows the file in Finder; Cmd-click still opens the
+  // editor and right-click keeps every option.
+  const revealOnClick = onReveal !== undefined;
+
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          hasPrimaryAction ? (
+          hasPrimaryAction || revealOnClick ? (
             <ContextChip
               kind="mention"
               render={<a href={href} />}
@@ -2250,6 +2254,10 @@ const MarkdownFileLink = memo(function MarkdownFileLink({
                 event.stopPropagation();
                 if (onOpen && shouldOpenMarkdownFileLinkInEditor(event)) {
                   handleOpenInEditor();
+                  return;
+                }
+                if (revealOnClick) {
+                  handleRevealInFileManager();
                   return;
                 }
                 if (useBrowserPrimaryAction) {

@@ -12,7 +12,7 @@ const CODEX_FILL = `linear-gradient(90deg, ${CODEX_GRADIENT_STOPS[0]}, ${CODEX_G
 type AtlasProvider = "claude" | "codex";
 
 /** Accepts a provider driver (`claudeAgent`), usage kind (`claude`) or display label. */
-function atlasProvider(provider: string): AtlasProvider | null {
+export function atlasProvider(provider: string): AtlasProvider | null {
   const key = provider.toLowerCase();
   if (key.startsWith("claude")) return "claude";
   if (key === "codex") return "codex";

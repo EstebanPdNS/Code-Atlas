@@ -1,4 +1,5 @@
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+// Code Atlas: the Usage page shows Codex's own icon.
+import { UsageProviderIcon as ProviderInstanceIcon } from "~/atlas/usage/UsageProviderIcon";
 import type { UsageProviderKind } from "@t3tools/contracts";
 import { useLayoutEffect, useRef, useState } from "react";
 
