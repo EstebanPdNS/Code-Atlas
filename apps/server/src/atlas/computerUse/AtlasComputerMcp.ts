@@ -192,7 +192,8 @@ export function atlasComputerHelperCandidates(execPath: string, moduleUrl: strin
   const candidates: string[] = [];
   const override = process.env.ATLAS_COMPUTER_HELPER;
   if (override) candidates.push(override);
-  const contents = execPath.lastIndexOf(".app/Contents/");
+  // The outermost app: a helper app inside it has its own Contents.
+  const contents = execPath.indexOf(".app/Contents/");
   if (contents !== -1) {
     const app = execPath.slice(0, contents + ".app/Contents/".length);
     candidates.push(NodePath.join(app, "Resources/atlas-computer/atlas-computer"));
@@ -289,6 +290,8 @@ function controlLine(index: number, control: AccessibleControl): string {
 export function makeAtlasComputer(helper: string) {
   // The size of the latest screenshot of each window (key 0: the screen).
   const shots = new Map<number, { readonly width: number; readonly height: number }>();
+  // The latest screenshot of each app, for a window that replaced the one shot.
+  const latestShot = new Map<number, { readonly width: number; readonly height: number }>();
   // The controls listed by the latest computer_app_state of each window, in global points.
   const controls = new Map<number, ReadonlyArray<AccessibleControl>>();
   // "Allow Once" answers last for this session; "Always Allow" is stored.
@@ -382,7 +385,16 @@ export function makeAtlasComputer(helper: string) {
     if (app === undefined && windowId === undefined) {
       throw new ComputerUseError("Name the app (or a windowId) to act on.");
     }
-    const window = findWindow(await listWindows(), { app, windowId });
+    // An app that is still launching gets a few seconds to show its window.
+    let window = findWindow(await listWindows(), { app, windowId });
+    for (
+      let waited = 0;
+      window === null && windowId === undefined && waited < 4000;
+      waited += 400
+    ) {
+      await sleep(400);
+      window = findWindow(await listWindows(), { app, windowId });
+    }
     if (window === null) {
       throw new ComputerUseError(
         `No window of ${app ?? `id ${windowId}`} is on screen. Open the app with computer_open_app or check computer_windows.`,
@@ -408,6 +420,16 @@ export function makeAtlasComputer(helper: string) {
         () => false,
       );
       if (code !== 0 || !exists) {
+        // A window that just closed or was replaced (a chooser becoming a
+        // document) is not a permission problem.
+        if (
+          window !== null &&
+          findWindow(await listWindows(), { windowId: window.windowId }) === null
+        ) {
+          throw new ComputerUseError(
+            `That ${window.app} window just closed or changed. Take a new screenshot of ${window.app}.`,
+          );
+        }
         throw new ComputerUseError(
           `The screenshot failed. Code Atlas needs Screen & System Audio Recording permission. ${STALE_GRANT_HINT}`,
         );
@@ -423,6 +445,7 @@ export function makeAtlasComputer(helper: string) {
       const width = Number(/pixelWidth: (\d+)/.exec(stdout)?.[1] ?? 0);
       const height = Number(/pixelHeight: (\d+)/.exec(stdout)?.[1] ?? 0);
       shots.set(window?.windowId ?? 0, { width, height });
+      if (window !== null) latestShot.set(window.pid, { width, height });
       const data = (await NodeFSP.readFile(file)).toString("base64");
       const name =
         window === null ? "the main screen" : `${window.app} (window ${window.windowId})`;
@@ -439,12 +462,23 @@ export function makeAtlasComputer(helper: string) {
   };
 
   const toScreen = (window: DesktopWindow, x: number, y: number) =>
-    imagePointToScreen(window, shots.get(window.windowId) ?? null, x, y);
+    imagePointToScreen(
+      window,
+      shots.get(window.windowId) ?? latestShot.get(window.pid) ?? null,
+      x,
+      y,
+    );
 
   const afterAction = async (args: Json, window: DesktopWindow, summary: string) => {
     if (args.screenshot === false) return [{ type: "text", text: summary } as ToolContent];
     await sleep(350);
-    const fresh = findWindow(await listWindows(), { windowId: window.windowId }) ?? window;
+    // The action may have replaced the window (a chooser opening a document):
+    // follow the app's front window then.
+    const windows = await listWindows();
+    const fresh =
+      findWindow(windows, { windowId: window.windowId }) ??
+      windows.find((candidate) => candidate.pid === window.pid) ??
+      window;
     return [{ type: "text", text: summary } as ToolContent, ...(await screenshot(fresh))];
   };
 
@@ -681,8 +715,25 @@ export function makeAtlasComputer(helper: string) {
           byBundle ? ["-g", "-b", app] : ["-g", "-a", app],
         );
         if (code !== 0) throw new ComputerUseError(`Could not open ${app}.`);
-        await sleep(1200);
-        return [{ type: "text", text: `Opened ${app}. Take a screenshot to see it.` }];
+        // Done when its window is on screen, so the next screenshot finds it.
+        for (let waited = 0; waited < 10_000; waited += 400) {
+          const window = findWindow(await listWindows(), { app });
+          if (window !== null) {
+            return [
+              {
+                type: "text",
+                text: `Opened ${window.app} (window ${window.windowId}). Call computer_app_state to see it.`,
+              },
+            ];
+          }
+          await sleep(400);
+        }
+        return [
+          {
+            type: "text",
+            text: `Opened ${app}, but no window of it is on screen yet. Check computer_windows.`,
+          },
+        ];
       }
       default:
         throw new ComputerUseError(`Unknown tool ${name}.`);

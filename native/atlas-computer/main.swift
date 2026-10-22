@@ -126,11 +126,28 @@ func pressAccessibleControl(pid: pid_t, at point: CGPoint, action: String) -> Bo
   guard AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &hit) == .success,
     let element = hit
   else { return false }
-  var names: CFArray?
-  guard AXUIElementCopyActionNames(element, &names) == .success,
-    let actions = names as? [String], actions.contains(action)
-  else { return false }
-  return AXUIElementPerformAction(element, action as CFString) == .success
+  // The hit is the innermost element (a label, an image); the control that
+  // takes the action is often one of its parents.
+  var current: AXUIElement? = element
+  for _ in 0..<6 {
+    guard let candidate = current else { return false }
+    var names: CFArray?
+    if AXUIElementCopyActionNames(candidate, &names) == .success,
+      let actions = names as? [String], actions.contains(action)
+    {
+      return AXUIElementPerformAction(candidate, action as CFString) == .success
+    }
+    var parent: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(candidate, kAXParentAttribute as CFString, &parent) == .success,
+      let next = parent, CFGetTypeID(next) == AXUIElementGetTypeID()
+    else { return false }
+    let nextElement = next as! AXUIElement
+    var role: CFTypeRef?
+    AXUIElementCopyAttributeValue(nextElement, kAXRoleAttribute as CFString, &role)
+    if (role as? String) == "AXWindow" || (role as? String) == "AXApplication" { return false }
+    current = nextElement
+  }
+  return false
 }
 
 /// Inserts text at the caret of the app's focused field, if it accepts that.
