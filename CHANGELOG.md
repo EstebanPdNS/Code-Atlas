@@ -5,7 +5,7 @@
 - Code Atlas is signed with its own stable certificate instead of an ad-hoc signature, so macOS keeps Screen Recording and Accessibility across updates, and terminals, agents and computer-use helpers share that one permission. Allow Code Atlas once more after installing 1.5.
 - A window an agent uses gets a thin orange line and the pill above it; Code Atlas no longer leaves full screen when it appears, and the frame no longer flickers between actions.
 - Claude and Codex delegate to each other's models when that does the job better (Sol, Astra or Luna; Opus or Sonnet), and use Luna for very small tasks.
-- Claude has its own computer use: it sees app windows and clicks, types and presses keys in them (an emulator, any app), under Code Atlas's own permissions. The first time it looks at or controls an app in a session, Code Atlas asks you.
+- Claude has its own computer use, like Codex: a gray cursor of its own that clicks, types and presses keys in any app (an emulator included) in the background, so you keep your pointer; apps that ignore background input get it in the foreground. It runs under Code Atlas's own permissions and asks once per app, or never again with Always Allow.
 - Agent questions are cards: the question on top, the options, then Skip (Esc) and Submit (⌘↩).
 - A message with only an image shows only the image.
 - Clicking a file an agent mentions shows it in Finder.
