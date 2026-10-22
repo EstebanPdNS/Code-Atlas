@@ -218,7 +218,8 @@ export type TurnWeeklyActivityResult = typeof TurnWeeklyActivityResult.Type;
  */
 export const SourceControlDiscoveryInput = Schema.Struct({
   activityCwd: Schema.optionalKey(TrimmedNonEmptyString),
-  // Code Atlas: every project's week with its agents, for the Usage page.
+  // Code Atlas: every project's activity with its agents, for the Usage page.
+  // The answer then carries only that activity, without the tool discovery.
   activityAll: Schema.optionalKey(Schema.Boolean),
   /** With `activityAll`: how many days back, seven by default. */
   activityDays: Schema.optionalKey(Schema.Literals([1, 7, 30, 90])),

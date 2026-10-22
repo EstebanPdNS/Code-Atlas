@@ -233,12 +233,13 @@ export const make = Effect.gen(function* () {
   return SourceControlDiscovery.of({
     discover,
     discoverFor: (input) =>
+      // Only the activity: probing the VCS tools would hold the Usage page's
+      // Code view up by a second on every change of period.
       input.activityAll === true
-        ? Effect.all([discover, turnActivity.weekly(null, input.activityDays ?? 7)], {
-            concurrency: "unbounded",
-          }).pipe(
-            Effect.map(([result, turns]) => ({
-              ...result,
+        ? turnActivity.weekly(null, input.activityDays ?? 7).pipe(
+            Effect.map((turns) => ({
+              versionControlSystems: [],
+              sourceControlProviders: [],
               ...(Option.isSome(turns) ? { turnActivity: turns.value } : {}),
             })),
           )
