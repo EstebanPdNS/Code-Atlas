@@ -184,6 +184,30 @@ export const TurnWeeklyActivityResult = Schema.Struct({
   commands: Schema.optionalKey(NonNegativeInt),
   threads: Schema.optionalKey(NonNegativeInt),
   agentSeconds: Schema.optionalKey(NonNegativeInt),
+  // Code Atlas: every project's activity (the Usage page's Code view) also
+  // splits it by project and by day, or by hour over the past 24 hours.
+  projects: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        workspaceRoot: Schema.String,
+        title: Schema.String,
+        turns: NonNegativeInt,
+        linesAdded: NonNegativeInt,
+        linesRemoved: NonNegativeInt,
+        filesChanged: NonNegativeInt,
+      }),
+    ),
+  ),
+  periods: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        /** A local day (YYYY-MM-DD), or an hour's start as an ISO time. */
+        start: Schema.String,
+        linesAdded: NonNegativeInt,
+        linesRemoved: NonNegativeInt,
+      }),
+    ),
+  ),
 });
 export type TurnWeeklyActivityResult = typeof TurnWeeklyActivityResult.Type;
 
@@ -196,6 +220,8 @@ export const SourceControlDiscoveryInput = Schema.Struct({
   activityCwd: Schema.optionalKey(TrimmedNonEmptyString),
   // Code Atlas: every project's week with its agents, for the Usage page.
   activityAll: Schema.optionalKey(Schema.Boolean),
+  /** With `activityAll`: how many days back, seven by default. */
+  activityDays: Schema.optionalKey(Schema.Literals([1, 7, 30, 90])),
 });
 export type SourceControlDiscoveryInput = typeof SourceControlDiscoveryInput.Type;
 

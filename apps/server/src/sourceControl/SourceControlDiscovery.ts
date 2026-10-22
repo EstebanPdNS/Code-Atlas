@@ -234,7 +234,9 @@ export const make = Effect.gen(function* () {
     discover,
     discoverFor: (input) =>
       input.activityAll === true
-        ? Effect.all([discover, turnActivity.weekly(null)], { concurrency: "unbounded" }).pipe(
+        ? Effect.all([discover, turnActivity.weekly(null, input.activityDays ?? 7)], {
+            concurrency: "unbounded",
+          }).pipe(
             Effect.map(([result, turns]) => ({
               ...result,
               ...(Option.isSome(turns) ? { turnActivity: turns.value } : {}),

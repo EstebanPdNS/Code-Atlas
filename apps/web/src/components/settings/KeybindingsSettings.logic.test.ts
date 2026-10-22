@@ -102,6 +102,7 @@ describe("KeybindingsSettings.logic", () => {
       "usage.open",
       "usage.cost",
       "usage.tokens",
+      "usage.code",
       "usage.limits",
       "usage.period.day",
       "usage.period.week",

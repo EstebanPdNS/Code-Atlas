@@ -16,6 +16,7 @@ import { PROVIDER_ORDER, PROVIDER_PRESENTATION } from "./usageProviders";
 import { observeResize } from "~/lib/observeResize";
 // Code Atlas: Codex's blue-to-violet and Claude's coral on the chart. The page can make
 // the plot taller through `--usage-chart-height` (default 14rem).
+import { morphablePath } from "../../atlas/usage/chartMorph";
 import {
   UsageChartGradients,
   usageChartPaint,
@@ -129,7 +130,7 @@ interface CurveSegment {
   readonly to: Point;
 }
 
-function smoothCurve(points: readonly Point[]): readonly CurveSegment[] {
+export function smoothCurve(points: readonly Point[]): readonly CurveSegment[] {
   if (points.length < 2) return [];
   const tangents = monotoneTangents(points);
   const segments: CurveSegment[] = [];
@@ -147,16 +148,6 @@ function smoothCurve(points: readonly Point[]): readonly CurveSegment[] {
     });
   }
   return segments;
-}
-
-function curvePath(segments: readonly CurveSegment[]): string {
-  const first = segments[0];
-  if (first === undefined) return "";
-  let path = `M${first.from.x.toFixed(2)},${first.from.y.toFixed(2)}`;
-  for (const segment of segments) {
-    path += ` C${segment.c1.x.toFixed(2)},${segment.c1.y.toFixed(2)} ${segment.c2.x.toFixed(2)},${segment.c2.y.toFixed(2)} ${segment.to.x.toFixed(2)},${segment.to.y.toFixed(2)}`;
-  }
-  return path;
 }
 
 function areaPath(line: string) {
@@ -212,13 +203,15 @@ function buildChart(
   const stepX = periods.length < 2 ? 0 : VIEW_WIDTH / (periods.length - 1);
   const paths = providers.map((provider) => {
     const slot = PROVIDER_ORDER.indexOf(provider);
-    const line = curvePath(
+    // Code Atlas: sampled, so a change of period morphs the curve too.
+    const line = morphablePath(
       smoothCurve(
         columns.map((column, periodIndex) => ({
           x: periodIndex * stepX,
           y: valueToY(column.bands[slot]?.value ?? 0, scale.max),
         })),
       ),
+      VIEW_WIDTH,
     );
     return {
       provider,
@@ -457,8 +450,8 @@ export function UsageProviderChart({
     <div className="flex flex-col gap-1">
       <div className="flex gap-2">
         <div
-          // Code Atlas: the axis fades in afresh when the metric changes.
-          key={metric}
+          // Code Atlas: the axis fades in afresh when the metric or period changes.
+          key={`${metric}:${resolution}:${periods.length}`}
           data-atlas-chart-axis
           className="relative h-[var(--usage-chart-height,14rem)] w-14 shrink-0"
         >
@@ -504,7 +497,7 @@ export function UsageProviderChart({
           })}
 
           {/* Code Atlas: each path also sets d as a style, so switching cost and
-              tokens morphs the curves (same points, new heights) instead of jumping. */}
+              tokens, or the period, morphs the curves instead of jumping. */}
           {paths.map(({ provider, loading, area }) => (
             <path
               key={provider}
@@ -532,7 +525,11 @@ export function UsageProviderChart({
         </UsageChartPlot>
       </div>
 
-      <div className="flex justify-between pl-16 text-3xs text-muted-foreground uppercase">
+      <div
+        key={`${resolution}:${periods.length}`}
+        data-atlas-chart-axis
+        className="flex justify-between pl-16 text-3xs text-muted-foreground uppercase"
+      >
         <span>{periods[0] === undefined ? "" : formatPeriod(periods[0])}</span>
         <span>
           {periods[Math.floor(periods.length / 2)] === undefined

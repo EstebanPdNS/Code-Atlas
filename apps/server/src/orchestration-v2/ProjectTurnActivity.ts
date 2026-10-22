@@ -19,9 +19,7 @@ import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 
 import { type FileChangeLineStats, fileChangeLineStats } from "./AtlasFileChangeStats.ts";
 
-const WEEK = Duration.days(7);
-
-// A null root reads every project (the Usage page's week).
+// A null root reads every project (the Usage page's Code view).
 const WeeklyRequest = Schema.Struct({
   workspaceRoot: Schema.NullOr(Schema.String),
   since: Schema.String,
@@ -29,6 +27,8 @@ const WeeklyRequest = Schema.Struct({
 const CheckpointRow = Schema.Struct({
   checkpointId: Schema.String,
   root: Schema.String,
+  title: Schema.String,
+  at: Schema.String,
   runId: Schema.String,
   // A subagent's thread working in its parent's checkout: the parent's
   // checkpoint already holds its edits.
@@ -38,6 +38,8 @@ const CheckpointRow = Schema.Struct({
 const EditRow = Schema.Struct({
   runId: Schema.String,
   root: Schema.String,
+  title: Schema.String,
+  at: Schema.String,
   payload: Schema.String,
 });
 const CountsRow = Schema.Struct({
@@ -86,17 +88,52 @@ function projectPath(workspaceRoot: string, path: string): string {
 
 const nonNegative = (value: number) => Math.max(0, Math.round(value));
 
+const localZone = DateTime.zoneMakeLocal();
+const periodUnit = (days: number) => (days === 1 ? "hour" : "day");
+
+function periodKey(start: DateTime.DateTime, days: number): string {
+  return days === 1 ? DateTime.formatIso(start) : DateTime.formatIsoDate(start);
+}
+
+/**
+ * The window's periods, oldest first and all present: local days, or hours
+ * over a single day. The server's clock is the user's, as on the Usage page.
+ */
+export function activityPeriods(
+  since: DateTime.DateTime,
+  now: DateTime.DateTime,
+  days: number,
+): ReadonlyArray<string> {
+  const periods: string[] = [];
+  let cursor = DateTime.startOf(DateTime.setZone(since, localZone), periodUnit(days));
+  while (DateTime.isLessThanOrEqualTo(cursor, now)) {
+    periods.push(periodKey(cursor, days));
+    cursor = DateTime.add(cursor, days === 1 ? { hours: 1 } : { days: 1 });
+  }
+  return periods;
+}
+
+export function activityPeriodOf(at: string, days: number): string | null {
+  return Option.match(DateTime.make(at), {
+    onNone: () => null,
+    onSome: (time) =>
+      periodKey(DateTime.startOf(DateTime.setZone(time, localZone), periodUnit(days)), days),
+  });
+}
+
 export class ProjectTurnActivity extends Context.Service<
   ProjectTurnActivity,
   {
     /**
-     * Turns in the last seven days whose checkpoint changed files, across the
-     * live threads of the active projects rooted at `workspaceRoot` (every
-     * project when it is null). None when
-     * there are none, or when the projection cannot be read.
+     * Turns in the last `days` days (seven by default) whose checkpoint
+     * changed files, across the live threads of the active projects rooted at
+     * `workspaceRoot`. Every project when it is null, then also split by
+     * project and by period. None when there are none, or when the projection
+     * cannot be read.
      */
     readonly weekly: (
       workspaceRoot: string | null,
+      days?: number,
     ) => Effect.Effect<Option.Option<TurnWeeklyActivityResult>>;
   }
 >()("t3/orchestration-v2/ProjectTurnActivity") {}
@@ -113,6 +150,8 @@ const make = Effect.gen(function* () {
       SELECT
         checkpoints.checkpoint_id AS "checkpointId",
         projects.workspace_root AS "root",
+        projects.title AS "title",
+        checkpoints.captured_at AS "at",
         checkpoints.run_id AS "runId",
         CASE WHEN parents.thread_id IS NOT NULL
           AND COALESCE(json_extract(threads.payload_json, '$.worktreePath'), '')
@@ -143,7 +182,7 @@ const make = Effect.gen(function* () {
     Result: EditRow,
     execute: ({ workspaceRoot, since }) => sql`
       SELECT items.run_id AS "runId", projects.workspace_root AS "root",
-        items.payload_json AS "payload"
+        projects.title AS "title", items.updated_at AS "at", items.payload_json AS "payload"
       FROM projection_projects AS projects
       INNER JOIN orchestration_v2_projection_threads AS threads
         ON threads.project_id = projects.project_id
@@ -199,8 +238,14 @@ const make = Effect.gen(function* () {
     `,
   });
 
-  const weekly = Effect.fn("ProjectTurnActivity.weekly")(function* (workspaceRoot: string | null) {
-    const since = DateTime.formatIso(DateTime.subtractDuration(yield* DateTime.now, WEEK));
+  const weekly = Effect.fn("ProjectTurnActivity.weekly")(function* (
+    workspaceRoot: string | null,
+    days = 7,
+  ) {
+    const now = yield* DateTime.now;
+    const sinceTime = DateTime.subtractDuration(now, Duration.days(days));
+    const since = DateTime.formatIso(sinceTime);
+    const detailed = workspaceRoot === null;
     // The card is a glance: an unreadable projection shows no activity rather than an error.
     const read = Effect.gen(function* () {
       const request = { workspaceRoot, since };
@@ -213,26 +258,74 @@ const make = Effect.gen(function* () {
       const diffedRuns = new Set<string>();
       let linesAdded = 0;
       let linesRemoved = 0;
+      const projects = new Map<
+        string,
+        { title: string; turns: Set<string>; files: Set<string>; added: number; removed: number }
+      >();
+      const periods = new Map(
+        activityPeriods(sinceTime, now, days).map((start) => [start, { added: 0, removed: 0 }]),
+      );
+      const record = (
+        row: { readonly root: string; readonly title: string; readonly at: string },
+        turn: string,
+        paths: ReadonlyArray<string>,
+        added: number,
+        removed: number,
+      ) => {
+        turns.add(turn);
+        for (const path of paths) files.add(`${row.root}\0${path}`);
+        linesAdded += added;
+        linesRemoved += removed;
+        if (!detailed) return;
+        const project = projects.get(row.root) ?? {
+          title: row.title,
+          turns: new Set<string>(),
+          files: new Set<string>(),
+          added: 0,
+          removed: 0,
+        };
+        project.turns.add(turn);
+        for (const path of paths) project.files.add(path);
+        project.added += added;
+        project.removed += removed;
+        projects.set(row.root, project);
+        const periodStart = activityPeriodOf(row.at, days);
+        const period = periodStart === null ? undefined : periods.get(periodStart);
+        if (period !== undefined) {
+          period.added += added;
+          period.removed += removed;
+        }
+      };
       for (const row of checkpoints) {
         const changed = checkpointFiles(row.files);
         if (changed.length === 0) continue;
         diffedRuns.add(row.runId);
         if (row.shared === 1) continue;
-        turns.add(`checkpoint:${row.checkpointId}`);
-        for (const file of changed) {
-          if (typeof file.path === "string") files.add(`${row.root}\0${file.path}`);
-          linesAdded += typeof file.additions === "number" ? file.additions : 0;
-          linesRemoved += typeof file.deletions === "number" ? file.deletions : 0;
-        }
+        record(
+          row,
+          `checkpoint:${row.checkpointId}`,
+          changed.flatMap((file) => (typeof file.path === "string" ? [file.path] : [])),
+          changed.reduce(
+            (sum, file) => sum + (typeof file.additions === "number" ? file.additions : 0),
+            0,
+          ),
+          changed.reduce(
+            (sum, file) => sum + (typeof file.deletions === "number" ? file.deletions : 0),
+            0,
+          ),
+        );
       }
       for (const row of edits) {
         if (diffedRuns.has(row.runId)) continue;
         const edit = editOf(row.payload);
         if (edit === null || edit.lines === null) continue;
-        turns.add(`run:${row.runId}`);
-        if (edit.path !== "") files.add(`${row.root}\0${projectPath(row.root, edit.path)}`);
-        linesAdded += edit.lines.additions;
-        linesRemoved += edit.lines.deletions;
+        record(
+          row,
+          `run:${row.runId}`,
+          edit.path === "" ? [] : [projectPath(row.root, edit.path)],
+          edit.lines.additions,
+          edit.lines.deletions,
+        );
       }
       return {
         turns: turns.size,
@@ -243,6 +336,25 @@ const make = Effect.gen(function* () {
         commands: counts.commands,
         threads: counts.threads,
         agentSeconds: nonNegative(counts.agentSeconds),
+        ...(detailed
+          ? {
+              projects: Array.from(projects, ([root, project]) => ({
+                workspaceRoot: root,
+                title: project.title,
+                turns: project.turns.size,
+                linesAdded: project.added,
+                linesRemoved: project.removed,
+                filesChanged: project.files.size,
+              })).toSorted(
+                (a, b) => b.linesAdded + b.linesRemoved - (a.linesAdded + a.linesRemoved),
+              ),
+              periods: Array.from(periods, ([start, period]) => ({
+                start,
+                linesAdded: period.added,
+                linesRemoved: period.removed,
+              })),
+            }
+          : {}),
       } satisfies TurnWeeklyActivityResult;
     });
     const activity = yield* sql.withTransaction(read).pipe(
