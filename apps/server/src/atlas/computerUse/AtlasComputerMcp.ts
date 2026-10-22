@@ -399,12 +399,17 @@ export function makeAtlasComputer(helper: string) {
     return [{ type: "text", text: summary } as ToolContent, ...(await screenshot(fresh))];
   };
 
-  // Claude's coral cursor, drawn by the helper; one process for the session.
+  // The agent's own cursor, drawn by the helper; one process for the session.
   let cursor: NodeChildProcess.ChildProcess | null = null;
   let cursorAt: { readonly x: number; readonly y: number } | null = null;
   const cue = (line: string) => {
     if (cursor === null || cursor.exitCode !== null || cursor.stdin?.destroyed) {
-      cursor = NodeChildProcess.spawn(helper, ["cursor"], { stdio: ["pipe", "ignore", "ignore"] });
+      cursor = NodeChildProcess.spawn(
+        helper,
+        // The agent's colors: Claude's orange, Codex's violet.
+        ["cursor", process.env.ATLAS_COMPUTER_AGENT === "codex" ? "codex" : "claude"],
+        { stdio: ["pipe", "ignore", "ignore"] },
+      );
       cursor.on("error", () => undefined);
       cursor.stdin?.on("error", () => undefined);
     }

@@ -669,7 +669,7 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
       type: "stdio",
       command: "/app/node",
       args: ["/app/bin.mjs", "atlas-computer-mcp"],
-      env: { ELECTRON_RUN_AS_NODE: "1" },
+      env: { ELECTRON_RUN_AS_NODE: "1", ATLAS_COMPUTER_AGENT: "claude" },
     });
     assert.include(full.allowedTools ?? [], "mcp__atlas-computer__*");
 
