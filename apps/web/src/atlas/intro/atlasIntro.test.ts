@@ -4,6 +4,8 @@ import type { SourceControlDiscoveryResult } from "@t3tools/contracts";
 
 import {
   formatAtlasWeekCounts,
+  formatAtlasWeekFiles,
+  formatAtlasWeekTime,
   publishAtlasTerminalMeta,
   slugifyAtlasCommand,
   toAtlasWeekActivity,
@@ -54,7 +56,7 @@ describe("this week's activity", () => {
         weeklyActivity: { commits: 1, linesAdded: 5, linesRemoved: 2 },
       }),
     );
-    expect(week).toEqual({ linesAdded: 1_240, linesRemoved: 310, turns: 12, commits: 1 });
+    expect(week).toMatchObject({ linesAdded: 1_240, linesRemoved: 310, turns: 12, commits: 1 });
     expect(formatAtlasWeekCounts(week!)).toBe("12 turns · 1 commit");
   });
 
@@ -69,8 +71,28 @@ describe("this week's activity", () => {
     const week = toAtlasWeekActivity(
       discovery({ weeklyActivity: { commits: 3, linesAdded: 11, linesRemoved: 9 } }),
     );
-    expect(week).toEqual({ linesAdded: 11, linesRemoved: 9, turns: null, commits: 3 });
+    expect(week).toMatchObject({ linesAdded: 11, linesRemoved: 9, turns: null, commits: 3 });
     expect(formatAtlasWeekCounts(week!)).toBe("3 commits");
+  });
+
+  it("adds the agents' files, commands, threads and time in a project without git", () => {
+    const week = toAtlasWeekActivity(
+      discovery({
+        turnActivity: {
+          turns: 23,
+          linesAdded: 6_170,
+          linesRemoved: 460,
+          filesChanged: 92,
+          filesRead: 10,
+          commands: 9_206,
+          threads: 5,
+          agentSeconds: 55_440,
+        },
+      }),
+    );
+    expect(formatAtlasWeekFiles(week!)).toBe("92 files changed · 10 read");
+    expect(formatAtlasWeekCounts(week!)).toBe("23 turns · 9,206 commands");
+    expect(formatAtlasWeekTime(week!)).toBe("5 threads · 15h 24m of agent work");
   });
 
   it("has nothing to show without either source", () => {

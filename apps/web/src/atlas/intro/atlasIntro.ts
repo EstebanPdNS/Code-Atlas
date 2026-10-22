@@ -21,6 +21,12 @@ export interface AtlasWeekActivity {
   readonly turns: number | null;
   /** The repository author's commits; null outside a repository. */
   readonly commits: number | null;
+  /** The agents' week in the project; null when the server does not report it. */
+  readonly filesChanged: number | null;
+  readonly filesRead: number | null;
+  readonly commands: number | null;
+  readonly threads: number | null;
+  readonly agentSeconds: number | null;
 }
 
 /**
@@ -39,6 +45,11 @@ export function toAtlasWeekActivity(
       linesRemoved: turns.linesRemoved,
       turns: turns.turns,
       commits: git?.commits ?? null,
+      filesChanged: turns.filesChanged ?? null,
+      filesRead: turns.filesRead ?? null,
+      commands: turns.commands ?? null,
+      threads: turns.threads ?? null,
+      agentSeconds: turns.agentSeconds ?? null,
     };
   }
   if (git === undefined) return null;
@@ -47,6 +58,11 @@ export function toAtlasWeekActivity(
     linesRemoved: git.linesRemoved,
     turns: null,
     commits: git.commits,
+    filesChanged: null,
+    filesRead: null,
+    commands: null,
+    threads: null,
+    agentSeconds: null,
   };
 }
 
@@ -55,16 +71,42 @@ export function formatAtlasCount(value: number): string {
   return countFormat.format(value);
 }
 
-/** "3 turns · 2 commits", naming only the counts that are known. */
+const counted = (value: number, one: string, many: string) =>
+  `${formatAtlasCount(value)} ${value === 1 ? one : many}`;
+
+/** "3 turns · 120 commands · 2 commits", naming only the counts that are known. */
 export function formatAtlasWeekCounts(week: AtlasWeekActivity): string {
   const counts: string[] = [];
-  if (week.turns !== null) {
-    counts.push(`${formatAtlasCount(week.turns)} ${week.turns === 1 ? "turn" : "turns"}`);
+  if (week.turns !== null) counts.push(counted(week.turns, "turn", "turns"));
+  if (week.commands !== null && week.commands > 0) {
+    counts.push(counted(week.commands, "command", "commands"));
   }
-  if (week.commits !== null) {
-    counts.push(`${formatAtlasCount(week.commits)} ${week.commits === 1 ? "commit" : "commits"}`);
-  }
+  if (week.commits !== null) counts.push(counted(week.commits, "commit", "commits"));
   return counts.join(" · ");
+}
+
+/** "92 files changed · 10 read", or null when nothing is known. */
+export function formatAtlasWeekFiles(week: AtlasWeekActivity): string | null {
+  if (week.filesChanged === null) return null;
+  const read =
+    week.filesRead !== null && week.filesRead > 0
+      ? ` · ${formatAtlasCount(week.filesRead)} read`
+      : "";
+  return `${counted(week.filesChanged, "file", "files")} changed${read}`;
+}
+
+/** "5 threads · 15h 24m of agent work", or null when nothing is known. */
+export function formatAtlasWeekTime(week: AtlasWeekActivity): string | null {
+  const parts: string[] = [];
+  if (week.threads !== null && week.threads > 0)
+    parts.push(counted(week.threads, "thread", "threads"));
+  if (week.agentSeconds !== null && week.agentSeconds >= 60) {
+    const minutes = Math.round(week.agentSeconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const time = hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+    parts.push(`${time} of agent work`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export interface AtlasGitHubAccount {

@@ -23,6 +23,8 @@ import {
   ATLAS_SOUND_STORAGE_KEY,
   formatAtlasCount,
   formatAtlasWeekCounts,
+  formatAtlasWeekFiles,
+  formatAtlasWeekTime,
   publishAtlasTerminalMeta,
   replayAtlasIntro,
   setAtlasIntroStatus,
@@ -313,7 +315,13 @@ function AtlasTerminalFrame({ frameRef, commandRef, artRef, ...props }: AtlasTer
                   </span>
                   <span className="text-muted-foreground"> lines</span>
                 </p>
+                {formatAtlasWeekFiles(meta.week) === null ? null : (
+                  <p className="text-muted-foreground">{formatAtlasWeekFiles(meta.week)}</p>
+                )}
                 <p className="text-muted-foreground">{formatAtlasWeekCounts(meta.week)}</p>
+                {formatAtlasWeekTime(meta.week) === null ? null : (
+                  <p className="text-muted-foreground">{formatAtlasWeekTime(meta.week)}</p>
+                )}
               </div>
             )}
           </AtlasInfoCell>

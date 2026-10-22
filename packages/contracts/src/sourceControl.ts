@@ -173,10 +173,17 @@ export type VcsWeeklyActivityResult = typeof VcsWeeklyActivityResult.Type;
 
 /** Code Atlas: lines the project's turns changed in the last seven days, from their checkpoints. */
 export const TurnWeeklyActivityResult = Schema.Struct({
-  /** Turns whose checkpoint changed at least one file. */
+  /** Turns the project's threads ran (subagents' threads not counted twice). */
   turns: NonNegativeInt,
   linesAdded: NonNegativeInt,
   linesRemoved: NonNegativeInt,
+  // Code Atlas: the rest of the week's activity, read from the agents' own work
+  // so projects without git count too.
+  filesChanged: Schema.optionalKey(NonNegativeInt),
+  filesRead: Schema.optionalKey(NonNegativeInt),
+  commands: Schema.optionalKey(NonNegativeInt),
+  threads: Schema.optionalKey(NonNegativeInt),
+  agentSeconds: Schema.optionalKey(NonNegativeInt),
 });
 export type TurnWeeklyActivityResult = typeof TurnWeeklyActivityResult.Type;
 
