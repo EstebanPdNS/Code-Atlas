@@ -2914,6 +2914,9 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   if (platform === "mac") {
     const path = yield* Path.Path;
     const repoRoot = yield* RepoRoot;
+    // Code Atlas: unsigned builds get a stable local identity instead of an
+    // ad-hoc signature, so macOS keeps Screen Recording across updates.
+    if (!signed) buildConfig.afterPack = path.join(repoRoot, "scripts/code-atlas-after-pack.ts");
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
