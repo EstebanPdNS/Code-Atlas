@@ -4,12 +4,10 @@ import { useRef, useState } from "react";
 
 import { niceScale, smoothCurve } from "~/components/usage/UsageProviderChart";
 import { cn } from "~/lib/utils";
-import { usePrimaryEnvironmentId } from "~/state/environments";
-import { useEnvironmentQuery } from "~/state/query";
-import { sourceControlEnvironment } from "~/state/sourceControl";
 
 import { formatAtlasCount } from "../intro/atlasIntro";
 import { morphablePath } from "./chartMorph";
+import { type UsagePeriodDays, useCodeActivity } from "./usagePreload";
 
 type Activity = NonNullable<SourceControlDiscoveryResult["turnActivity"]>;
 type Period = NonNullable<Activity["periods"]>[number];
@@ -42,18 +40,10 @@ export function UsageCodeView({
   windowDays,
   hour12,
 }: {
-  readonly windowDays: 1 | 7 | 30 | 90;
+  readonly windowDays: UsagePeriodDays;
   readonly hour12: boolean;
 }) {
-  const environmentId = usePrimaryEnvironmentId();
-  const discovery = useEnvironmentQuery(
-    environmentId === null
-      ? null
-      : sourceControlEnvironment.discovery({
-          environmentId,
-          input: { activityAll: true, activityDays: windowDays },
-        }),
-  );
+  const discovery = useCodeActivity(windowDays);
   // The last period stays on screen, dimmed, until the new one arrives, so
   // the chart can morph from it.
   const [kept, setKept] = useState<SourceControlDiscoveryResult | null>(null);

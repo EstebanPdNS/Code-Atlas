@@ -113,6 +113,7 @@ import {
 // Code Atlas: Cost and Tokens tabs only, provider colors, and tokens per subscription dollar.
 import { USAGE_TABS, withoutLimitsTab } from "../../atlas/usage/usageTabs";
 import { UsageCodeView } from "../../atlas/usage/UsageCodeView";
+import { makePeriodWindows, UsagePeriodPreload } from "../../atlas/usage/usagePreload";
 import { UsageTokenEfficiency } from "../../atlas/usage/UsageTokenEfficiency";
 import { UsageTokenTypes } from "../../atlas/usage/UsageTokenTypes";
 import { usageProviderFill } from "../../atlas/usage/usageProviderPaint";
@@ -201,13 +202,11 @@ export function UsagePage() {
     });
     return shortcut ? `${option.label} (${shortcut})` : option.label;
   };
+  // Code Atlas: every period's window is made up front and preloaded.
+  const [periodWindows, setPeriodWindows] = useState(makePeriodWindows);
   const [windowSelection, setWindowSelection] = useState(() => ({
     days: preferences.windowDays,
-    window: makeWindow(
-      preferences.windowDays,
-      undefined,
-      preferences.windowDays === 1 ? "hour" : "day",
-    ),
+    window: periodWindows[preferences.windowDays],
   }));
   const metric = preferences.metric;
   const showingLimits = metric === "limits";
@@ -254,10 +253,7 @@ export function UsagePage() {
   const selectWindow = (days: number) => {
     if (!isUsageWindowDays(days)) return;
     updatePreferences({ windowDays: days });
-    setWindowSelection({
-      days,
-      window: makeWindow(days, undefined, days === 1 ? "hour" : "day"),
-    });
+    setWindowSelection({ days, window: periodWindows[days] });
   };
   const selectMetric = (nextMetric: UsageMetric) => {
     if (nextMetric === "limits") setLimitsNow(Date.now());
@@ -331,6 +327,7 @@ export function UsagePage() {
       nextWindow.untilTime !== window.untilTime
     ) {
       setWindowSelection({ days: windowDays, window: nextWindow });
+      setPeriodWindows({ ...makePeriodWindows(), [windowDays]: nextWindow });
     }
     refreshingRef.current = true;
     setIsRefreshing(true);
@@ -518,6 +515,7 @@ export function UsagePage() {
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
+      <UsagePeriodPreload windows={periodWindows} />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>{topbarContent}</WorkspacePageHeader>
 
