@@ -599,6 +599,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.autoResumeLimitedThreads !== DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads
       ? ["Auto-resume limited threads"]
       : []),
+    ...(settings.autoResumeGoalThreads !== DEFAULT_UNIFIED_SETTINGS.autoResumeGoalThreads
+      ? ["Keep goals going after limits"]
+      : []),
     ...(settings.snoozeLimitedThreads !== DEFAULT_UNIFIED_SETTINGS.snoozeLimitedThreads
       ? ["Snooze limited threads"]
       : []),
@@ -761,6 +764,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       sidebarAutoSettleKeepPullRequests: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleKeepPullRequests,
       sidebarAutoSettleOnMerge: DEFAULT_UNIFIED_SETTINGS.sidebarAutoSettleOnMerge,
       autoResumeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.autoResumeLimitedThreads,
+      autoResumeGoalThreads: DEFAULT_UNIFIED_SETTINGS.autoResumeGoalThreads,
       snoozeLimitedThreads: DEFAULT_UNIFIED_SETTINGS.snoozeLimitedThreads,
       responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
       enableProviderUpdateChecks: DEFAULT_UNIFIED_SETTINGS.enableProviderUpdateChecks,
@@ -2352,6 +2356,23 @@ export function GeneralSettingsPanel() {
                 updateSettings({ autoResumeLimitedThreads: Boolean(checked) })
               }
               aria-label="Auto-resume limited threads"
+            />
+          }
+        />
+        {/* Code Atlas: goals resume after a usage limit even with auto-resume off. */}
+        <SettingsRow
+          serverScoped
+          {...searchableSetting("auto-resume-goal-threads")}
+          description="When a thread with a goal hits its session or weekly limit, it continues by itself as soon as the limit resets."
+          settingKeys={["autoResumeGoalThreads"]}
+          control={
+            <ScopedSwitch
+              settingKeys={["autoResumeGoalThreads"]}
+              checked={settings.autoResumeGoalThreads}
+              onCheckedChange={(checked) =>
+                updateSettings({ autoResumeGoalThreads: Boolean(checked) })
+              }
+              aria-label="Keep goals going after limits"
             />
           }
         />

@@ -174,7 +174,10 @@ export type ProjectionLimitRecoveryCandidate = Pick<
   | "updatedAt"
   | "limitRecovery"
   | "snoozedUntil"
->;
+> & {
+  // Code Atlas: a goal still being worked toward (active, or stopped by the limit).
+  readonly hasActiveGoal?: boolean;
+};
 
 export type ProjectionThreadPullRequests = Pick<
   OrchestrationV2AppThread,
@@ -445,6 +448,7 @@ export interface ProjectionStoreV2Shape {
     readonly now: DateTime.Utc;
     readonly autoResume: boolean;
     readonly snooze: boolean;
+    readonly autoResumeGoals?: boolean;
   }) => Effect.Effect<ReadonlyArray<ProjectionLimitRecoveryCandidate>, ProjectionStoreV2Error>;
   readonly getSettlementCandidates: (
     threadId?: ThreadId,
@@ -3761,9 +3765,15 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           readonly completed_at: string | null;
           readonly failure_payload_json: string;
           readonly last_error: string | null;
+          readonly has_active_goal: number;
         }>`
           SELECT t.payload_json, r.run_id, r.completed_at,
             item.payload_json AS failure_payload_json,
+            EXISTS (
+              SELECT 1 FROM orchestration_v2_projection_provider_threads goal_thread
+              WHERE goal_thread.thread_id = t.thread_id
+                AND json_extract(goal_thread.payload_json, '$.goal.status') IN ('active', 'usage_limited')
+            ) AS has_active_goal,
             (
               SELECT json_extract(session.payload_json, '$.lastError')
               -- Keep bindings outermost: one provider instance can hold every session.
@@ -3829,6 +3839,11 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 )
                 AND (
                   ${booleanInt(options.autoResume)}
+                  OR (${booleanInt(options.autoResumeGoals === true)} AND EXISTS (
+                    SELECT 1 FROM orchestration_v2_projection_provider_threads goal_thread
+                    WHERE goal_thread.thread_id = t.thread_id
+                      AND json_extract(goal_thread.payload_json, '$.goal.status') IN ('active', 'usage_limited')
+                  ))
                   OR (${booleanInt(options.snooze)} AND julianday(json_extract(item.payload_json, '$.failure.resetAt')) > julianday(${DateTime.formatIso(options.now)}))
                 )
               )
@@ -3862,6 +3877,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             pendingRuntimeRequest: null,
             limitRecovery: thread.limitRecovery ?? null,
             snoozedUntil: thread.snoozedUntil ?? null,
+            hasActiveGoal: row.has_active_goal === 1,
           });
         }
         return candidates;
