@@ -158,6 +158,8 @@ final class CursorView: NSView {
   // The arrow's tip inside the view; room around it for the outline, shadow and ripple.
   static let tip = CGPoint(x: 12, y: 10)
   var fill = agentColor("claude")
+  // Codex's arrow runs from cyan through blue to violet, like Codex's own cursor.
+  var gradient: NSGradient?
 
   /// The system arrow's proportions at its usual size (about 20 points tall).
   static func arrow(at tip: CGPoint) -> NSBezierPath {
@@ -186,8 +188,17 @@ final class CursorView: NSView {
     NSColor(calibratedWhite: 0.08, alpha: 1).setStroke()
     arrow.lineWidth = 2.6
     arrow.stroke()
-    fill.setFill()
-    arrow.fill()
+    if let gradient {
+      let tip = CursorView.tip
+      NSGraphicsContext.saveGraphicsState()
+      arrow.addClip()
+      gradient.draw(
+        from: tip, to: CGPoint(x: tip.x + 11, y: tip.y + 17), options: [.drawsBeforeStartingLocation, .drawsAfterEndingLocation])
+      NSGraphicsContext.restoreGraphicsState()
+    } else {
+      fill.setFill()
+      arrow.fill()
+    }
     context.endTransparencyLayer()
     NSGraphicsContext.restoreGraphicsState()
   }
@@ -202,6 +213,13 @@ final class AgentCursor {
 
   init(agent: String) {
     view.fill = agentColor(agent)
+    if agent == "codex" {
+      view.gradient = NSGradient(colors: [
+        NSColor(calibratedRed: 0x38 / 255, green: 0xB6 / 255, blue: 0xFF / 255, alpha: 1),
+        NSColor(calibratedRed: 0x5B / 255, green: 0x6C / 255, blue: 0xFF / 255, alpha: 1),
+        NSColor(calibratedRed: 0xA8 / 255, green: 0x5C / 255, blue: 0xF7 / 255, alpha: 1),
+      ])
+    }
     window = NSWindow(
       contentRect: view.frame, styleMask: .borderless, backing: .buffered, defer: false)
     window.isOpaque = false
