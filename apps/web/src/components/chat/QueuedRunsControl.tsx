@@ -27,6 +27,7 @@ import { cn } from "~/lib/utils";
 import { ComposerBanner } from "./ComposerBanner";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { withoutAttachmentOnlyPrompt } from "~/atlas/chat/attachmentOnlyPrompt";
 
 export interface EditQueuedRunRequest {
   readonly runId: RunId;
@@ -258,8 +259,11 @@ export function QueuedRunsControl({
           <ComposerBanner.Children render={<ol />} id={queueListId}>
             {items.map((item) => {
               const previewText = assistantCitationsToPlainText(
-                replaceComposerContextReferences(item.text, (reference) =>
-                  reference.kind === "image" && item.thumbnails.length > 0 ? "" : reference.label,
+                // Code Atlas: a queued image-only message previews as its image.
+                replaceComposerContextReferences(
+                  withoutAttachmentOnlyPrompt(item.text),
+                  (reference) =>
+                    reference.kind === "image" && item.thumbnails.length > 0 ? "" : reference.label,
                 ),
               ).trim();
               const rowRunId = item.runId;
