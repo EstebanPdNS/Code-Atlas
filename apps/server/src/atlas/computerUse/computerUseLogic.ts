@@ -193,3 +193,16 @@ export function findWindow(
 
 /** Long side of the images sent to the model: enough to read, cheap in tokens. */
 export const SCREENSHOT_MAX_SIDE = 1568;
+
+/** The names an app's approval is stored under: its name and bundle id, lowercased. */
+export function appApprovalKeys(app: string, bundleId = ""): string[] {
+  const keys = [app, bundleId]
+    .map((value) =>
+      value
+        .trim()
+        .replace(/\.app$/iu, "")
+        .toLowerCase(),
+    )
+    .filter((value) => value.length > 0);
+  return [...new Set(keys)];
+}

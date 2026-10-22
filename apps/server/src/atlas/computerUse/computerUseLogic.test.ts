@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { findWindow, imagePointToScreen, parseKeyCombo } from "./computerUseLogic.ts";
+import {
+  appApprovalKeys,
+  findWindow,
+  imagePointToScreen,
+  parseKeyCombo,
+} from "./computerUseLogic.ts";
 
 describe("parseKeyCombo", () => {
   it("reads modifiers and keys", () => {
@@ -57,5 +62,15 @@ describe("findWindow", () => {
   it("finds a window by id and nothing for an unknown app", () => {
     expect(findWindow(windows, { windowId: 3 })?.windowId).toBe(3);
     expect(findWindow(windows, { app: "Safari" })).toBeNull();
+  });
+});
+
+describe("appApprovalKeys", () => {
+  it("keys an app by name and bundle id, case-insensitively", () => {
+    expect(appApprovalKeys("Pages", "com.apple.iWork.Pages")).toEqual([
+      "pages",
+      "com.apple.iwork.pages",
+    ]);
+    expect(appApprovalKeys("Azahar.app")).toEqual(["azahar"]);
   });
 });
