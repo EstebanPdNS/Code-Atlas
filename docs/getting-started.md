@@ -45,7 +45,7 @@ Code Atlas builds like T3 Code. Install Node 24 and [Vite+](https://viteplus.dev
 
 ```sh
 vp i
-T3CODE_DESKTOP_VERSION=1.4.0 vp run dist:desktop:dmg:arm64
+T3CODE_DESKTOP_VERSION=1.5.0 vp run dist:desktop:dmg:arm64
 ```
 
-The build also compiles the local Whisper server with `native/whisper-server/build.sh` (requires the Xcode command line tools and CMake). See the [development runbook](operations/development.md) for the full T3 Code workflow. The reference sources that coding agents read (`.repos/`) are not in the repository; fetch them with `vp run sync:repos`.
+The build signs the app with a local certificate that `scripts/code-atlas-sign.sh` creates in `~/.code-atlas/signing` the first time, so macOS keeps Screen Recording and Accessibility across builds; keep that folder. The build also compiles the local Whisper server with `native/whisper-server/build.sh` (requires the Xcode command line tools and CMake). See the [development runbook](operations/development.md) for the full T3 Code workflow. The reference sources that coding agents read (`.repos/`) are not in the repository; fetch them with `vp run sync:repos`.
