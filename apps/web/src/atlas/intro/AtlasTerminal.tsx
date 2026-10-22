@@ -92,7 +92,6 @@ const INTRO_START_DELAY_MS = 1600;
 const LOGO_START_DELAY_MS = 180;
 const ZOOM_DURATION_MS = 1400;
 const BACKDROP_FADE_MS = 650;
-const OVERLAY_FADE_MS = 160;
 // A safety net: never leave the app covered.
 const INTRO_SAFETY_TIMEOUT_MS = 15_000;
 // Well below the macOS window buttons, which sit over the fullscreen intro.
@@ -474,23 +473,73 @@ export function AtlasLaunchIntro() {
   return createPortal(<AtlasLaunchIntroScene meta={meta} />, document.body);
 }
 
+/**
+ * Frames the command in the top-left corner and the logo across the window,
+ * and returns that transform (the zoom-out starts from it).
+ */
+function frameIntroCamera(
+  camera: HTMLElement | null,
+  commandEl: HTMLElement | null,
+  art: HTMLElement | null,
+): string {
+  if (!camera || !commandEl || !art) return "none";
+  // Measure untransformed: the camera may already be framed.
+  camera.style.transform = "none";
+  const cameraRect = camera.getBoundingClientRect();
+  const commandRect = commandEl.getBoundingClientRect();
+  const artRect = art.getBoundingClientRect();
+  const commandTop = commandRect.top - cameraRect.top;
+  const commandLeft = commandRect.left - cameraRect.left;
+  const artBottom = artRect.bottom - cameraRect.top;
+  const viewportWidth = window.innerWidth;
+  const edge = Math.min(40, Math.max(18, viewportWidth * 0.035));
+  const top = INTRO_COMMAND_TOP_PX;
+  // Like the handbook: the logo spans most of the window width, limited only
+  // by the window height.
+  const scale = Math.max(
+    1.03,
+    Math.min(
+      6,
+      (viewportWidth * 0.8) / Math.max(artRect.width, commandEl.scrollWidth),
+      (window.innerHeight - top - 40) / (artBottom - commandTop),
+    ),
+  );
+  const left = edge - commandLeft * scale;
+  const transform = `translate(${left}px, ${top - commandTop * scale}px) scale(${scale})`;
+  camera.style.transform = transform;
+  return transform;
+}
+
+function landedTerminalSize(): { readonly width: number; readonly height: number } | null {
+  const rect = findLandedTerminal()?.getBoundingClientRect();
+  return rect && rect.width > 0 ? { width: rect.width, height: rect.height } : null;
+}
+
 function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
-  // Fixed for the run: a project rename mid-intro must not restart the typing.
-  const [command] = useState(() => slugifyAtlasCommand(meta.projectName));
+  // On a fresh launch the project loads during the opening pause: the typing
+  // reads the latest meta, so it types the project the terminal lands on.
+  const metaRef = useRef(meta);
+  useLayoutEffect(() => {
+    metaRef.current = meta;
+  }, [meta]);
   const [typed, setTyped] = useState(0);
   const [rows, setRows] = useState(0);
   const [phase, setPhase] = useState<IntroPhase>("typing");
-  // The landing terminal's box when it already exists. The app usually mounts
-  // it later, so the zoom-out also animates the size to wherever it is by then.
-  const [{ width, height }] = useState(() => {
-    const rect = findLandedTerminal()?.getBoundingClientRect();
-    return rect && rect.width > 0
-      ? { width: rect.width, height: rect.height }
-      : {
-          width: Math.min(704, window.innerWidth - 64),
-          height: Math.max(360, Math.min(620, window.innerHeight - 240)),
-        };
-  });
+  const phaseRef = useRef<IntroPhase>("typing");
+  useLayoutEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+  // The landing terminal's box. On a fresh launch the app mounts it after the
+  // intro, so it is measured again when the typing starts; the zoom-out then
+  // animates the size to wherever it is by then.
+  const [{ width, height }] = useState(
+    () =>
+      landedTerminalSize() ?? {
+        width: Math.min(704, window.innerWidth - 64),
+        height: Math.max(360, Math.min(620, window.innerHeight - 240)),
+      },
+  );
+  const sizeRef = useRef({ width, height });
   const overlayRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<HTMLDivElement>(null);
@@ -499,36 +548,25 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
   const startTransform = useRef("none");
   const skipRef = useRef(() => setAtlasIntroStatus("done"));
 
-  // Frame the command in the top-left corner and the logo across the window.
+  // Frame the command in the top-left corner and the logo across the window,
+  // and again if the window changes before the zoom (a fresh window can still
+  // be maximizing when the intro mounts).
   useLayoutEffect(() => {
-    const camera = cameraRef.current;
-    const commandEl = commandRef.current;
-    const art = artRef.current;
-    if (!camera || !commandEl || !art) return;
-    // Measure untransformed: effects can run again after the camera was framed.
-    camera.style.transform = "none";
-    const cameraRect = camera.getBoundingClientRect();
-    const commandRect = commandEl.getBoundingClientRect();
-    const artRect = art.getBoundingClientRect();
-    const commandTop = commandRect.top - cameraRect.top;
-    const commandLeft = commandRect.left - cameraRect.left;
-    const artBottom = artRect.bottom - cameraRect.top;
-    const viewportWidth = window.innerWidth;
-    const edge = Math.min(40, Math.max(18, viewportWidth * 0.035));
-    const top = INTRO_COMMAND_TOP_PX;
-    // Like the handbook: the logo spans most of the window width, limited only
-    // by the window height.
-    const scale = Math.max(
-      1.03,
-      Math.min(
-        6,
-        (viewportWidth * 0.8) / Math.max(artRect.width, commandEl.scrollWidth),
-        (window.innerHeight - top - 40) / (artBottom - commandTop),
-      ),
+    startTransform.current = frameIntroCamera(
+      cameraRef.current,
+      commandRef.current,
+      artRef.current,
     );
-    const left = edge - commandLeft * scale;
-    startTransform.current = `translate(${left}px, ${top - commandTop * scale}px) scale(${scale})`;
-    camera.style.transform = startTransform.current;
+    const onResize = () => {
+      if (phaseRef.current !== "typing" && phaseRef.current !== "logo") return;
+      startTransform.current = frameIntroCamera(
+        cameraRef.current,
+        commandRef.current,
+        artRef.current,
+      );
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   useEffect(() => {
@@ -558,27 +596,22 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
         camera.style.width = `${target.width}px`;
         camera.style.height = `${target.height}px`;
       }
-      animations.push(
-        backdrop.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: BACKDROP_FADE_MS,
-          easing: "ease",
-          fill: "forwards",
-        }),
-      );
-      later(() => {
-        const fade = overlay.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: OVERLAY_FADE_MS,
-          easing: "linear",
-          fill: "forwards",
-        });
-        animations.push(fade);
-        fade.finished.then(finish, finish);
-      }, BACKDROP_FADE_MS);
+      const fade = backdrop.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: BACKDROP_FADE_MS,
+        easing: "ease",
+        fill: "forwards",
+      });
+      animations.push(fade);
+      // The camera already sits on the landed terminal: hand over in one
+      // commit (overlay out, terminal in) instead of fading the camera first,
+      // which blinked the terminal out and back.
+      fade.finished.then(finish, finish);
     };
     const zoomOut = () => {
       setPhase("zoom");
       const camera = cameraRef.current;
       if (!camera) return finish();
+      const { width, height } = sizeRef.current;
       const target = findLandedTerminal()?.getBoundingClientRect();
       const landed =
         target && target.width > 0
@@ -636,10 +669,22 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
     const typeNext = () => {
       position += 1;
       setTyped(position);
+      const command = slugifyAtlasCommand(metaRef.current.projectName);
       if (position < command.length) later(typeNext, randomBetween(45, 140) / TYPE_SPEEDUP);
       else later(startLogo, LOGO_START_DELAY_MS);
     };
-    later(typeNext, INTRO_START_DELAY_MS);
+    later(() => {
+      // Nothing shows yet but the caret: resize and reframe before typing.
+      const landed = landedTerminalSize();
+      const camera = cameraRef.current;
+      if (landed && camera) {
+        sizeRef.current = landed;
+        camera.style.width = `${landed.width}px`;
+        camera.style.height = `${landed.height}px`;
+        startTransform.current = frameIntroCamera(camera, commandRef.current, artRef.current);
+      }
+      typeNext();
+    }, INTRO_START_DELAY_MS);
     later(finish, INTRO_SAFETY_TIMEOUT_MS);
     // Escape and a click both skip: the app appears and Aurora stops with it.
     const skip = () => {
@@ -658,7 +703,7 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       // Aurora keeps playing into the app unless the intro was skipped early.
       if (!finished) audio?.pause();
     };
-  }, [command, width, height]);
+  }, []);
 
   return (
     <div
@@ -678,7 +723,8 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
           caret={phase === "typing"}
           commandRef={commandRef}
           artRef={artRef}
-          className="shadow-2xl/20"
+          // Lands with the landed terminal's shadow, so the handover shows no seam.
+          className={phase === "reveal" ? "shadow-lg/5" : "shadow-2xl/20"}
         />
       </div>
     </div>

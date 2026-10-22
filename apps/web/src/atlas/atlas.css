@@ -1083,6 +1083,20 @@ span[data-atlas-hero-heading] {
   animation-delay: 0.4s;
 }
 
+/* A Codex thread's dots run through the Codex icon's blue to violet; Claude
+   keeps the orange. */
+[data-atlas-provider="codex"] > span:nth-child(1) {
+  background: #4f7cff;
+}
+
+[data-atlas-provider="codex"] > span:nth-child(2) {
+  background: #6d6cfb;
+}
+
+[data-atlas-provider="codex"] > span:nth-child(3) {
+  background: #8b5cf6;
+}
+
 /* Sortable lists (Pinned, a project's threads, a group's projects, the
    groups): rows glide aside with dnd-kit's inline transition while one drags;
    with reduced motion they move at once. */
@@ -1090,6 +1104,141 @@ span[data-atlas-hero-heading] {
   [data-atlas-sortable-list] > li {
     transition: none !important;
   }
+}
+
+/* ========== Questions ========== */
+/* An agent's question above the composer, like Claude Code's prompt cards:
+   the question on a header strip, the options, then Skip (Esc) and the
+   white Next/Submit (⌘↩) in a footer. */
+[data-atlas-question] {
+  font-size: 0.875rem;
+  line-height: 1.35rem;
+}
+
+[data-atlas-question-head] {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0.125rem 0.125rem 0;
+  padding: 0.625rem 0.5rem 0.625rem 0.875rem;
+  border-radius: 0.875rem 0.875rem 0.375rem 0.375rem;
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  color: var(--foreground);
+  font-size: 0.9375rem;
+}
+
+[data-atlas-question-toggle] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background-color var(--atlas-duration-fast) var(--atlas-ease-out);
+}
+
+[data-atlas-question-toggle]:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+[data-atlas-question-body] {
+  padding: 0.625rem 0.375rem 0.25rem;
+}
+
+[data-atlas-question-title] {
+  margin: 0 0.5rem 0.375rem;
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+[data-atlas-question-option] {
+  padding: 0.5rem 0.5rem 0.5rem 0.625rem;
+  border-radius: 0.625rem;
+  color: color-mix(in srgb, var(--foreground) 88%, transparent);
+  transition: background-color var(--atlas-duration-fast) var(--atlas-ease-out);
+}
+
+[data-atlas-question-option]:hover:not(:disabled),
+[data-atlas-question-option]:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+[data-atlas-question-option][data-selected] {
+  background: color-mix(in srgb, var(--foreground) 9%, transparent);
+  color: var(--foreground);
+}
+
+[data-atlas-question-foot] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.375rem 0.375rem 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+}
+
+[data-atlas-question-skip],
+[data-atlas-question-submit] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2rem;
+  padding: 0 0.3125rem 0 0.75rem;
+  border-radius: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--atlas-duration-fast) var(--atlas-ease-out),
+    opacity var(--atlas-duration-fast) var(--atlas-ease-out);
+}
+
+[data-atlas-question-skip] {
+  color: var(--foreground);
+}
+
+[data-atlas-question-skip]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+}
+
+[data-atlas-question-submit] {
+  background: var(--foreground);
+  color: var(--background);
+}
+
+[data-atlas-question-submit]:disabled,
+[data-atlas-question-skip]:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+[data-atlas-question] :is(button):active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/* Keycaps: the option numbers and the Esc / ⌘↩ hints. */
+[data-atlas-keycap] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.375rem;
+  height: 1.375rem;
+  padding: 0 0.3125rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent);
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+[data-atlas-question-submit] [data-atlas-keycap] {
+  border-color: color-mix(in srgb, var(--background) 25%, transparent);
+  color: color-mix(in srgb, var(--background) 70%, transparent);
 }
 
 /* ========== Progress ========== */
@@ -1299,24 +1448,44 @@ span[data-atlas-hero-heading] {
    and the star beside the address bar. */
 [data-atlas-newtab-body] {
   display: flex;
-  max-width: 44rem;
+  max-width: 46rem;
   flex-direction: column;
   gap: 1.75rem;
   margin: 0 auto;
-  padding: 1.75rem 1.25rem 2rem;
+  padding: 2rem 1.25rem 2.5rem;
 }
 
 [data-atlas-newtab-section] {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.75rem;
 }
 
 [data-atlas-newtab-heading] {
+  display: flex;
+  align-items: center;
+  gap: 0.4375rem;
   margin: 0;
-  color: var(--muted-foreground);
+  color: var(--foreground);
   font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+[data-atlas-newtab-heading] svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--muted-foreground);
+}
+
+[data-atlas-newtab-count] {
+  padding: 0 0.375rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 7%, transparent);
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
   font-weight: 500;
+  line-height: 1.125rem;
+  font-variant-numeric: tabular-nums;
 }
 
 [data-atlas-newtab-hint] {
@@ -1325,10 +1494,28 @@ span[data-atlas-hero-heading] {
   font-size: 0.75rem;
 }
 
+/* An empty section is a quiet dashed card with its icon, so the page keeps
+   its shape before anything is saved. */
+[data-atlas-newtab-empty] {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px dashed color-mix(in srgb, var(--foreground) 14%, transparent);
+  border-radius: 0.875rem;
+}
+
+[data-atlas-newtab-empty] > svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+}
+
 [data-atlas-site-grid] {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
-  gap: 0.375rem;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1339,20 +1526,25 @@ span[data-atlas-hero-heading] {
   min-width: 0;
 }
 
+/* Each site is a small card: its icon, then the title and the host below. */
 [data-atlas-site-open] {
   display: flex;
   width: 100%;
   flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.875rem 0.5rem 0.75rem;
-  border-radius: calc(var(--radius) - 2px);
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 9%, transparent);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--foreground) 2.5%, transparent);
   color: var(--foreground);
+  text-align: left;
   cursor: pointer;
 }
 
 [data-atlas-site-open]:hover {
-  background: var(--accent);
+  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
 [data-atlas-site-open]:focus-visible {
@@ -1362,41 +1554,59 @@ span[data-atlas-hero-heading] {
 
 [data-atlas-site-icon] {
   display: flex;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--card);
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 0.625rem;
+  background: var(--background);
 }
 
 [data-atlas-site-icon] img {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
   object-fit: contain;
 }
 
 [data-atlas-site-letter] {
   color: var(--muted-foreground);
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
-[data-atlas-site-title] {
+[data-atlas-site-text] {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.0625rem;
+}
+
+[data-atlas-site-title],
+[data-atlas-site-host] {
   max-width: 100%;
   overflow: hidden;
-  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+[data-atlas-site-title] {
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+[data-atlas-site-host] {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
 }
 
 /* The tile's remove control shows on hover or keyboard focus. */
 [data-atlas-site-remove] {
   position: absolute;
-  top: 0.25rem;
-  right: 0.25rem;
+  top: 0.5rem;
+  right: 0.5rem;
   display: flex;
   width: 1.25rem;
   height: 1.25rem;
@@ -1440,7 +1650,7 @@ span[data-atlas-hero-heading] {
 }
 
 :is([data-atlas-site-open], [data-atlas-site-remove]) {
-  transition-property: color, background-color, opacity, scale;
+  transition-property: color, background-color, border-color, opacity, scale;
   transition-duration: var(--atlas-duration-fast);
   transition-timing-function: var(--atlas-ease-out);
 }
@@ -1511,6 +1721,14 @@ span[data-atlas-hero-heading] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-atlas-question] button {
+    transition: none;
+  }
+
+  [data-atlas-question] :is(button):active:not(:disabled) {
+    transform: none;
+  }
+
   [data-atlas-caret],
   [data-atlas-rise],
   [data-atlas-pop-in],
