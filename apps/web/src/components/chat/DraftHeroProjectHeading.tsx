@@ -39,7 +39,7 @@ export function DraftHeroProjectHeading({
           data-atlas-hero-heading
           className="flex w-max items-baseline whitespace-nowrap font-normal text-2xl tracking-tight"
         >
-          <span>What should we build in</span>
+          <span>What should we build in{"\u00a0"}</span>
           <span>
             <span className="font-medium">{projectName}</span>?
           </span>
@@ -52,8 +52,10 @@ export function DraftHeroProjectHeading({
         <span className="max-w-full lg:group-data-[inline=true]/draft-hero:shrink-0">
           What should we build
           <span className="lg:group-data-[inline=true]/draft-hero:hidden">?</span>
-          {/* Code Atlas: [data-atlas-hero-heading] spaces "in" evenly on both sides. */}
-          <span className="hidden lg:group-data-[inline=true]/draft-hero:inline"> in</span>
+          {/* Code Atlas: a no-break space after "in" matches the one before it in any typeface. */}
+          <span className="hidden lg:group-data-[inline=true]/draft-hero:inline">
+            {" in\u00a0"}
+          </span>
         </span>
         <span className="flex min-w-0 max-w-full items-baseline justify-center text-base tracking-normal lg:group-data-[inline=true]/draft-hero:text-2xl lg:group-data-[inline=true]/draft-hero:tracking-tight">
           <span className="min-w-0">{children}</span>

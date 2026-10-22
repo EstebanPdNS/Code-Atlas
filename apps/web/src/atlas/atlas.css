@@ -287,10 +287,11 @@ html:not([data-theme-id]) [data-chat-column] > header + div {
   margin-top: 1.25rem;
 }
 
-/* "What should we build in <project>?": the gap after "in" is one monospace
-   space, the same as the space typed before it. Stacked, gap-2 still applies. */
+/* "What should we build in <project>?": the space after "in" is a no-break
+   space in the text, the same width as the one before it in any typeface, so
+   no column gap is added. Stacked, gap-2 still applies. */
 [data-atlas-hero-heading] {
-  column-gap: 1ch;
+  column-gap: 0;
 }
 
 /* "What should we build in <project>?" at 80% of its former 1.5rem. */
