@@ -8,7 +8,7 @@
 <p align="center">A Mac workspace for coding agents, with local voice dictation and organized projects. Based on T3 Code.</p>
 
 <p align="center">
-  <a href="https://github.com/EstebanPdNS/Code-Atlas/releases/tag/v1.4"><img src="docs/images/badges/release.svg" alt="Release: v1.4" height="22"></a>
+  <a href="https://github.com/EstebanPdNS/Code-Atlas/releases/tag/v1.5"><img src="docs/images/badges/release.svg" alt="Release: v1.5" height="22"></a>
   <a href="docs/getting-started.md"><img src="docs/images/badges/macos.svg" alt="macOS 13+ · Apple Silicon" height="22"></a>
   <a href="https://github.com/EstebanPdNS/Code-Atlas/commits/main/"><img src="docs/images/badges/development.svg" alt="Development: active" height="22"></a>
   <a href="LICENSE"><img src="docs/images/badges/license.svg" alt="License: MIT" height="22"></a>
@@ -24,11 +24,11 @@ This project was developed with the help of [OpenAI Codex](https://openai.com/co
 
 ## Download
 
-<a href="https://github.com/EstebanPdNS/Code-Atlas/releases/download/v1.4/Code-Atlas-v1.4.zip"><img src="docs/images/download.svg" alt="Download for macOS" width="226" height="46"></a>
+<a href="https://github.com/EstebanPdNS/Code-Atlas/releases/download/v1.5/Code-Atlas-v1.5.zip"><img src="docs/images/download.svg" alt="Download for macOS" width="226" height="46"></a>
 
-**v1.4 · macOS 13+ · Apple Silicon.** Move the app to Applications and follow the [installation guide](docs/getting-started.md).
+**v1.5 · macOS 13+ · Apple Silicon.** Move the app to Applications and follow the [installation guide](docs/getting-started.md).
 
-Code Atlas is ad-hoc signed and not notarized: on first launch, choose **Open Anyway** in System Settings → Privacy & Security. It does not update itself; to update, replace the app in Applications with the new version. Settings, projects, threads and groups carry over.
+Code Atlas is signed with its own certificate but not notarized: on first launch, choose **Open Anyway** in System Settings → Privacy & Security. It does not update itself; to update, replace the app in Applications with the new version. Settings, projects, threads and groups carry over.
 
 ## Features
 
