@@ -1,19 +1,43 @@
-import type { SVGProps } from "react";
+import { useId, type SVGProps } from "react";
 
-// The Codex app's own icon (the blue-to-violet cloud with a prompt), taken
-// from its macOS app at 64 px.
-const CODEX_ICON_DATA_URL =
-  "data:image/png;base64,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";
+// The Codex app icon's colors: lavender at the top, a deep blue at the bottom.
+const CODEX_CLOUD_STOPS = ["#b3a8fd", "#7a9cfc", "#3a47ff"] as const;
+const CODEX_PROMPT_COLOR = "#ffffff";
 
 /**
- * Code Atlas: the Codex app's mark, for places that name Codex the app,
- * where the OpenAI knot would read as ChatGPT. The view box trims the icon's
- * margin so the cloud fills the box like the other provider marks.
+ * Code Atlas: the Codex app's mark (a blue-to-violet cloud with a prompt) on
+ * a transparent background, for places that name Codex the app, where the
+ * OpenAI knot would read as ChatGPT.
  */
 export function CodexMark(props: SVGProps<SVGSVGElement>) {
+  const gradientId = useId();
   return (
-    <svg {...props} viewBox="5 5 54 54">
-      <image href={CODEX_ICON_DATA_URL} width="64" height="64" />
+    <svg {...props} viewBox="2 2 28 28">
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="3" x2="0" y2="29" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor={CODEX_CLOUD_STOPS[0]} />
+          <stop offset="0.5" stopColor={CODEX_CLOUD_STOPS[1]} />
+          <stop offset="1" stopColor={CODEX_CLOUD_STOPS[2]} />
+        </linearGradient>
+      </defs>
+      <g fill={`url(#${gradientId})`}>
+        <circle cx="16" cy="16" r="9.4" />
+        <circle cx="12.91" cy="9.38" r="5.8" />
+        <circle cx="19.25" cy="9.46" r="5.8" />
+        <circle cx="23.14" cy="14.46" r="5.8" />
+        <circle cx="21.65" cy="20.62" r="5.8" />
+        <circle cx="15.91" cy="23.3" r="5.8" />
+        <circle cx="10.24" cy="20.48" r="5.8" />
+        <circle cx="8.9" cy="14.29" r="5.8" />
+      </g>
+      <path
+        d="M9.6 12.1 12.4 16.2l-2.8 3.9M16.7 19.9h5.9"
+        fill="none"
+        stroke={CODEX_PROMPT_COLOR}
+        strokeWidth="1.95"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

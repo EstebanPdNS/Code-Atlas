@@ -25,6 +25,7 @@ import { useKnownTerminalSessions } from "~/state/terminalSessions";
 import { AtlasActivityDots } from "../brand/ActivityDots";
 import { AtlasFold } from "../brand/AtlasFold";
 import { atlasProviderLabel, useAtlasAgentProviders } from "../brand/agentProviders";
+import { UsageProviderIcon } from "../usage/UsageProviderIcon";
 import { atlasProviderFill } from "../brand/providerColors";
 import {
   contextRows,
@@ -348,7 +349,14 @@ export function AtlasUsageSection({ environmentId }: { readonly environmentId: E
           );
           return (
             <div key={provider.instanceId} className="grid gap-1.5">
-              <span className="text-sm font-medium">{atlasProviderLabel(provider)}</span>
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                <UsageProviderIcon
+                  driverKind={provider.driver}
+                  displayName={atlasProviderLabel(provider)}
+                  iconClassName="size-4"
+                />
+                {atlasProviderLabel(provider)}
+              </span>
               {notice ? <span className="text-xs text-muted-foreground">{notice}</span> : null}
               {windows.map((window) => {
                 const resets = formatResetsIn(window, now);
