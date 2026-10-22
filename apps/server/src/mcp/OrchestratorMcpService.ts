@@ -106,6 +106,7 @@ import {
 } from "./McpInvocationContext.ts";
 import * as Metrics from "../observability/Metrics.ts";
 import * as SecretRequests from "../secrets/SecretRequests.ts";
+import { resolveAtlasModelAlias } from "./atlasModelAliases.ts";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_WAIT_TIMEOUT_MS = 60 * 60 * 1_000;
@@ -1340,7 +1341,11 @@ const make = Effect.gen(function* () {
     }
 
     const inheritedSelection = input.parent.thread.modelSelection;
-    const requestedModel = input.target?.model;
+    // Code Atlas: "sol", "opus" and other family names resolve to the live slug.
+    const requestedModel =
+      input.target?.model !== undefined && provider !== undefined
+        ? resolveAtlasModelAlias(input.target.model, provider.models)
+        : input.target?.model;
     const model =
       requestedModel ??
       (instanceId === inheritedSelection.instanceId

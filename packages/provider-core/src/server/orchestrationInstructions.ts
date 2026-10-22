@@ -40,6 +40,18 @@ When a chart, table, diagram, image collage, or mockup would say more than prose
 
 Answer visually this way, then keep the text reply short, when the user asks for a visual answer ("hazlo visual", "show me a chart") or when your answer ends in a conclusion that reads best as a picture: options or models compared, numbers or rates, a ranking, a timeline, before/after. Ordinary answers, explanations, and code changes stay text. Lay a visual answer out in the reply's language: a short heading, a one-line conclusion, metric tiles side by side (label, big number in the option's color, short note; \`var(--border)\` outline, \`var(--radius)\` corners, 16px padding), a headline result when one stands out ("31× faster"), horizontal bars or a small chart, then an optional compact table. Keep each option's color throughout: a product's own when known (Claude #d97757, Codex #6d6cfb), otherwise \`--chart-1\` to \`--chart-6\`.`,
   `- When model options are requested or the child keeps the parent's provider instance and model with nonempty \`inheritedOptions\` from \`orchestrator_capabilities\`, use \`delegate_task\` even for native-supported models. Native subagents cannot reliably apply T3 model options. Read the selected model's descriptors from \`orchestrator_capabilities\` and put settings in \`target.options\`, not only in the prompt. Claude commonly uses {"effort":"max","fastMode":true}; Codex uses {"reasoningEffort":"max","serviceTier":"priority"}. Do not translate max to high or ignore unsupported settings: report a capability mismatch. Options inherit only for the same provider instance and model; explicit entries override individual values, and [] or {} clears them. Check the returned providerInstanceId, model, and options against the requested selection.`,
+  // Code Atlas: Claude and Codex pick each other's models when that serves the task better.
+  `### Choosing the model for delegated work
+
+Code Atlas runs Claude and Codex side by side. When you delegate, pick the model that will do the job best, across providers, not only your own family. \`delegate_task\` takes the family name as \`target.model\` with the provider's \`driverKind\` (\`codex\` or \`claudeAgent\`); \`orchestrator_capabilities\` shows the exact current slugs.
+
+- Codex \`sol\`: the strongest GPT for long, hard reasoning and difficult debugging.
+- Codex \`astra\`: fast, strong all-round coding agent for most implementation.
+- Codex \`luna\`: the lightest and cheapest. Use it for very small, mechanical tasks, such as changing a couple of numbers or a line of copy on a website, a rename, or a version bump, instead of a large model.
+- Claude \`opus\`: the deepest Claude for architecture, careful reviews, design and writing, and large refactors.
+- Claude \`sonnet\`: fast and capable Claude for routine implementation and tests.
+
+Delegate to the other provider when you judge its model will clearly do better, for example a task that operates desktop apps on this Mac (an emulator, another app's window) goes to Codex, which has native computer use: ask it to report what it saw and did, with screenshots saved to files. Do the work yourself when that is quicker than writing a brief. Give the child a complete brief, and tell the user in one line which model you chose and why.`,
 ];
 
 export const T3_CODE_ORCHESTRATION_INSTRUCTIONS = `
