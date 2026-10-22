@@ -1,5 +1,5 @@
 // Code Atlas: the native half of Claude's computer use on this Mac, like
-// Codex's: Claude gets its own gray cursor, and its clicks and keys go straight
+// Codex's: Claude gets its own cursor, and its clicks and keys go straight
 // to the target app, so the user's own pointer and focus stay free. Apps that
 // ignore input sent that way (games, emulators) get it in the foreground
 // instead, and the user's pointer goes back where it was.
@@ -142,9 +142,12 @@ func windows() -> [[String: Any]] {
 
 // MARK: - Agent cursor
 
-/// Claude's own pointer: a gray arrow that glides to where Claude acts and
+/// Claude's own pointer, in Claude's coral (Codex draws its own cursor in its
+/// colors): an arrow that glides to where Claude acts and
 /// ripples on clicks. Click-through, above everything, on every Space, and
 /// left out of screen captures so Claude's screenshots show the app alone.
+let claudeCoral = NSColor(calibratedRed: 0xD9 / 255, green: 0x77 / 255, blue: 0x57 / 255, alpha: 1)
+
 final class CursorView: NSView {
   override var isFlipped: Bool { true }
   static let tip = CGPoint(x: 18, y: 18)
@@ -167,7 +170,7 @@ final class CursorView: NSView {
     shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
     NSGraphicsContext.saveGraphicsState()
     shadow.set()
-    NSColor(calibratedWhite: 0.42, alpha: 1).setFill()
+    claudeCoral.setFill()
     arrow.fill()
     NSGraphicsContext.restoreGraphicsState()
     NSColor.white.setStroke()
@@ -237,7 +240,7 @@ final class AgentCursor {
       transform: nil)
     // The layer is not flipped: the tip sits `tip.y` below the top edge.
     ring.position = CGPoint(x: CursorView.tip.x, y: view.frame.height - CursorView.tip.y)
-    ring.fillColor = NSColor(calibratedWhite: 0.42, alpha: 0.35).cgColor
+    ring.fillColor = claudeCoral.withAlphaComponent(0.35).cgColor
     ring.strokeColor = NSColor.white.withAlphaComponent(0.8).cgColor
     ring.lineWidth = 1
     layer.addSublayer(ring)
