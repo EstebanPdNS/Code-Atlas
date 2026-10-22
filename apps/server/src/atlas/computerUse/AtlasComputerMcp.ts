@@ -10,6 +10,7 @@ import * as NodeReadline from "node:readline";
 import * as NodeURL from "node:url";
 
 import {
+  appApprovalKeys,
   type DesktopWindow,
   findWindow,
   imagePointToScreen,
@@ -56,6 +57,11 @@ const screenshotAfter = {
     type: "boolean",
     description: "Return a fresh screenshot of the window after acting (default true).",
   },
+  foreground: {
+    type: "boolean",
+    description:
+      "Bring the app to the front and send real input. Default false: input goes to the app in the background and the user keeps their pointer. Use true only when a screenshot shows the background action had no effect (games, emulators).",
+  },
 };
 
 const TOOLS = [
@@ -76,7 +82,7 @@ const TOOLS = [
   {
     name: "computer_click",
     description:
-      "Click at x, y (pixels in the latest screenshot of the window). The app comes to the front first.",
+      "Click at x, y (pixels in the latest screenshot of the window) with Claude's own cursor; the app stays where it is and the user keeps their pointer.",
     inputSchema: {
       type: "object",
       properties: {
@@ -201,10 +207,45 @@ function numberArg(args: Json, key: string): number {
   return value;
 }
 
+/** Apps the user chose "Always Allow" for, kept across Claude sessions. */
+function approvalsFile(): string {
+  const home = process.env.T3CODE_HOME || NodePath.join(NodeOS.homedir(), ".code-atlas");
+  return NodePath.join(home, "userdata", "computer-use-apps.json");
+}
+
+async function readAlwaysAllowed(): Promise<Set<string>> {
+  try {
+    const parsed: unknown = JSON.parse(await NodeFSP.readFile(approvalsFile(), "utf8"));
+    const apps = (parsed as { readonly apps?: unknown }).apps;
+    return new Set(Array.isArray(apps) ? apps.filter((app) => typeof app === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+async function writeAlwaysAllowed(apps: ReadonlySet<string>) {
+  const file = approvalsFile();
+  await NodeFSP.mkdir(NodePath.dirname(file), { recursive: true });
+  await NodeFSP.writeFile(file, `${JSON.stringify({ apps: [...apps].toSorted() }, null, 2)}\n`);
+}
+
+const SETTINGS_PANES = {
+  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+} as const;
+
+// macOS keeps a grant tied to the signature it was given to; a Code Atlas
+// build signed differently shows as allowed yet is asked again.
+const STALE_GRANT_HINT =
+  "If Code Atlas already shows as on there, macOS still holds the permission of an older Code Atlas build: select Code Atlas, remove it with −, add it again with +, then quit and reopen Code Atlas.";
+
 export function makeAtlasComputer(helper: string) {
   // The size of the latest screenshot of each window (key 0: the screen).
   const shots = new Map<number, { readonly width: number; readonly height: number }>();
+  // "Allow Once" answers last for this session; "Always Allow" is stored.
   const allowed = new Set<string>();
+  const alwaysAllowed = readAlwaysAllowed();
+  const requested = new Set<keyof typeof SETTINGS_PANES>();
 
   const callHelper = async (args: ReadonlyArray<string>): Promise<Json> => {
     const { stdout } = await run(helper, args);
@@ -234,40 +275,56 @@ export function makeAtlasComputer(helper: string) {
     };
   };
 
-  const requireAccessibility = async () => {
+  // Checked before every capture or input, so a missing permission is asked
+  // for once per session instead of re-prompting on every screencapture.
+  const ensurePermission = async (kind: keyof typeof SETTINGS_PANES) => {
     const permissions = await callHelper(["permissions"]);
-    if (permissions.accessibility !== true) {
-      throw new ComputerUseError(
-        "Code Atlas needs Accessibility to control apps: System Settings → Privacy & Security → Accessibility → turn on Code Atlas. Then try again.",
-      );
+    const granted =
+      kind === "screen" ? permissions.screenRecording === true : permissions.accessibility === true;
+    if (granted) return;
+    const name = kind === "screen" ? "Screen & System Audio Recording" : "Accessibility";
+    if (!requested.has(kind)) {
+      requested.add(kind);
+      await callHelper(["request", kind]);
+      await run("/usr/bin/open", [SETTINGS_PANES[kind]]);
     }
+    throw new ComputerUseError(
+      `Code Atlas needs ${name} permission (System Settings → Privacy & Security → ${name} → turn on Code Atlas; that page is now open). ${STALE_GRANT_HINT} Tell the user exactly this, then wait for them before trying again.`,
+    );
   };
 
-  // One question per app and session, answered in a system dialog so it works
-  // whatever the thread's approval mode.
-  const approve = async (key: string, label: string) => {
-    if (allowed.has(key)) return;
+  // One question per app, in a system dialog so it works whatever the
+  // thread's approval mode; "Always Allow" is remembered for later sessions.
+  const approve = async (app: string, bundleId = "") => {
+    const keys = appApprovalKeys(app, bundleId);
+    const always = await alwaysAllowed;
+    if (keys.some((key) => allowed.has(key) || always.has(key))) return;
     const { stdout, code } = await run(
       "/usr/bin/osascript",
       [
         "-e",
         "on run argv",
         "-e",
-        'display dialog (item 1 of argv) with title "Code Atlas" buttons {"Don\'t Allow", "Allow"} default button "Allow" cancel button "Don\'t Allow" with icon caution giving up after 120',
+        'display dialog (item 1 of argv) with title "Code Atlas" buttons {"Don\'t Allow", "Allow Once", "Always Allow"} default button "Always Allow" cancel button "Don\'t Allow" with icon caution giving up after 120',
         "-e",
         "return button returned of result",
         "-e",
         "end run",
-        `Claude wants to see and control ${label} on this Mac.\n\nCode Atlas asks once per app in each Claude session.`,
+        `Claude wants to see and control “${app}” on this Mac: take screenshots of its windows, click, type and press keys in it.`,
       ],
       130_000,
     );
-    if (code !== 0 || stdout.trim() !== "Allow") {
+    const answer = stdout.trim();
+    if (code !== 0 || (answer !== "Allow Once" && answer !== "Always Allow")) {
       throw new ComputerUseError(
-        `The user did not allow control of ${label}. Ask them before trying again.`,
+        `The user did not allow control of “${app}”. Ask them before trying again.`,
       );
     }
-    allowed.add(key);
+    for (const key of keys) allowed.add(key);
+    if (answer === "Always Allow") {
+      for (const key of keys) always.add(key);
+      await writeAlwaysAllowed(always).catch(() => undefined);
+    }
   };
 
   const resolveTarget = async (args: Json): Promise<DesktopWindow> => {
@@ -282,7 +339,7 @@ export function makeAtlasComputer(helper: string) {
         `No window of ${app ?? `id ${windowId}`} is on screen. Open the app with computer_open_app or check computer_windows.`,
       );
     }
-    await approve(`app:${window.bundleId || window.app}`, `“${window.app}”`);
+    await approve(window.app, window.bundleId);
     return window;
   };
 
@@ -290,6 +347,7 @@ export function makeAtlasComputer(helper: string) {
     const directory = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "atlas-computer-"));
     const file = NodePath.join(directory, "shot.png");
     try {
+      await ensurePermission("screen");
       const area = window ?? (await displayBounds());
       const args =
         window === null
@@ -302,7 +360,7 @@ export function makeAtlasComputer(helper: string) {
       );
       if (code !== 0 || !exists) {
         throw new ComputerUseError(
-          "The screenshot failed. Code Atlas needs Screen Recording: System Settings → Privacy & Security → Screen & System Audio Recording → turn on Code Atlas.",
+          `The screenshot failed. Code Atlas needs Screen & System Audio Recording permission. ${STALE_GRANT_HINT}`,
         );
       }
       await run("/usr/bin/sips", ["-Z", String(SCREENSHOT_MAX_SIDE), file]);
@@ -341,9 +399,45 @@ export function makeAtlasComputer(helper: string) {
     return [{ type: "text", text: summary } as ToolContent, ...(await screenshot(fresh))];
   };
 
-  const focus = async (window: DesktopWindow) => {
-    await requireAccessibility();
-    await callHelper(["activate", String(window.pid)]);
+  // Claude's gray cursor, drawn by the helper; one process for the session.
+  let cursor: NodeChildProcess.ChildProcess | null = null;
+  let cursorAt: { readonly x: number; readonly y: number } | null = null;
+  const cue = (line: string) => {
+    if (cursor === null || cursor.exitCode !== null || cursor.stdin?.destroyed) {
+      cursor = NodeChildProcess.spawn(helper, ["cursor"], { stdio: ["pipe", "ignore", "ignore"] });
+      cursor.on("error", () => undefined);
+      cursor.stdin?.on("error", () => undefined);
+    }
+    cursor.stdin?.write(`${line}\n`);
+  };
+  // The cursor glides first, so the user sees where Claude is about to act.
+  const glideTo = async (point: { readonly x: number; readonly y: number }) => {
+    cue(`move ${point.x} ${point.y}`);
+    cursorAt = point;
+    await sleep(380);
+  };
+  const glideIntoWindow = (window: DesktopWindow) =>
+    glideTo(
+      cursorAt !== null &&
+        cursorAt.x >= window.x &&
+        cursorAt.y >= window.y &&
+        cursorAt.x <= window.x + window.width &&
+        cursorAt.y <= window.y + window.height
+        ? cursorAt
+        : {
+            x: Math.round(window.x + window.width / 2),
+            y: Math.round(window.y + window.height / 2),
+          },
+    );
+
+  // Background input goes straight to the app: the user keeps their pointer
+  // and focus. Foreground input brings the app to the front first, for apps
+  // that ignore background input (games, emulators).
+  const prepareInput = async (window: DesktopWindow, args: Json) => {
+    await ensurePermission("accessibility");
+    const foreground = args.foreground === true;
+    if (foreground) await callHelper(["activate", String(window.pid)]);
+    return foreground ? "foreground" : "background";
   };
 
   const callTool = async (name: string, args: Json): Promise<ToolContent[]> => {
@@ -364,79 +458,121 @@ export function makeAtlasComputer(helper: string) {
       }
       case "computer_screenshot": {
         if (args.app === undefined && args.windowId === undefined) {
-          await approve("screen", "the whole screen");
+          await approve("the whole screen");
           return screenshot(null);
         }
         return screenshot(await resolveTarget(args));
       }
       case "computer_click": {
         const window = await resolveTarget(args);
-        await focus(window);
+        const mode = await prepareInput(window, args);
         const point = toScreen(window, numberArg(args, "x"), numberArg(args, "y"));
         const clicks = typeof args.clicks === "number" ? Math.round(args.clicks) : 1;
+        await glideTo(point);
+        cue(`click ${point.x} ${point.y}`);
         await callHelper([
           "click",
+          String(window.pid),
+          String(window.windowId),
+          mode,
           String(point.x),
           String(point.y),
           args.button === "right" ? "right" : "left",
           String(clicks),
         ]);
-        return afterAction(args, window, `Clicked ${window.app} at (${args.x}, ${args.y}).`);
+        return afterAction(
+          args,
+          window,
+          `Clicked ${window.app} at (${args.x}, ${args.y}) (${mode}).`,
+        );
       }
       case "computer_type": {
         const window = await resolveTarget(args);
         if (typeof args.text !== "string" || args.text.length === 0) {
           throw new ComputerUseError("text must be a non-empty string.");
         }
-        await focus(window);
-        await callHelper(["type", args.text]);
-        return afterAction(args, window, `Typed ${args.text.length} characters in ${window.app}.`);
+        const mode = await prepareInput(window, args);
+        await glideIntoWindow(window);
+        await callHelper(["type", String(window.pid), mode, args.text]);
+        return afterAction(
+          args,
+          window,
+          `Typed ${args.text.length} characters in ${window.app} (${mode}).`,
+        );
       }
       case "computer_key": {
         const window = await resolveTarget(args);
         const keys = typeof args.keys === "string" ? args.keys : "";
         const combo = parseKeyCombo(keys);
         if (combo === null) throw new ComputerUseError(`Unknown key or shortcut: ${keys}.`);
-        await focus(window);
+        const mode = await prepareInput(window, args);
+        await glideIntoWindow(window);
         const repeat = Math.max(1, Math.min(50, Math.round(Number(args.repeat ?? 1)) || 1));
         const hold = Math.max(0, Math.min(10_000, Number(args.holdMs ?? 0) || 0));
         for (let index = 0; index < repeat; index++) {
-          await callHelper(["key", String(combo.keyCode), String(combo.flags), String(hold)]);
+          await callHelper([
+            "key",
+            String(window.pid),
+            mode,
+            String(combo.keyCode),
+            String(combo.flags),
+            String(hold),
+          ]);
           if (index < repeat - 1) await sleep(60);
         }
         return afterAction(
           args,
           window,
-          `Pressed ${keys}${repeat > 1 ? ` ×${repeat}` : ""} in ${window.app}.`,
+          `Pressed ${keys}${repeat > 1 ? ` ×${repeat}` : ""} in ${window.app} (${mode}).`,
         );
       }
       case "computer_scroll": {
         const window = await resolveTarget(args);
-        await focus(window);
+        const mode = await prepareInput(window, args);
         const point = toScreen(window, numberArg(args, "x"), numberArg(args, "y"));
+        await glideTo(point);
         await callHelper([
           "scroll",
+          String(window.pid),
+          String(window.windowId),
+          mode,
           String(point.x),
           String(point.y),
           String(-(Number(args.dx) || 0)),
           String(-(Number(args.dy) || 0)),
         ]);
-        return afterAction(args, window, `Scrolled ${window.app}.`);
+        return afterAction(args, window, `Scrolled ${window.app} (${mode}).`);
       }
       case "computer_drag": {
         const window = await resolveTarget(args);
-        await focus(window);
+        const mode = await prepareInput(window, args);
         const from = toScreen(window, numberArg(args, "fromX"), numberArg(args, "fromY"));
         const to = toScreen(window, numberArg(args, "toX"), numberArg(args, "toY"));
-        await callHelper(["drag", String(from.x), String(from.y), String(to.x), String(to.y)]);
-        return afterAction(args, window, `Dragged in ${window.app}.`);
+        await glideTo(from);
+        cue(`move ${to.x} ${to.y}`);
+        cursorAt = to;
+        await callHelper([
+          "drag",
+          String(window.pid),
+          String(window.windowId),
+          mode,
+          String(from.x),
+          String(from.y),
+          String(to.x),
+          String(to.y),
+        ]);
+        return afterAction(args, window, `Dragged in ${window.app} (${mode}).`);
       }
       case "computer_open_app": {
         const app = typeof args.app === "string" ? args.app.trim() : "";
         if (app.length === 0) throw new ComputerUseError("Name the app to open.");
-        await approve(`open:${app.toLowerCase()}`, `“${app}”`);
+        await approve(app);
         const byBundle = /^[\w-]+(\.[\w-]+){2,}$/.test(app);
-        const { code } = await run("/usr/bin/open", byBundle ? ["-b", app] : ["-a", app]);
+        // -g: launched behind the user's current app, like the rest of computer use.
+        const { code } = await run(
+          "/usr/bin/open",
+          byBundle ? ["-g", "-b", app] : ["-g", "-a", app],
+        );
         if (code !== 0) throw new ComputerUseError(`Could not open ${app}.`);
         await sleep(1200);
         return [{ type: "text", text: `Opened ${app}. Take a screenshot to see it.` }];
