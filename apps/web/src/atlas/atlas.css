@@ -29,6 +29,11 @@
   --atlas-duration-fast: 140ms;
   --atlas-duration-base: 220ms;
   --atlas-duration-slow: 360ms;
+  /* Every eased transition in the app (Tailwind's ease-out and the default
+     curve): fast off the mark, then a long soft landing, so panels and the
+     sidebar glide without feeling slow. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --default-transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
   /* How far a pressed control sinks. */
   --atlas-press-scale: 0.96;
   /* Concrete names first: some engines alias ui-monospace to the proportional UI font. */

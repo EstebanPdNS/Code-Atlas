@@ -633,8 +633,8 @@ describe("ClientSettings appearance contrast", () => {
 });
 
 describe("ClientSettings panel animations", () => {
-  it("defaults to instant changes", () => {
-    expect(decodeClientSettings({}).panelAnimationDurationMs).toBe(0);
+  it("defaults to a short glide", () => {
+    expect(decodeClientSettings({}).panelAnimationDurationMs).toBe(200);
   });
 
   it.each([0, 400])("accepts a panel animation duration: %s", (value) => {

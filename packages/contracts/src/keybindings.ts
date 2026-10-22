@@ -108,6 +108,8 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "editor.openFavorite",
   "usage.cost",
   "usage.tokens",
+  // Code Atlas: the Usage page's Code view.
+  "usage.code",
   "usage.limits",
   "usage.period.day",
   "usage.period.week",

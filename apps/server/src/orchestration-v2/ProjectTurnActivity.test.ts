@@ -387,6 +387,27 @@ it.layer(layerTest)("ProjectTurnActivity", (it) => {
         })),
         Option.some({ turns: 4, linesAdded: 1021, linesRemoved: 1006, filesChanged: 3 }),
       );
+      // ...split by project, most changed first, and by day.
+      const all = Option.getOrThrow(yield* activity.weekly(null));
+      assert.deepStrictEqual(
+        all.projects?.map((project) => [project.title, project.linesAdded, project.turns]),
+        [
+          ["project:other", 999, 1],
+          ["project:atlas", 22, 3],
+        ],
+      );
+      assert.strictEqual(all.periods?.length, 8);
+      assert.strictEqual(
+        all.periods?.reduce((sum, period) => sum + period.linesAdded, 0),
+        1021,
+      );
+      // A longer window reaches older turns; the past 24 hours count by hour.
+      const month = Option.getOrThrow(yield* activity.weekly(null, 30));
+      assert.strictEqual(month.linesAdded, 1121);
+      assert.strictEqual(month.periods?.length, 31);
+      const day = Option.getOrThrow(yield* activity.weekly(null, 1));
+      assert.strictEqual(day.periods?.length, 25);
+      assert.isUndefined((yield* activity.weekly("/work/atlas")).pipe(Option.getOrThrow).projects);
     }),
   );
 

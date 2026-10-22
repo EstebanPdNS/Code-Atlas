@@ -118,7 +118,8 @@ export const PanelAnimationDurationMs = Schema.Int.check(
   }),
 );
 export type PanelAnimationDurationMs = typeof PanelAnimationDurationMs.Type;
-const DEFAULT_PANEL_ANIMATION_DURATION_MS: PanelAnimationDurationMs = 0;
+// Code Atlas: panels glide by default, quick enough to stay snappy.
+const DEFAULT_PANEL_ANIMATION_DURATION_MS: PanelAnimationDurationMs = 200;
 
 export const MIN_INTERFACE_FONT_SIZE = 12;
 export const MAX_INTERFACE_FONT_SIZE = 20;
