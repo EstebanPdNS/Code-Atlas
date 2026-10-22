@@ -4,7 +4,8 @@ import { formatTokens, makeWindow } from "@t3tools/shared/usageFormat";
 import { TrendingUpIcon } from "lucide-react";
 import { useState } from "react";
 
-import { ProviderInstanceIcon } from "../../components/chat/ProviderInstanceIcon";
+// Code Atlas: the Usage page shows Codex's own icon.
+import { UsageProviderIcon as ProviderInstanceIcon } from "~/atlas/usage/UsageProviderIcon";
 import { PROVIDER_PRESENTATION } from "../../components/usage/usageProviders";
 import { useNowMinute } from "../../hooks/useNowMinute";
 import { environmentPresentations } from "../../state/presentation";

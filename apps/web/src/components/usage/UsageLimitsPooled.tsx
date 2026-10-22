@@ -31,7 +31,8 @@ import { ensureLocalApi } from "../../localApi";
 import { usePrimarySettings } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+// Code Atlas: the Usage page shows Codex's own icon.
+import { UsageProviderIcon as ProviderInstanceIcon } from "~/atlas/usage/UsageProviderIcon";
 import { providerClients } from "../settings/providerDriverMeta";
 import { RedactedSensitiveText } from "../settings/RedactedSensitiveText";
 import { Button } from "../ui/button";

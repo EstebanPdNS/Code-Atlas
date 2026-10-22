@@ -51,6 +51,9 @@ import { Link } from "@tanstack/react-router";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
 import { notificationChildThreadId } from "@t3tools/client-runtime/state/thread-execution";
 import { replaceComposerContextReferences } from "@t3tools/shared/composerContextReferences";
+import { withoutAttachmentOnlyPrompt } from "~/atlas/chat/attachmentOnlyPrompt";
+import { agentPersona, atlasSubagentOrder } from "~/atlas/agents/agentPersona";
+import { AgentFaceIcon } from "~/atlas/agents/agentFaces";
 import {
   liveThoughtLine,
   resolveWorkEntryToolPresentation,
@@ -298,7 +301,7 @@ import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
 import {
   isV2LifecycleItem,
-  EnvironmentSubagentAvatar,
+  subagentStatusVisual,
   SubagentElapsed,
   SubagentNotificationLink,
   V2LifecycleRow,
@@ -2204,6 +2207,8 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   );
   const userMessage = resolveUserMessagePresentation(row.message);
   const resolvedContext = resolveUserMessageContext(row.message);
+  // Code Atlas: an image sent alone shows only the image.
+  const visibleText = withoutAttachmentOnlyPrompt(resolvedContext.text);
   const previewImages = userImages.filter((image) => image.name.startsWith("preview-annotation-"));
   const revertTurnCount = row.revertTurnCount;
   const chippedAttachmentIds = new Set(
@@ -2217,10 +2222,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   const annotationRecordIds = resolvedContext.records
     .filter((record) => record.kind === "preview-annotation")
     .map((record) => record.contextId);
-  const plainText = replaceComposerContextReferences(
-    resolvedContext.text,
-    (reference) => reference.label,
-  );
+  const plainText = replaceComposerContextReferences(visibleText, (reference) => reference.label);
   const promptLink = promptLinkFor(plainText);
   const contextClipboardFragment =
     resolvedContext.records.length === 0
@@ -2466,7 +2468,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
         ) : null}
         <div onCopyCapture={onBodyCopyCapture}>
           <CollapsibleUserMessageBody
-            text={resolvedContext.text}
+            text={visibleText}
             renderContextReference={renderContextReference}
             skills={ctx.skills}
             markdownCwd={ctx.markdownCwd}
@@ -3258,6 +3260,8 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
     ),
     (thread) => thread?.projection.subagents,
   );
+  // Code Atlas: the stack shows each subagent's own face, as its row does.
+  const siblingIds = atlasSubagentOrder(liveAgents ?? []).split("\n");
   const agents = members.map((item) => {
     const live = liveAgents?.find((agent) => agent.id === item.subagentId);
     return {
@@ -3291,13 +3295,21 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
         >
           <span className="flex shrink-0 items-center -space-x-1.5" aria-hidden>
             {agents.slice(0, 3).map(({ item, status }) => (
-              <EnvironmentSubagentAvatar
-                key={item.id}
-                environmentId={ctx.activeThreadEnvironmentId}
-                providerInstanceId={item.providerInstanceId}
-                driver={item.driver}
-                status={agents.length === 1 ? status : undefined}
-              />
+              <span key={item.id} className="relative inline-flex shrink-0">
+                <AgentFaceIcon
+                  persona={agentPersona(item.subagentId, siblingIds)}
+                  fresh={status === "pending" || status === "running"}
+                  className="size-6"
+                />
+                {agents.length === 1 && status ? (
+                  <span
+                    className={cn(
+                      "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background",
+                      subagentStatusVisual(status).dotClass,
+                    )}
+                  />
+                ) : null}
+              </span>
             ))}
             {agents.length > 3 ? (
               <span className="relative inline-flex size-6 items-center justify-center rounded-full bg-muted text-3xs font-medium text-muted-foreground ring-2 ring-background">

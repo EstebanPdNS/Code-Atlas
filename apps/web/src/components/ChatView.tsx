@@ -8578,6 +8578,7 @@ export default function ChatView(props: ChatViewProps) {
                   {claudeProgressStyle && !isDraftHeroState ? (
                     <AtlasClaudeProgress
                       working={isWorking}
+                      provider={selectedProvider}
                       startedAt={activeWorkStartedAt}
                       tokens={activeThreadLiveTokenUsage?.usedTokens ?? null}
                       activity={

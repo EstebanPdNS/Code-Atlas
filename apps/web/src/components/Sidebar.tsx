@@ -2098,7 +2098,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     props.isPinned && (!sortable?.isDragging || (props.dragOverPinned && props.dropVerb === null));
   // Code Atlas: a thread whose agent is running shows the working dots after its title.
   const atlasWorkingDots = atlasRunning ? (
-    <AtlasActivityDots className="ms-1.5 shrink-0 self-center" />
+    <AtlasActivityDots
+      className="ms-1.5 shrink-0 self-center"
+      provider={providerEntry?.driverKind ?? null}
+    />
   ) : null;
   const pinIndicator = showPin ? (
     props.pinningSupported && canOperateThread && !sortable?.isDragging ? (
@@ -4935,7 +4938,11 @@ export default function Sidebar() {
                               serverConfigs.get(thread.environmentId)?.environment.capabilities
                                 .threadPinning === true
                             }
-                            isPinned={thread.pinnedAt != null}
+                            // Code Atlas: rows in Pinned need no pin of their own.
+                            isPinned={
+                              thread.pinnedAt != null &&
+                              !(CODE_ATLAS_SIDEBAR && section === "pinned")
+                            }
                             dropVerb={
                               dragState?.activeKey === threadKey
                                 ? resolveSidebarDropVerb(dragState.activeSection, dragTargetSection)

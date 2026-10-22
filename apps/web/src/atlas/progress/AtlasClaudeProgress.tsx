@@ -10,6 +10,7 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 
 import { AtlasFold } from "~/atlas/brand/AtlasFold";
+import { atlasProvider } from "~/atlas/brand/providerColors";
 import { ChangedFilesTree } from "~/components/chat/ChangedFilesTree";
 import type { ComposerTaskStep } from "~/components/chat/ComposerTasksBadge";
 import { cn } from "~/lib/utils";
@@ -158,6 +159,7 @@ function AtlasLines(props: { readonly lines: AtlasLineStats | null }) {
 
 /** "• • 1m 8s · 37.0k tokens · +40 −12 · Thinking" at the top of the progress stack. */
 function AtlasStatusLine(props: {
+  readonly provider: string | null;
   readonly startedAt: string | null;
   readonly tokens: number | null;
   readonly lines: AtlasLineStats | null;
@@ -179,7 +181,14 @@ function AtlasStatusLine(props: {
       data-atlas-rise
       className="flex items-center gap-2.5 px-1 text-sm text-muted-foreground"
     >
-      <span aria-hidden data-atlas-status-dots className="flex items-center gap-1">
+      <span
+        aria-hidden
+        data-atlas-status-dots
+        data-atlas-provider={
+          props.provider ? (atlasProvider(props.provider) ?? undefined) : undefined
+        }
+        className="flex items-center gap-1"
+      >
         <span />
         <span />
         <span />
@@ -266,6 +275,8 @@ function AtlasChangedFilesRow(
  */
 export function AtlasClaudeProgress(props: {
   readonly working: boolean;
+  /** The thread's provider driver: the status dots take its colors. */
+  readonly provider: string | null;
   readonly startedAt: string | null;
   readonly tokens: number | null;
   readonly activity: string;
@@ -282,6 +293,7 @@ export function AtlasClaudeProgress(props: {
     <div data-atlas-claude-progress className="mb-3 flex flex-col gap-3">
       {props.working ? (
         <AtlasStatusLine
+          provider={props.provider}
           startedAt={props.startedAt}
           tokens={props.tokens}
           lines={props.lines}

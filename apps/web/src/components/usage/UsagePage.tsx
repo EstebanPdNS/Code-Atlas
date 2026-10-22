@@ -59,7 +59,8 @@ import {
   makeWindow,
 } from "@t3tools/shared/usageFormat";
 import { Button, InlineButton } from "../ui/button";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+// Code Atlas: the Usage page shows Codex's own icon.
+import { UsageProviderIcon as ProviderInstanceIcon } from "~/atlas/usage/UsageProviderIcon";
 import {
   Menu,
   MenuCheckboxItem,
