@@ -90,9 +90,9 @@ describe("this week's activity", () => {
         },
       }),
     );
-    expect(formatAtlasWeekFiles(week!)).toBe("92 files changed · 10 read");
-    expect(formatAtlasWeekCounts(week!)).toBe("23 turns · 9,206 commands");
-    expect(formatAtlasWeekTime(week!)).toBe("5 threads · 15h 24m of agent work");
+    expect(formatAtlasWeekFiles(week!)).toBe("92 files · 10 read");
+    expect(formatAtlasWeekCounts(week!)).toBe("23 turns · 9,206 cmds");
+    expect(formatAtlasWeekTime(week!)).toBe("5 threads · 15h 24m");
   });
 
   it("has nothing to show without either source", () => {
