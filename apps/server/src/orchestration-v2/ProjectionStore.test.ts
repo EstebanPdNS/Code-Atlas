@@ -4137,6 +4137,7 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
             pendingRuntimeRequest: null,
             limitRecovery: sqlShell.limitRecovery,
             snoozedUntil: sqlShell.snoozedUntil,
+            hasActiveGoal: false,
           });
         } else assert.isUndefined(candidate);
         assert.isUndefined(candidates.find((row) => row.id === otherThreadId));
@@ -4294,6 +4295,25 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
           (row) => row.id === threadId,
         ),
       );
+      // Code Atlas: a thread with a goal still in progress resumes even with auto-resume off.
+      yield* sql`INSERT INTO orchestration_v2_projection_provider_threads
+        (provider_thread_id, thread_id, owner_node_id, provider, driver, provider_instance_id,
+          provider_session_id, status, first_run_ordinal, last_run_ordinal, updated_at, payload_json)
+        VALUES ('limit-shell:goal-thread', ${threadId}, ${original.rootNodeId}, ${driver}, ${driver},
+          ${providerInstanceId}, NULL, 'idle', 1, 1, ${DateTime.formatIso(now)},
+          ${'{"goal":{"objective":"Ship it","status":"usage_limited"}}'})`;
+      assert.isUndefined(
+        (yield* store.getLimitRecoveryCandidates(recoveryOptions)).find(
+          (row) => row.id === threadId,
+        ),
+      );
+      assert.isTrue(
+        (yield* store.getLimitRecoveryCandidates({
+          ...recoveryOptions,
+          autoResumeGoals: true,
+        })).find((row) => row.id === threadId)?.hasActiveGoal,
+      );
+      yield* sql`DELETE FROM orchestration_v2_projection_provider_threads WHERE provider_thread_id = 'limit-shell:goal-thread'`;
       const reset = DateTime.makeUnsafe(limitItem.failure.resetAt);
       const recovery = {
         runId: original.id,

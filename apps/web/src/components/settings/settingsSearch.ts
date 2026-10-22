@@ -334,6 +334,13 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/general",
     searchTerms: ["usage quota rate limit reset recover continue"],
   },
+  // Code Atlas
+  {
+    id: "auto-resume-goal-threads",
+    title: "Keep goals going after limits",
+    to: "/settings/general",
+    searchTerms: ["goal usage session weekly limit reset resume continue automatically"],
+  },
   // Code Atlas: the rows of Settings → General → Code Atlas.
   {
     id: "atlas-background-tasks-card",

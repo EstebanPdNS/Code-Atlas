@@ -83,12 +83,15 @@ const makeSweep = Effect.gen(function* () {
       now,
       autoResume: preferences.autoResumeLimitedThreads,
       snooze: preferences.snoozeLimitedThreads,
+      autoResumeGoals: preferences.autoResumeGoalThreads,
     });
     const nowMs = DateTime.toEpochMillis(now);
     for (const thread of candidates) {
       const command = limitRecoveryCommand(
         thread,
-        preferences.autoResumeLimitedThreads,
+        // Code Atlas: a goal keeps going once the limit resets.
+        preferences.autoResumeLimitedThreads ||
+          (preferences.autoResumeGoalThreads && thread.hasActiveGoal === true),
         nowMs,
         preferences.snoozeLimitedThreads,
       );

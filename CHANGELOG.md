@@ -6,6 +6,7 @@
 - A window an agent uses gets a thin orange line and the pill above it; Code Atlas no longer leaves full screen when it appears, and the frame no longer flickers between actions.
 - Claude and Codex delegate to each other's models when that does the job better (Sol, Astra or Luna; Opus or Sonnet), and use Luna for very small tasks.
 - Claude has its own computer use, like Codex: a Liquid Glass cursor of its own (orange for Claude) that reads each app's controls, presses buttons and fills fields through accessibility, and clicks, types and presses keys in any app (an emulator included) in the background, so you keep your pointer; apps that ignore background input get it in the foreground. It runs under Code Atlas's own permissions and asks once per app, or never again with Always Allow.
+- A thread with a goal keeps going on its own when a session or weekly limit resets (Settings → General → Keep goals going after limits, on by default).
 - Agent questions are cards: the question on top, the options, then Skip (Esc) and Submit (⌘↩).
 - A message with only an image shows only the image.
 - Clicking a file an agent mentions shows it in Finder.
