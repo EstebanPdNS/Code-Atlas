@@ -888,7 +888,13 @@ span[data-atlas-hero-heading] {
   visibility: hidden;
 }
 
+/* Hidden until it has its final size (see AtlasLaunchIntroScene), then faded in. */
+[data-atlas-intro-camera]:not([data-atlas-ready]) {
+  opacity: 0;
+}
+
 [data-atlas-intro-camera] {
+  transition: opacity var(--atlas-duration-fast) var(--atlas-ease-out);
   position: absolute;
   top: 0;
   left: 0;
