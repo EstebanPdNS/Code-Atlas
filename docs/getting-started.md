@@ -9,9 +9,9 @@
 
 ## Install
 
-1. Download `Code-Atlas-v1.4.zip` from the [latest release](https://github.com/EstebanPdNS/Code-Atlas/releases/latest).
+1. Download `Code-Atlas-v1.5.zip` from the [latest release](https://github.com/EstebanPdNS/Code-Atlas/releases/latest).
 2. Open the zip and move **Code Atlas** to Applications.
-3. Open Code Atlas. The app is ad-hoc signed and not notarized, so macOS may block the first launch. Open **System Settings → Privacy & Security** and choose **Open Anyway**.
+3. Open Code Atlas. The app is signed with its own certificate but not notarized, so macOS may block the first launch. Open **System Settings → Privacy & Security** and choose **Open Anyway**.
 
 Code Atlas keeps its settings, projects and threads in `~/.code-atlas`. It does not read or change an installed T3 Code. It does not update itself: download new versions from the [releases page](https://github.com/EstebanPdNS/Code-Atlas/releases). When T3 Code publishes a new stable release, Code Atlas shows a notification; click it to read the release on GitHub. Nothing is installed.
 
