@@ -673,18 +673,31 @@ function AtlasLaunchIntroScene({ meta }: { readonly meta: AtlasTerminalMeta }) {
       if (position < command.length) later(typeNext, randomBetween(45, 140) / TYPE_SPEEDUP);
       else later(startLogo, LOGO_START_DELAY_MS);
     };
-    later(() => {
-      // Nothing shows yet but the caret: resize and reframe before typing.
-      const landed = landedTerminalSize();
+    // The backdrop covers the app from the first frame, but the terminal stays
+    // hidden until it has its final size: the landed terminal usually mounts a
+    // moment after the intro, and framing it again on screen made the prompt
+    // jump. It appears as soon as that size is known (or after a short wait),
+    // well before the typing starts.
+    let waitedForSize = 0;
+    const showCamera = () => {
       const camera = cameraRef.current;
-      if (landed && camera) {
+      if (!camera) return;
+      const landed = landedTerminalSize();
+      if (landed === null && waitedForSize < INTRO_START_DELAY_MS - 400) {
+        waitedForSize += 100;
+        later(showCamera, 100);
+        return;
+      }
+      if (landed) {
         sizeRef.current = landed;
         camera.style.width = `${landed.width}px`;
         camera.style.height = `${landed.height}px`;
-        startTransform.current = frameIntroCamera(camera, commandRef.current, artRef.current);
       }
-      typeNext();
-    }, INTRO_START_DELAY_MS);
+      startTransform.current = frameIntroCamera(camera, commandRef.current, artRef.current);
+      camera.dataset.atlasReady = "";
+    };
+    showCamera();
+    later(typeNext, INTRO_START_DELAY_MS);
     later(finish, INTRO_SAFETY_TIMEOUT_MS);
     // Escape and a click both skip: the app appears and Aurora stops with it.
     const skip = () => {
