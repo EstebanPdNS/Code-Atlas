@@ -8,7 +8,7 @@
 - Agent questions are cards: the question on top, the options, then Skip (Esc) and Submit (⌘↩).
 - A message with only an image shows only the image.
 - Clicking a file an agent mentions shows it in Finder.
-- Subagent groups show each subagent's face; working dots use each agent's colors; the Usage page shows the Codex icon.
+- Subagent groups show each subagent's face; working dots use each agent's colors; the Usage page and the Usage card show the Codex cloud icon.
 - Pinned threads drop their pin icons.
 - The launch intro frames itself after the window settles and lands without a blink.
 - The browser's new tab shows Recents and Favorites as cards with each site's address.
