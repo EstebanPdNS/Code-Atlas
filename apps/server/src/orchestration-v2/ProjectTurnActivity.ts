@@ -21,16 +21,25 @@ import { type FileChangeLineStats, fileChangeLineStats } from "./AtlasFileChange
 
 const WEEK = Duration.days(7);
 
-const WeeklyRequest = Schema.Struct({ workspaceRoot: Schema.String, since: Schema.String });
+// A null root reads every project (the Usage page's week).
+const WeeklyRequest = Schema.Struct({
+  workspaceRoot: Schema.NullOr(Schema.String),
+  since: Schema.String,
+});
 const CheckpointRow = Schema.Struct({
   checkpointId: Schema.String,
+  root: Schema.String,
   runId: Schema.String,
   // A subagent's thread working in its parent's checkout: the parent's
   // checkpoint already holds its edits.
   shared: NonNegativeInt,
   files: Schema.String,
 });
-const EditRow = Schema.Struct({ runId: Schema.String, payload: Schema.String });
+const EditRow = Schema.Struct({
+  runId: Schema.String,
+  root: Schema.String,
+  payload: Schema.String,
+});
 const CountsRow = Schema.Struct({
   commands: NonNegativeInt,
   filesRead: NonNegativeInt,
@@ -82,11 +91,12 @@ export class ProjectTurnActivity extends Context.Service<
   {
     /**
      * Turns in the last seven days whose checkpoint changed files, across the
-     * live threads of the active projects rooted at `workspaceRoot`. None when
+     * live threads of the active projects rooted at `workspaceRoot` (every
+     * project when it is null). None when
      * there are none, or when the projection cannot be read.
      */
     readonly weekly: (
-      workspaceRoot: string,
+      workspaceRoot: string | null,
     ) => Effect.Effect<Option.Option<TurnWeeklyActivityResult>>;
   }
 >()("t3/orchestration-v2/ProjectTurnActivity") {}
@@ -102,6 +112,7 @@ const make = Effect.gen(function* () {
     execute: ({ workspaceRoot, since }) => sql`
       SELECT
         checkpoints.checkpoint_id AS "checkpointId",
+        projects.workspace_root AS "root",
         checkpoints.run_id AS "runId",
         CASE WHEN parents.thread_id IS NOT NULL
           AND COALESCE(json_extract(threads.payload_json, '$.worktreePath'), '')
@@ -116,7 +127,7 @@ const make = Effect.gen(function* () {
       LEFT JOIN orchestration_v2_projection_threads AS parents
         ON json_extract(threads.payload_json, '$.lineage.relationshipToParent') = 'subagent'
         AND parents.thread_id = json_extract(threads.payload_json, '$.lineage.parentThreadId')
-      WHERE projects.workspace_root = ${workspaceRoot}
+      WHERE (${workspaceRoot} IS NULL OR projects.workspace_root = ${workspaceRoot})
         AND projects.deleted_at IS NULL
         AND threads.deleted_at IS NULL
         AND checkpoints.run_id IS NOT NULL
@@ -131,13 +142,14 @@ const make = Effect.gen(function* () {
     Request: WeeklyRequest,
     Result: EditRow,
     execute: ({ workspaceRoot, since }) => sql`
-      SELECT items.run_id AS "runId", items.payload_json AS "payload"
+      SELECT items.run_id AS "runId", projects.workspace_root AS "root",
+        items.payload_json AS "payload"
       FROM projection_projects AS projects
       INNER JOIN orchestration_v2_projection_threads AS threads
         ON threads.project_id = projects.project_id
       INNER JOIN orchestration_v2_projection_turn_items AS items
         ON items.thread_id = threads.thread_id
-      WHERE projects.workspace_root = ${workspaceRoot}
+      WHERE (${workspaceRoot} IS NULL OR projects.workspace_root = ${workspaceRoot})
         AND projects.deleted_at IS NULL
         AND threads.deleted_at IS NULL
         AND items.type = 'file_change'
@@ -159,7 +171,7 @@ const make = Effect.gen(function* () {
         FROM projection_projects AS projects
         INNER JOIN orchestration_v2_projection_threads AS threads
           ON threads.project_id = projects.project_id
-        WHERE projects.workspace_root = ${workspaceRoot}
+        WHERE (${workspaceRoot} IS NULL OR projects.workspace_root = ${workspaceRoot})
           AND projects.deleted_at IS NULL
           AND threads.deleted_at IS NULL
       )
@@ -187,7 +199,7 @@ const make = Effect.gen(function* () {
     `,
   });
 
-  const weekly = Effect.fn("ProjectTurnActivity.weekly")(function* (workspaceRoot: string) {
+  const weekly = Effect.fn("ProjectTurnActivity.weekly")(function* (workspaceRoot: string | null) {
     const since = DateTime.formatIso(DateTime.subtractDuration(yield* DateTime.now, WEEK));
     // The card is a glance: an unreadable projection shows no activity rather than an error.
     const read = Effect.gen(function* () {
@@ -208,7 +220,7 @@ const make = Effect.gen(function* () {
         if (row.shared === 1) continue;
         turns.add(`checkpoint:${row.checkpointId}`);
         for (const file of changed) {
-          if (typeof file.path === "string") files.add(file.path);
+          if (typeof file.path === "string") files.add(`${row.root}\0${file.path}`);
           linesAdded += typeof file.additions === "number" ? file.additions : 0;
           linesRemoved += typeof file.deletions === "number" ? file.deletions : 0;
         }
@@ -218,7 +230,7 @@ const make = Effect.gen(function* () {
         const edit = editOf(row.payload);
         if (edit === null || edit.lines === null) continue;
         turns.add(`run:${row.runId}`);
-        if (edit.path !== "") files.add(projectPath(workspaceRoot, edit.path));
+        if (edit.path !== "") files.add(`${row.root}\0${projectPath(row.root, edit.path)}`);
         linesAdded += edit.lines.additions;
         linesRemoved += edit.lines.deletions;
       }

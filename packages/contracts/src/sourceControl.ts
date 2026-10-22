@@ -194,6 +194,8 @@ export type TurnWeeklyActivityResult = typeof TurnWeeklyActivityResult.Type;
  */
 export const SourceControlDiscoveryInput = Schema.Struct({
   activityCwd: Schema.optionalKey(TrimmedNonEmptyString),
+  // Code Atlas: every project's week with its agents, for the Usage page.
+  activityAll: Schema.optionalKey(Schema.Boolean),
 });
 export type SourceControlDiscoveryInput = typeof SourceControlDiscoveryInput.Type;
 

@@ -1686,6 +1686,24 @@ span[data-atlas-hero-heading] {
   fill: var(--primary);
 }
 
+/* Usage chart: switching cost and tokens morphs each curve to its new
+   heights (the paths keep their points), and the axis labels fade in. */
+[data-atlas-chart-path] {
+  transition-property: d, opacity;
+  transition-duration: 520ms, 150ms;
+  transition-timing-function: var(--atlas-ease-out);
+}
+
+[data-atlas-chart-axis] {
+  animation: atlas-chart-axis-in var(--atlas-duration-base) var(--atlas-ease-out);
+}
+
+@keyframes atlas-chart-axis-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* ========== Motion ========== */
 /* Every animation is a one-shot or runs only while work is live, and touches
    only opacity and transforms. Reduced motion stops all of them. */
@@ -1730,6 +1748,14 @@ span[data-atlas-hero-heading] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-atlas-chart-path] {
+    transition: none;
+  }
+
+  [data-atlas-chart-axis] {
+    animation: none;
+  }
+
   [data-atlas-question] button {
     transition: none;
   }

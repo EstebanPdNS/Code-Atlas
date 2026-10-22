@@ -648,7 +648,11 @@ it.effect("reads weekly activity once a minute and only with a configured author
     Layer.provide(
       Layer.mock(ProjectTurnActivity.ProjectTurnActivity)({
         weekly: (workspaceRoot) =>
-          Effect.succeed(Option.fromUndefinedOr(turnActivity.get(workspaceRoot))),
+          Effect.succeed(
+            Option.fromUndefinedOr(
+              workspaceRoot === null ? undefined : turnActivity.get(workspaceRoot),
+            ),
+          ),
       }),
     ),
     Layer.provide(ServerConfig.layerTest(process.cwd(), { prefix: "t3-source-control-weekly-" })),

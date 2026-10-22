@@ -233,18 +233,25 @@ export const make = Effect.gen(function* () {
   return SourceControlDiscovery.of({
     discover,
     discoverFor: (input) =>
-      input.activityCwd === undefined
-        ? discover
-        : Effect.all(
-            [discover, weeklyActivity(input.activityCwd), turnActivity.weekly(input.activityCwd)],
-            { concurrency: "unbounded" },
-          ).pipe(
-            Effect.map(([result, activity, turns]) => ({
+      input.activityAll === true
+        ? Effect.all([discover, turnActivity.weekly(null)], { concurrency: "unbounded" }).pipe(
+            Effect.map(([result, turns]) => ({
               ...result,
-              ...(Option.isSome(activity) ? { weeklyActivity: activity.value } : {}),
               ...(Option.isSome(turns) ? { turnActivity: turns.value } : {}),
             })),
-          ),
+          )
+        : input.activityCwd === undefined
+          ? discover
+          : Effect.all(
+              [discover, weeklyActivity(input.activityCwd), turnActivity.weekly(input.activityCwd)],
+              { concurrency: "unbounded" },
+            ).pipe(
+              Effect.map(([result, activity, turns]) => ({
+                ...result,
+                ...(Option.isSome(activity) ? { weeklyActivity: activity.value } : {}),
+                ...(Option.isSome(turns) ? { turnActivity: turns.value } : {}),
+              })),
+            ),
   });
 });
 
